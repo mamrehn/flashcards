@@ -340,40 +340,152 @@ async function initializeHostFeatures(reconnectInfo) {
     if (!isHostInitialized) {
         // console.log("Setting up host event listeners for the first time.");
 
-        // Event listener for JSON file import
-        jsonFileInput.addEventListener('change', (event) => {
-            const file = event.target.files[0];
-            if (!file) return;
+        // Validates a single MC question; freetext (no options/correct) is filtered out
+        const isValidMCQuestion = (q) =>
+            q && typeof q.question === 'string' && q.question.trim().length > 0 &&
+            Array.isArray(q.options) && q.options.length > 0 &&
+            q.options.every(o => typeof o === 'string') &&
+            Array.isArray(q.correct) && q.correct.length > 0 &&
+            q.correct.every(idx => Number.isInteger(idx) && idx >= 0 && idx < q.options.length);
 
+        // Extracts MC questions from a parsed JSON blob (array or {cards:[...]})
+        const extractMCQuestions = (data) => {
+            let candidates = [];
+            if (Array.isArray(data)) {
+                candidates = data;
+            } else if (data && Array.isArray(data.cards)) {
+                candidates = data.cards;
+            } else if (data && Array.isArray(data.questions)) {
+                candidates = data.questions;
+            }
+            return candidates.filter(isValidMCQuestion);
+        };
+
+        // Reads a single File as text
+        const readFileText = (file) => new Promise((resolve, reject) => {
             const reader = new FileReader();
-            reader.onload = (e) => {
-                try {
-                    const data = JSON.parse(e.target.result);
-                    const isValidQuestion = (q) =>
-                        q.question && Array.isArray(q.options) && q.options.length > 0 &&
-                        Array.isArray(q.correct) && q.correct.length > 0 &&
-                        q.correct.every(idx => Number.isInteger(idx) && idx >= 0 && idx < q.options.length);
-
-                    if (data && Array.isArray(data) && data.every(isValidQuestion)) {
-                        quizState.questions = data;
-                    } else if (data && data.cards && Array.isArray(data.cards)) {
-                        const validCards = data.cards.filter(isValidQuestion);
-                        quizState.questions = validCards;
-                    } else {
-                        fileStatus.textContent = 'Ungültiges JSON. Erwartet wird ein Array von Fragen oder eine "Karten"-Struktur.';
-                        quizState.questions = [];
-                    }
-                    fileStatus.textContent = quizState.questions.length > 0 ? `Importiert ${quizState.questions.length} Fragen.` : (fileStatus.textContent || 'Keine Fragen im JSON gefunden.');
-                    renderQuestionsList();
-                } catch (error) {
-                    console.error('Error parsing JSON:', error);
-                    fileStatus.textContent = 'Fehler beim Parsen des JSON. Format überprüfen.';
-                    quizState.questions = [];
-                    renderQuestionsList();
-                }
-            };
+            reader.onload = (e) => resolve(e.target.result);
+            reader.onerror = () => reject(reader.error);
             reader.readAsText(file);
         });
+
+        // Reads a single File as ArrayBuffer
+        const readFileBuffer = (file) => new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = (e) => resolve(e.target.result);
+            reader.onerror = () => reject(reader.error);
+            reader.readAsArrayBuffer(file);
+        });
+
+        // Processes a list of Files (JSON or ZIP), aggregates MC questions
+        const importFiles = async (files) => {
+            if (!files || files.length === 0) return;
+            const collected = [];
+            let processedFiles = 0;
+            let skippedFreetext = 0;
+            let failedFiles = 0;
+
+            for (const file of files) {
+                const isJson = file.type === 'application/json' || file.name.toLowerCase().endsWith('.json');
+                const isZip = file.type === 'application/zip' || file.name.toLowerCase().endsWith('.zip');
+                if (!isJson && !isZip) {
+                    failedFiles++;
+                    continue;
+                }
+
+                try {
+                    if (isZip) {
+                        if (typeof JSZip === 'undefined') {
+                            fileStatus.textContent = 'ZIP-Unterstützung nicht verfügbar (JSZip nicht geladen).';
+                            return;
+                        }
+                        const buffer = await readFileBuffer(file);
+                        const zip = await JSZip.loadAsync(buffer);
+                        const entries = [];
+                        zip.forEach((relPath, entry) => {
+                            if (!entry.dir && relPath.toLowerCase().endsWith('.json')) {
+                                entries.push(entry);
+                            }
+                        });
+                        for (const entry of entries) {
+                            try {
+                                const content = await entry.async('string');
+                                const data = JSON.parse(content);
+                                const mc = extractMCQuestions(data);
+                                const total = Array.isArray(data) ? data.length :
+                                              (data && Array.isArray(data.cards)) ? data.cards.length :
+                                              (data && Array.isArray(data.questions)) ? data.questions.length : 0;
+                                skippedFreetext += Math.max(0, total - mc.length);
+                                collected.push(...mc);
+                                processedFiles++;
+                            } catch (err) {
+                                failedFiles++;
+                            }
+                        }
+                    } else {
+                        const text = await readFileText(file);
+                        const data = JSON.parse(text);
+                        const mc = extractMCQuestions(data);
+                        const total = Array.isArray(data) ? data.length :
+                                      (data && Array.isArray(data.cards)) ? data.cards.length :
+                                      (data && Array.isArray(data.questions)) ? data.questions.length : 0;
+                        skippedFreetext += Math.max(0, total - mc.length);
+                        collected.push(...mc);
+                        processedFiles++;
+                    }
+                } catch (err) {
+                    console.error('Import error:', err);
+                    failedFiles++;
+                }
+            }
+
+            if (collected.length > 0) {
+                quizState.questions = collected;
+                const parts = [`Importiert: ${collected.length} MC-Fragen aus ${processedFiles} Datei(en).`];
+                if (skippedFreetext > 0) parts.push(`${skippedFreetext} Freitext-Frage(n) übersprungen.`);
+                if (failedFiles > 0) parts.push(`${failedFiles} Datei(en) fehlgeschlagen.`);
+                fileStatus.textContent = parts.join(' ');
+            } else {
+                quizState.questions = [];
+                fileStatus.textContent = 'Keine gültigen MC-Fragen gefunden. Nur Multiple-Choice-Fragen werden importiert.';
+            }
+            renderQuestionsList();
+        };
+
+        // File input change
+        jsonFileInput.addEventListener('change', (event) => {
+            importFiles(Array.from(event.target.files || []));
+            event.target.value = '';
+        });
+
+        // Drag-and-drop on the drop zone
+        const quizDropZone = document.getElementById('quiz-drop-zone');
+        if (quizDropZone) {
+            quizDropZone.addEventListener('click', () => jsonFileInput.click());
+
+            quizDropZone.addEventListener('dragenter', (e) => {
+                e.preventDefault();
+                quizDropZone.classList.add('drag-over');
+            });
+            quizDropZone.addEventListener('dragover', (e) => {
+                e.preventDefault();
+                quizDropZone.classList.add('drag-over');
+            });
+            quizDropZone.addEventListener('dragleave', (e) => {
+                e.preventDefault();
+                if (!quizDropZone.contains(e.relatedTarget)) {
+                    quizDropZone.classList.remove('drag-over');
+                }
+            });
+            quizDropZone.addEventListener('drop', (e) => {
+                e.preventDefault();
+                quizDropZone.classList.remove('drag-over');
+                const files = e.dataTransfer && e.dataTransfer.files;
+                if (files && files.length > 0) {
+                    importFiles(Array.from(files));
+                }
+            });
+        }
 
         // Event listener for adding new option input fields
         addOptionBtn.addEventListener('click', () => {

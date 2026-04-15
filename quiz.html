@@ -8,7 +8,12 @@
         content="default-src 'self'; script-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com; style-src 'self' 'unsafe-inline'; connect-src 'self' wss://qlash-server.fly.dev; img-src 'self' data:; font-src 'self'; base-uri 'self'; form-action 'self';">
     <meta name="referrer" content="no-referrer">
     <title>Multiplayer Quiz</title>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"
+        integrity="sha512-CNgIRecGo7nphbeZ04Sc13ka07paqdeTu0WR1IM4kNcpmBAUSHSQX0FslNhTDadL4O5SAGapGt4FodqL8My0mA=="
+        crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+    <script defer src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"
+        integrity="sha512-XMVd28F1oH/O71fzwBnV7HucLxVwtxf26XV8P4wPk26EDxuGZ91N8bsOttmnomcCD3CS5ZMRL50H0GgOHvegtg=="
+        crossorigin="anonymous" referrerpolicy="no-referrer"></script>
     <link rel="stylesheet" href="theme.css">
     <script src="theme.js"></script>
     <script src="sanitize.js"></script>
@@ -51,11 +56,17 @@
                 </div>
                 <button id="start-quiz-btn" class="btn btn-accent" style="margin-top: 10px;">Quiz starten</button>
 
-                <div class="file-input-container">
-                    <label for="json-file" class="file-input-label">Fragen importieren (JSON)</label>
-                    <input type="file" id="json-file" accept=".json">
+                <div class="upload-section">
+                    <input type="file" id="json-file" accept=".json,.zip" multiple class="hidden">
+                    <div class="drop-zone" id="quiz-drop-zone">
+                        <div class="drop-zone-content">
+                            <span class="drop-zone-icon">📂</span>
+                            <span class="drop-zone-text">MC-Fragen importieren</span>
+                            <span class="drop-zone-hint">Datei hierher ziehen oder klicken — .json oder .zip</span>
+                        </div>
+                    </div>
+                    <p id="file-status"></p>
                 </div>
-                <p id="file-status"></p>
 
                 <h3>Oder Fragen manuell erstellen:</h3>
                 <form id="question-form">
