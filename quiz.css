@@ -36,6 +36,27 @@ body {
     line-height: 1.5;
 }
 
+/* Links — themed so the join-link and footer stay readable in both modes
+   (browser default dark-blue is nearly invisible on dark surfaces). */
+a {
+    color: var(--primary-color);
+    text-decoration: underline;
+    text-decoration-thickness: 1px;
+    text-underline-offset: 2px;
+    font-weight: 500;
+}
+
+a:hover,
+a:focus-visible {
+    color: var(--secondary-color);
+}
+
+#join-link,
+#join-link-modal {
+    color: var(--primary-color);
+    word-break: break-all;
+}
+
 h1 {
     font-size: 1.8rem;
 }
@@ -711,23 +732,45 @@ input:focus, select:focus {
     }
 }
 
-/* Dark mode overrides — violet-leaning */
+/* Dark mode overrides — violet-leaning, with boosted contrast.
+   We locally override --text-color / --text-muted so quiz-page text
+   reads cleanly against both the deep-violet surfaces and the default
+   dark body; this is scoped to quiz.css and does not affect cards. */
 [data-theme="dark"] {
-    --primary-color: #a78bd1;       /* light violet for dark bg */
-    --secondary-color: #7a5cb5;
-    --accent-color: #ff6b8a;
-    --dark-color: #e0e0e0;
-    --correct-color: #4caf50;
-    --wrong-color: #ff6e40;
+    --primary-color: #c4a6ea;       /* lighter violet — higher contrast on dark */
+    --secondary-color: #a78bd1;     /* used for link-hover / secondary buttons */
+    --accent-color: #ff7a96;
+    --dark-color: #f5f5f5;
+    --correct-color: #5cd66f;
+    --wrong-color: #ff8560;
 
-    --quiz-surface: #2e2340;
-    --quiz-surface-alt: #3a2d50;
-    --quiz-hover: #443560;
-    --cards-highlight-bg: #3a2d50;
-    --cards-highlight-border: #7a5cb5;
-    --success-bg: rgba(76, 175, 80, 0.2);
-    --success-border: rgba(76, 175, 80, 0.3);
-    --primary-rgb: 167, 139, 209;
+    --text-color: #f5f5f5;          /* was #e0e0e0 — brighter body text */
+    --text-muted: #c0bed0;          /* was #a0a0b0 — readable hints */
+
+    --quiz-surface: #2a2040;        /* slightly darker to raise text contrast */
+    --quiz-surface-alt: #352a52;
+    --quiz-hover: #443666;
+    --cards-highlight-bg: #352a52;
+    --cards-highlight-border: #a78bd1;
+    --success-bg: rgba(76, 175, 80, 0.22);
+    --success-border: rgba(92, 214, 111, 0.45);
+    --primary-rgb: 196, 166, 234;
+}
+
+[data-theme="dark"] a:hover,
+[data-theme="dark"] a:focus-visible {
+    color: #e0cdf5;                 /* brighter than primary — pops on hover */
+}
+
+[data-theme="dark"] .question-item,
+[data-theme="dark"] .player-item,
+[data-theme="dark"] .host-options-list li {
+    color: var(--text-color);
+}
+
+[data-theme="dark"] #current-question-text,
+[data-theme="dark"] #player-question-text {
+    color: var(--primary-color);
 }
 
 [data-theme="dark"] .qr-modal-close:hover {
