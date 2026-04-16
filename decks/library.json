@@ -1,0 +1,27 @@
+{
+  "generatedAt": "2026-04-16T19:52:00.792Z",
+  "deckCount": 1,
+  "decks": [
+    {
+      "id": "beispiel-allgemeinwissen",
+      "filename": "beispiel-allgemeinwissen.zip",
+      "title": "beispiel-allgemeinwissen",
+      "version": "7b1a573f4510",
+      "size": 686,
+      "questionCount": 5,
+      "invalidCount": 0,
+      "types": {
+        "text": 3,
+        "multipleChoice": 2
+      },
+      "categories": [
+        "Geografie",
+        "Mathematik",
+        "Naturwissenschaft"
+      ],
+      "sourceFiles": [
+        "beispiel-allgemeinwissen.json"
+      ]
+    }
+  ]
+}

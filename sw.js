@@ -4,23 +4,31 @@
  * Strategy: Stale-While-Revalidate for app shell, Cache First for data
  */
 
-const CACHE_NAME = 'flashcards-v1';
+const CACHE_NAME = 'flashcards-v2';
 const ASSETS_TO_CACHE = [
     './',
     './index.html',
     './cards.html',
     './quiz.html',
+    './library.html',
     './datenschutz.html',
     './cards.css',
     './quiz.css',
+    './library.css',
     './theme.css',
     './cards.js',
     './quiz.js',
+    './library.js',
     './index.js',
     './sanitize.js',
     './theme.js',
     './manifest.json'
 ];
+
+// Library deck files (decks/library.json and decks/*.zip) are intentionally
+// NOT precached — they're fetched on demand and the stale-while-revalidate
+// fetch handler below caches them lazily on first use. This keeps the install
+// step fast and avoids carrying every deck for users who only want one.
 
 // Install event - cache assets
 self.addEventListener('install', (event) => {

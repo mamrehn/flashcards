@@ -286,9 +286,12 @@ function initializeApp() {
     loadSavedDecks();
     displaySavedDecks();
     loadSpacedRepetitionData();
-    
+
     // Set up service worker update listener
     setupServiceWorkerUpdates();
+
+    // Deep link: cards.html?import=<library-deck-id>
+    handleLibraryImportDeepLink();
 }
 
 // ============================================================================
@@ -661,8 +664,8 @@ function handleZipUpload(event) {
         try {
             const zip = new JSZip();
             const zipContent = await zip.loadAsync(e.target.result);
-            let processedCount = 0;
             let errorCount = 0;
+            const importedDeckNames = [];
 
             // Process each file in the ZIP
             const promises = [];
@@ -671,7 +674,7 @@ function handleZipUpload(event) {
                     const promise = zipEntry.async('string').then(content => {
                         try {
                             const data = sanitizeParsedJSON(JSON.parse(content));
-                            
+
                             if (!data.cards || !Array.isArray(data.cards) || data.cards.length === 0) {
                                 errorCount++;
                                 return;
@@ -679,7 +682,7 @@ function handleZipUpload(event) {
 
                             // Check card validity
                             const validCards = validateCards(data.cards);
-                            
+
                             if (validCards.length === 0) {
                                 errorCount++;
                                 return;
@@ -688,7 +691,7 @@ function handleZipUpload(event) {
                             // Save the deck with filename as deck name
                             const deckName = relativePath.split('/').pop().replace('.json', '');
                             saveToLocalStorage(deckName, validCards, []);
-                            processedCount++;
+                            importedDeckNames.push(deckName);
                         } catch (e) {
                             errorCount++;
                         }
@@ -698,10 +701,10 @@ function handleZipUpload(event) {
             });
 
             await Promise.all(promises);
-            
-            if (processedCount > 0) {
-                displaySavedDecks();
-                showMessage(`${processedCount} Decks erfolgreich importiert${errorCount > 0 ? `, ${errorCount} fehlgeschlagen` : ''}.`);
+
+            if (importedDeckNames.length > 0) {
+                displaySavedDecks('', importedDeckNames);
+                showMessage(`${importedDeckNames.length} Decks erfolgreich importiert${errorCount > 0 ? `, ${errorCount} fehlgeschlagen` : ''}.`);
             } else {
                 showError('Keine gültigen JSON-Dateien in der ZIP-Datei gefunden.');
             }
@@ -714,6 +717,91 @@ function handleZipUpload(event) {
         }
     };
     reader.readAsArrayBuffer(file);
+}
+
+/**
+ * Handle deep link cards.html?import=<library-deck-id>.
+ * Fetches the manifest + ZIP from /decks/, imports the deck(s), records
+ * library metadata for the v2 update badge on library.html, and starts
+ * a study session. The URL parameter is stripped on success so a refresh
+ * doesn't re-import.
+ */
+async function handleLibraryImportDeepLink() {
+    const params = new URLSearchParams(location.search);
+    const id = params.get('import');
+    if (!id) return;
+
+    try {
+        const manifestRes = await fetch('decks/library.json', { cache: 'no-cache' });
+        if (!manifestRes.ok) throw new Error(`manifest HTTP ${manifestRes.status}`);
+        const manifest = sanitizeParsedJSON(await manifestRes.json());
+        if (!manifest || !Array.isArray(manifest.decks)) throw new Error('manifest malformed');
+
+        const deckMeta = manifest.decks.find(d => d.id === id);
+        if (!deckMeta) {
+            showError(`Bibliotheks-Deck „${id}“ wurde nicht gefunden.`);
+            history.replaceState({}, '', 'cards.html');
+            return;
+        }
+
+        if (typeof JSZip === 'undefined') throw new Error('JSZip nicht geladen');
+
+        const zipUrl = `decks/${encodeURIComponent(deckMeta.filename)}?v=${encodeURIComponent(deckMeta.version)}`;
+        const zipRes = await fetch(zipUrl);
+        if (!zipRes.ok) throw new Error(`zip HTTP ${zipRes.status}`);
+        const buf = await zipRes.arrayBuffer();
+        const zip = await JSZip.loadAsync(buf);
+
+        const importedDeckNames = [];
+        const allCards = [];
+        const entries = Object.values(zip.files).filter(e => !e.dir && e.name.endsWith('.json'));
+        for (const entry of entries) {
+            const content = await entry.async('string');
+            let data;
+            try { data = sanitizeParsedJSON(JSON.parse(content)); } catch { continue; }
+            if (!data || !Array.isArray(data.cards)) continue;
+            const validCards = validateCards(data.cards);
+            if (validCards.length === 0) continue;
+            const deckName = entry.name.split('/').pop().replace(/\.json$/i, '');
+            saveToLocalStorage(deckName, validCards, []);
+            importedDeckNames.push(deckName);
+            for (const card of validCards) {
+                allCards.push({ ...card, sourceDeck: deckName });
+            }
+        }
+
+        if (importedDeckNames.length === 0) {
+            showError('Keine gültigen Karten im Bibliotheks-Deck gefunden.');
+            history.replaceState({}, '', 'cards.html');
+            return;
+        }
+
+        // Persist library metadata so the detail page can show "imported" /
+        // "update available" pills. Failure here is non-fatal.
+        try {
+            let libMeta = JSON.parse(localStorage.getItem('flashcardLibraryMeta') || '{}');
+            libMeta = sanitizeParsedJSON(libMeta) || {};
+            for (const deckName of importedDeckNames) {
+                libMeta[deckName] = {
+                    libraryId: deckMeta.id,
+                    libraryVersion: deckMeta.version,
+                    importedAt: new Date().toISOString()
+                };
+            }
+            localStorage.setItem('flashcardLibraryMeta', JSON.stringify(libMeta));
+        } catch (e) {
+            console.warn('Could not persist library meta:', e);
+        }
+
+        history.replaceState({}, '', 'cards.html');
+
+        displaySavedDecks('', importedDeckNames);
+        showMessage(`„${deckMeta.title}“ importiert (${allCards.length} Karten). Wähle Decks oder Kategorien für die nächste Runde.`);
+    } catch (err) {
+        console.error('Library import failed:', err);
+        showError('Bibliotheks-Deck konnte nicht importiert werden.');
+        history.replaceState({}, '', 'cards.html');
+    }
 }
 
 /**
@@ -739,7 +827,7 @@ function processJsonData(data, fileName) {
 
     updateAppTitle([deckName]);
     saveToLocalStorage(deckName, validCards, []);
-    displaySavedDecks();
+    displaySavedDecks('', [deckName]);
     initializeQuiz(validCards.map(card => ({ ...card, sourceDeck: deckName })));
     fileInput.value = '';
 }
@@ -923,7 +1011,7 @@ function extractCategories(deckName) {
     return categories;
 }
 
-function displaySavedDecks(searchTerm = '') {
+function displaySavedDecks(searchTerm = '', preselectDeckNames = []) {
     const savedDecksDiv = document.getElementById('saved-decks');
     savedDecksDiv.innerHTML = '';
 
@@ -934,6 +1022,8 @@ function displaySavedDecks(searchTerm = '') {
         startSelectedDecksBtn.disabled = true;
         return;
     }
+
+    const preselectSet = new Set(preselectDeckNames);
 
     const lowerSearch = searchTerm.toLowerCase();
 
@@ -974,6 +1064,9 @@ function displaySavedDecks(searchTerm = '') {
         checkbox.id = `deck-checkbox-${deckName}`;
         checkbox.className = 'deck-checkbox';
         checkbox.dataset.deckName = deckName;
+        if (preselectSet.has(deckName)) {
+            checkbox.checked = true;
+        }
         checkbox.addEventListener('click', (e) => e.stopPropagation());
         checkbox.addEventListener('change', () => {
             onDeckCheckboxChange(deckName, checkbox.checked);
@@ -1075,6 +1168,13 @@ function displaySavedDecks(searchTerm = '') {
         }
 
         savedDecksDiv.appendChild(folder);
+    }
+
+    // Cascade preselection to category checkboxes (no-op for category-less decks)
+    for (const deckName of preselectSet) {
+        if (savedDecks[deckName]) {
+            onDeckCheckboxChange(deckName, true);
+        }
     }
 
     updateStartButtonState();
@@ -3443,34 +3543,51 @@ function deleteSRCard(cardKey) {
 }
 
 /**
- * Cleanup orphaned SR data (cards whose decks have been deleted)
+ * Cleanup orphaned SR data. Two kinds of orphans:
+ *   1. Deck-level: deck was deleted entirely.
+ *   2. Question-level: deck still exists but the question text changed
+ *      (e.g. after re-importing an updated library deck), so the old
+ *      "deckName|||oldQuestionText" key no longer matches any card.
  */
 function cleanupOrphanedSRData() {
     const orphanedKeys = [];
-    
+    const deckQuestionSets = new Map();
+
     Object.keys(spacedRepetitionData).forEach(key => {
-        // Extract deck name from key (format: "deckName|||question")
-        const deckName = key.split('|||')[0];
-        
-        // Check if deck still exists
-        if (!savedDecks[deckName]) {
+        const sepIndex = key.indexOf('|||');
+        if (sepIndex < 0) return;
+        const deckName = key.slice(0, sepIndex);
+        const question = key.slice(sepIndex + 3);
+
+        const deck = savedDecks[deckName];
+        if (!deck) {
+            orphanedKeys.push(key);
+            return;
+        }
+
+        let questionSet = deckQuestionSets.get(deckName);
+        if (!questionSet) {
+            questionSet = new Set((deck.cards || []).map(c => c && c.question));
+            deckQuestionSets.set(deckName, questionSet);
+        }
+        if (!questionSet.has(question)) {
             orphanedKeys.push(key);
         }
     });
-    
+
     if (orphanedKeys.length === 0) {
         showMessage('Keine verwaisten Einträge gefunden. Alles sauber!');
         return;
     }
-    
-    if (!confirm(`${orphanedKeys.length} verwaiste Einträge gefunden (Decks wurden gelöscht). Jetzt entfernen?`)) {
+
+    if (!confirm(`${orphanedKeys.length} verwaiste Einträge gefunden (gelöschte Decks oder geänderte Fragen). Jetzt entfernen?`)) {
         return;
     }
-    
+
     orphanedKeys.forEach(key => {
         delete spacedRepetitionData[key];
     });
-    
+
     saveSpacedRepetitionData();
     displaySpacedRepetitionBuckets();
     showMessage(`${orphanedKeys.length} verwaiste Einträge entfernt.`);

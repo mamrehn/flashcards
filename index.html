@@ -128,6 +128,23 @@
             background: linear-gradient(45deg, var(--secondary, #166088), var(--primary, #4a6fa5));
         }
 
+        /* Style for the Library button */
+        .library-button {
+            background: linear-gradient(45deg, #2e7d32, #1b5e20);
+            border: 2px solid #66bb6a;
+        }
+
+        .library-button:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 12px 20px rgba(0, 0, 0, 0.3);
+            background: linear-gradient(45deg, #1b5e20, #2e7d32);
+        }
+
+        [data-theme="dark"] .library-button {
+            background: linear-gradient(45deg, #43a047, #2e7d32);
+            border-color: #81c784;
+        }
+
         footer {
             margin-top: 50px;
             font-size: 0.9em;
@@ -245,6 +262,10 @@
             <a href="quiz.html" id="quiz-btn" class="choice-button quiz-button">
                 <i class="fas fa-gamepad"></i>
                 <span>Wissen testen (Multiplayer Quiz)</span>
+            </a>
+            <a href="library.html" id="library-btn" class="choice-button library-button">
+                <i class="fas fa-book"></i>
+                <span>Bibliothek (Decks entdecken)</span>
             </a>
         </div>
     </div>

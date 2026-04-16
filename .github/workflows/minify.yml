@@ -27,7 +27,11 @@ jobs:
       - name: Install minification and inlining tools
         run: |
           npm install -g terser csso-cli html-minifier inline-source-cli
-      
+          npm install --no-save jszip
+
+      - name: Build deck library manifest
+        run: node scripts/build-library-manifest.js
+
       - name: Inject WebSocket URL from secrets
         env:
           WS_URL: ${{ secrets.WS_URL }}
@@ -49,6 +53,7 @@ jobs:
           terser index.js --compress --mangle -o index.js
           terser cards.js --compress --mangle -o cards.js
           terser quiz.js --compress --mangle -o quiz.js
+          terser library.js --compress --mangle -o library.js
           terser sanitize.js --compress --mangle -o sanitize.js
           terser theme.js --compress --mangle -o theme.js
 
@@ -56,6 +61,7 @@ jobs:
         run: |
           csso cards.css -o cards.css
           csso quiz.css -o quiz.css
+          csso library.css -o library.css
           csso theme.css -o theme.css
 
       - name: Add inline attributes to HTML files for inlining
@@ -71,6 +77,13 @@ jobs:
           sed -i 's|<link rel="stylesheet" href="cards\.css">|<link inline rel="stylesheet" href="cards.css">|g' cards.html
           sed -i 's|<script src="sanitize\.js"></script>|<script inline src="sanitize.js"></script>|g' cards.html
           sed -i 's|<script src="cards\.js"></script>|<script inline src="cards.js"></script>|g' cards.html
+
+          # library.html
+          sed -i 's|<link rel="stylesheet" href="theme\.css">|<link inline rel="stylesheet" href="theme.css">|g' library.html
+          sed -i 's|<script src="theme\.js"></script>|<script inline src="theme.js"></script>|g' library.html
+          sed -i 's|<link rel="stylesheet" href="library\.css">|<link inline rel="stylesheet" href="library.css">|g' library.html
+          sed -i 's|<script src="sanitize\.js"></script>|<script inline src="sanitize.js"></script>|g' library.html
+          sed -i 's|<script src="library\.js"></script>|<script inline src="library.js"></script>|g' library.html
 
           # quiz.html - need to handle external CDN scripts differently
           sed -i 's|<link rel="stylesheet" href="theme\.css">|<link inline rel="stylesheet" href="theme.css">|g' quiz.html
@@ -94,6 +107,10 @@ jobs:
           inline-source cards.html --compress false --root ./ > cards.inline.html
           mv cards.inline.html cards.html
           
+          # Inline library.html
+          inline-source library.html --compress false --root ./ > library.inline.html
+          mv library.inline.html library.html
+
           # Inline quiz.html
           inline-source quiz.html --compress false --root ./ > quiz.inline.html
           mv quiz.inline.html quiz.html
@@ -138,6 +155,18 @@ jobs:
             --remove-script-type-attributes \
             --remove-style-link-type-attributes \
             --use-short-doctype \
+            library.html -o library.html
+
+          html-minifier \
+            --collapse-boolean-attributes \
+            --collapse-whitespace \
+            --minify-css true \
+            --minify-js true \
+            --remove-comments \
+            --remove-redundant-attributes \
+            --remove-script-type-attributes \
+            --remove-style-link-type-attributes \
+            --use-short-doctype \
             quiz.html -o quiz.html
           
           html-minifier \
@@ -156,7 +185,7 @@ jobs:
 
       - name: Commit minified and inlined files
         run: |
-          git add *.html
+          git add *.html decks/library.json
           git diff --quiet && git diff --staged --quiet || git commit -m "Minify and inline for deployment (SHA: ${{ github.sha }})"
 
       - name: Deploy to gh-pages
