@@ -1,9 +1,9 @@
 {
   "meta": {
     "name": "Allgemeinwissen Mini-Quiz",
-    "subject": "AEuP",
-    "gradeLevel": "IF10",
-    "learningUnit": "LS0",
+    "subject": "Allgemeinwissen",
+    "gradeLevel": "Alle Klassen",
+    "learningUnit": "Kein Fach",
     "description": "Beispiel-Deck zur Demonstration des Bibliotheks-Formats. Vermischt Geografie, Mathematik und Naturwissenschaft.",
     "author": "Flashcards Demo"
   },
