@@ -1167,8 +1167,10 @@ async function initializeHostFeatures(reconnectInfo) {
         if (!quizState.players[playerId] || !quizState.isQuestionActive) return;
 
         const p = quizState.players[playerId];
-        // Only count if player hasn't answered this question yet
-        if (p.currentAnswer && p.currentAnswer.length > 0) return;
+        // Gate by explicit flag so a timeout-empty answer can't be followed by
+        // a second, non-empty submission from the same player (double-count).
+        if (p.hasAnswered) return;
+        p.hasAnswered = true;
 
         quizState.answersReceived++;
         // Use server-measured elapsed time for fair scoring (immune to client clock manipulation)
@@ -1286,6 +1288,7 @@ async function initializeHostFeatures(reconnectInfo) {
         for (const p of Object.values(quizState.players)) {
             p.currentAnswer = [];
             p.answerTime = null;
+            p.hasAnswered = false;
         }
 
         currentQuestionTextEl.textContent = currentQuestion.question;
@@ -1584,22 +1587,9 @@ async function initializeHostFeatures(reconnectInfo) {
         for (const [idx, p] of sortedPlayers.entries()) {
             const i = document.createElement('div');
             i.className = 'leaderboard-item';
-            switch (idx) {
-            case 0: {
-            i.classList.add('rank-1');
-            break;
-            }
-            case 1: {
-            i.classList.add('rank-2');
-            break;
-            }
-            case 2: { {
-            i.classList.add('rank-3');
-            // No default
-            }
-            break;
-            }
-            }
+            if (idx === 0) i.classList.add('rank-1');
+            else if (idx === 1) i.classList.add('rank-2');
+            else if (idx === 2) i.classList.add('rank-3');
             i.innerHTML = `<span>${idx + 1}. ${sanitizeHTML(p.name)}</span><span>${Math.round(p.score)} Punkte</span>`;
             leaderboard.append(i);
         }
@@ -1866,9 +1856,9 @@ function initializePlayerFeatures(reconnectInfo) {
 
             playerHasSubmitted = true;
             submitAnswerBtn.disabled = true;
-            for (const btn of optionsContainer
-                .querySelectorAll('button.option-btn')) (btn.disabled = true);
-            // console.log("Player submitted answer:", selectedAnswers);
+            for (const btn of optionsContainer.querySelectorAll('button.option-btn')) {
+                btn.disabled = true;
+            }
 
             if (playerTimerInterval) {
                 clearInterval(playerTimerInterval);
@@ -2121,8 +2111,9 @@ function initializePlayerFeatures(reconnectInfo) {
                     }
                 }
                 submitAnswerBtn.classList.add('hidden');
-                for (const btn of optionsContainer
-                    .querySelectorAll('button.option-btn')) (btn.disabled = true);
+                for (const btn of optionsContainer.querySelectorAll('button.option-btn')) {
+                    btn.disabled = true;
+                }
             }
         }, 100); // Update every 100ms
     }
@@ -2275,24 +2266,10 @@ function initializePlayerFeatures(reconnectInfo) {
                 ol.innerHTML = '<li>Keine Spieler in der Rangliste.</li>';
             } else {
                 for (const [idx, p] of frData.leaderboard.entries()) {
-                    // Added idx for rank highlighting
                     const li = document.createElement('li');
-                    switch (idx) {
-                    case 0: {
-                    li.classList.add('rank-1');
-                    break;
-                    }
-                    case 1: {
-                    li.classList.add('rank-2');
-                    break;
-                    }
-                    case 2: { {
-                    li.classList.add('rank-3');
-                    // No default
-                    }
-                    break;
-                    }
-                    }
+                    if (idx === 0) li.classList.add('rank-1');
+                    else if (idx === 1) li.classList.add('rank-2');
+                    else if (idx === 2) li.classList.add('rank-3');
                     li.textContent = `${idx + 1}. ${p.name}: ${Math.round(p.score)} Punkte`;
                     ol.append(li);
                 }
