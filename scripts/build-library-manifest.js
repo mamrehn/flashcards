@@ -43,6 +43,27 @@ function cardType(card) {
     return Array.isArray(card.options) ? 'multiple-choice' : 'text';
 }
 
+/**
+ * Pull a deck-level meta block out of a parsed JSON, normalizing strings.
+ * Returns null when no usable meta is present.
+ */
+function readMeta(data) {
+    if (!data || typeof data.meta !== 'object' || data.meta === null) return null;
+    const m = data.meta;
+    const str = (v) => (typeof v === 'string' && v.trim() !== '' ? v.trim() : undefined);
+    const out = {
+        name: str(m.name),
+        subject: str(m.subject),
+        gradeLevel: str(m.gradeLevel),
+        learningUnit: str(m.learningUnit),
+        description: str(m.description),
+        author: str(m.author)
+    };
+    // Drop undefined keys so JSON output stays clean.
+    for (const k of Object.keys(out)) if (out[k] === undefined) delete out[k];
+    return Object.keys(out).length > 0 ? out : null;
+}
+
 async function processZip(zipPath) {
     const buf = fs.readFileSync(zipPath);
     const hash = crypto.createHash('sha256').update(buf).digest('hex').slice(0, 12);
@@ -52,8 +73,9 @@ async function processZip(zipPath) {
     let validCards = 0;
     let textCards = 0;
     let mcCards = 0;
-    const categories = new Set();
+    const categoryCounts = new Map();
     const sourceFiles = [];
+    let meta = null;
 
     const entries = Object.values(zip.files).filter(e => !e.dir && e.name.endsWith('.json'));
     for (const entry of entries) {
@@ -62,6 +84,15 @@ async function processZip(zipPath) {
         let data;
         try { data = JSON.parse(content); } catch { continue; }
         if (!data || !Array.isArray(data.cards)) continue;
+
+        // First JSON file with a meta block wins for the ZIP-level metadata.
+        // Multi-JSON ZIPs typically share subject/grade/unit; per-card detail
+        // lives in the cards themselves.
+        if (!meta) {
+            const m = readMeta(data);
+            if (m) meta = m;
+        }
+
         for (const card of data.cards) {
             totalCards++;
             if (!isValidCard(card)) continue;
@@ -69,7 +100,9 @@ async function processZip(zipPath) {
             if (cardType(card) === 'text') textCards++; else mcCards++;
             if (Array.isArray(card.categories)) {
                 for (const c of card.categories) {
-                    if (typeof c === 'string' && c.trim() !== '') categories.add(c.trim());
+                    if (typeof c !== 'string' || c.trim() === '') continue;
+                    const name = c.trim();
+                    categoryCounts.set(name, (categoryCounts.get(name) || 0) + 1);
                 }
             }
         }
@@ -79,16 +112,22 @@ async function processZip(zipPath) {
     const baseName = filename.replace(/\.zip$/i, '');
     const id = slugify(baseName);
 
+    // Sort categories by count descending, then name ascending for stable output.
+    const categories = [...categoryCounts.entries()]
+        .map(([name, count]) => ({ name, count }))
+        .sort((a, b) => (b.count - a.count) || a.name.localeCompare(b.name, 'de'));
+
     return {
         id,
         filename,
-        title: baseName,
+        title: (meta && meta.name) || baseName,
+        meta: meta || null,
         version: hash,
         size: buf.length,
         questionCount: validCards,
         invalidCount: totalCards - validCards,
         types: { text: textCards, multipleChoice: mcCards },
-        categories: [...categories].sort(),
+        categories,
         sourceFiles: sourceFiles.sort()
     };
 }
@@ -115,7 +154,10 @@ async function main() {
             }
             seenIds.add(meta.id);
             decks.push(meta);
-            console.log(`  ✓ ${meta.filename} (${meta.questionCount} questions, ${meta.categories.length} categories, v${meta.version})`);
+            const metaSummary = meta.meta
+                ? ` [${meta.meta.subject || '?'} ${meta.meta.gradeLevel || '?'} ${meta.meta.learningUnit || '?'}]`
+                : ' [no meta]';
+            console.log(`  ✓ ${meta.filename}${metaSummary} (${meta.questionCount} questions, ${meta.categories.length} categories, v${meta.version})`);
         } catch (err) {
             console.error(`  ✗ ${path.basename(zip)}: ${err.message}`);
             process.exit(1);

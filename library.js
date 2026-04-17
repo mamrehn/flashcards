@@ -109,7 +109,10 @@ function renderGrid(filter) {
     const filtered = manifest.decks.filter(d => {
         if (!filter) return true;
         if (d.title.toLowerCase().includes(filter)) return true;
-        return d.categories.some(c => c.toLowerCase().includes(filter));
+        if (d.categories.some(c => c.name.toLowerCase().includes(filter))) return true;
+        const m = d.meta || {};
+        return [m.subject, m.gradeLevel, m.learningUnit, m.description, m.author]
+            .some(v => typeof v === 'string' && v.toLowerCase().includes(filter));
     });
 
     if (filtered.length === 0) {
@@ -136,34 +139,31 @@ function buildDeckCard(deck, importedMeta) {
         routeFromURL();
     });
 
+    const chips = buildMetaChips(deck.meta);
+    if (chips) card.appendChild(chips);
+
     const title = document.createElement('h2');
     title.className = 'deck-card-title';
     title.textContent = deck.title;
     card.appendChild(title);
 
+    if (deck.meta && deck.meta.description) {
+        const desc = document.createElement('p');
+        desc.className = 'deck-card-description';
+        desc.textContent = deck.meta.description;
+        card.appendChild(desc);
+    }
+
     const stats = document.createElement('div');
     stats.className = 'deck-card-stats';
-    stats.appendChild(buildStat('📝', `${deck.questionCount} Fragen`));
-    if (deck.types.text > 0) stats.appendChild(buildStat('💬', `${deck.types.text} Text`));
-    if (deck.types.multipleChoice > 0) stats.appendChild(buildStat('☑️', `${deck.types.multipleChoice} MC`));
+    const line = document.createElement('p');
+    line.className = 'stats-line';
+    line.textContent = `📝 ${deck.questionCount} Fragen${formatTypeBreakdown(deck.types, ' (', ')')}`;
+    stats.appendChild(line);
     card.appendChild(stats);
 
     if (deck.categories.length > 0) {
-        const cats = document.createElement('div');
-        cats.className = 'deck-card-categories';
-        for (const cat of deck.categories.slice(0, 4)) {
-            const badge = document.createElement('span');
-            badge.className = 'category-badge';
-            badge.textContent = cat;
-            cats.appendChild(badge);
-        }
-        if (deck.categories.length > 4) {
-            const more = document.createElement('span');
-            more.className = 'category-badge';
-            more.textContent = `+${deck.categories.length - 4}`;
-            cats.appendChild(more);
-        }
-        card.appendChild(cats);
+        card.appendChild(buildCategoryList(deck.categories, 5));
     }
 
     if (importedMeta) {
@@ -184,11 +184,62 @@ function buildDeckCard(deck, importedMeta) {
     return card;
 }
 
-function buildStat(icon, text) {
-    const span = document.createElement('span');
-    span.className = 'deck-card-stat';
-    span.textContent = `${icon} ${text}`;
-    return span;
+/**
+ * Compose chips for the small filename-encoded codes (subject/grade/unit).
+ * Returns null when the deck has no meta block (older zips without one).
+ */
+function buildMetaChips(meta) {
+    if (!meta) return null;
+    const codes = [meta.subject, meta.gradeLevel, meta.learningUnit].filter(Boolean);
+    if (codes.length === 0) return null;
+    const wrap = document.createElement('div');
+    wrap.className = 'meta-chips';
+    for (const code of codes) {
+        const chip = document.createElement('span');
+        chip.className = 'meta-chip';
+        chip.textContent = code;
+        wrap.appendChild(chip);
+    }
+    return wrap;
+}
+
+/**
+ * Bullet list of categories with per-category counts. Caps at `limit`
+ * with a "+N weitere" tail so tiles stay compact.
+ */
+function buildCategoryList(categories, limit) {
+    const list = document.createElement('ul');
+    list.className = 'category-list';
+    const shown = categories.slice(0, limit);
+    for (const cat of shown) {
+        const li = document.createElement('li');
+        const name = document.createTextNode(cat.name + ' ');
+        const count = document.createElement('span');
+        count.className = 'cat-count';
+        count.textContent = `(${cat.count})`;
+        li.appendChild(name);
+        li.appendChild(count);
+        list.appendChild(li);
+    }
+    if (categories.length > limit) {
+        const more = document.createElement('li');
+        more.className = 'cat-more';
+        more.textContent = `${categories.length - limit} weitere`;
+        list.appendChild(more);
+    }
+    return list;
+}
+
+/**
+ * "(23 Text + 26 MC)" — only shown when both types are present, so the
+ * breakdown clearly explains the total rather than looking additive.
+ */
+function formatTypeBreakdown(types, prefix, suffix) {
+    const parts = [];
+    if (types.text > 0) parts.push(`${types.text} Text`);
+    if (types.multipleChoice > 0) parts.push(`${types.multipleChoice} MC`);
+    if (parts.length < 2) return '';
+    return `${prefix}${parts.join(' + ')}${suffix}`;
 }
 
 function showDetail(deckId) {
@@ -219,15 +270,25 @@ function renderDetail(deck, importedMeta) {
     const card = document.createElement('div');
     card.className = 'detail-card';
 
+    const chips = buildMetaChips(deck.meta);
+    if (chips) card.appendChild(chips);
+
     const title = document.createElement('h2');
     title.className = 'detail-title';
     title.textContent = deck.title;
     card.appendChild(title);
 
-    const version = document.createElement('div');
-    version.className = 'detail-version';
-    version.textContent = `Version ${deck.version} · ${formatBytes(deck.size)}`;
-    card.appendChild(version);
+    if (deck.meta && deck.meta.description) {
+        const desc = document.createElement('p');
+        desc.className = 'detail-description';
+        desc.textContent = deck.meta.description;
+        card.appendChild(desc);
+    }
+
+    const metaLine = document.createElement('div');
+    metaLine.className = 'detail-meta-line';
+    metaLine.textContent = `Version ${deck.version} · ${formatBytes(deck.size)}`;
+    card.appendChild(metaLine);
 
     if (importedMeta) {
         if (importedMeta.libraryVersion === deck.version) {
@@ -245,29 +306,36 @@ function renderDetail(deck, importedMeta) {
         }
     }
 
-    const stats = document.createElement('div');
-    stats.className = 'detail-stats';
-    stats.appendChild(buildDetailStat(deck.questionCount, 'Fragen'));
-    stats.appendChild(buildDetailStat(deck.types.text, 'Textantwort'));
-    stats.appendChild(buildDetailStat(deck.types.multipleChoice, 'Multiple Choice'));
-    stats.appendChild(buildDetailStat(deck.categories.length, 'Kategorien'));
-    card.appendChild(stats);
+    // One prominent total + a sub-line that makes the breakdown explicit
+    // (avoids the "is it 49 + 23 + 26?" misread).
+    const summary = document.createElement('div');
+    summary.className = 'detail-summary';
+    const summaryCount = document.createElement('p');
+    summaryCount.className = 'detail-summary-count';
+    summaryCount.textContent = `${deck.questionCount} Fragen`;
+    summary.appendChild(summaryCount);
+    const breakdown = formatDetailBreakdown(deck.types);
+    if (breakdown) {
+        const breakdownEl = document.createElement('p');
+        breakdownEl.className = 'detail-summary-breakdown';
+        breakdownEl.textContent = breakdown;
+        summary.appendChild(breakdownEl);
+    }
+    card.appendChild(summary);
 
     if (deck.categories.length > 0) {
         const heading = document.createElement('h3');
         heading.className = 'detail-section-title';
-        heading.textContent = 'Kategorien';
+        heading.textContent = `Kategorien (${deck.categories.length})`;
         card.appendChild(heading);
+        card.appendChild(buildCategoryList(deck.categories, deck.categories.length));
+    }
 
-        const cats = document.createElement('div');
-        cats.className = 'detail-categories';
-        for (const cat of deck.categories) {
-            const badge = document.createElement('span');
-            badge.className = 'category-badge';
-            badge.textContent = cat;
-            cats.appendChild(badge);
-        }
-        card.appendChild(cats);
+    if (deck.meta && deck.meta.author) {
+        const author = document.createElement('div');
+        author.className = 'detail-author';
+        author.textContent = `Autor:in: ${deck.meta.author}`;
+        card.appendChild(author);
     }
 
     const actions = document.createElement('div');
@@ -309,18 +377,12 @@ function buildBanner(cls, title, detail) {
     return banner;
 }
 
-function buildDetailStat(value, label) {
-    const wrap = document.createElement('div');
-    wrap.className = 'detail-stat';
-    const v = document.createElement('div');
-    v.className = 'detail-stat-value';
-    v.textContent = value;
-    wrap.appendChild(v);
-    const l = document.createElement('div');
-    l.className = 'detail-stat-label';
-    l.textContent = label;
-    wrap.appendChild(l);
-    return wrap;
+function formatDetailBreakdown(types) {
+    const parts = [];
+    if (types.text > 0) parts.push(`${types.text} Text-Antworten`);
+    if (types.multipleChoice > 0) parts.push(`${types.multipleChoice} Multiple Choice`);
+    if (parts.length < 2) return '';
+    return `davon ${parts.join(' · ')}`;
 }
 
 function formatBytes(n) {
