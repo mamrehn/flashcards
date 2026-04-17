@@ -25,30 +25,36 @@ const WS_URL = 'ws://localhost:8080';
 1. Install the Fly CLI: https://fly.io/docs/flyctl/install/
 
 2. Sign up / log in:
-   ```bash
-   fly auth signup   # or: fly auth login
-   ```
+
+    ```bash
+    fly auth signup   # or: fly auth login
+    ```
 
 3. Launch the app (from the `server/` directory):
-   ```bash
-   cd server
-   fly launch
-   ```
-   This creates the app on Fly.io using the existing `fly.toml` and `Dockerfile`.
-   Note: `fly launch` creates 2 machines by default for high availability. Scale down to 1 for the free tier:
-   ```bash
-   fly scale count 1 --app qlash-server
-   ```
+
+    ```bash
+    cd server
+    fly launch
+    ```
+
+    This creates the app on Fly.io using the existing `fly.toml` and `Dockerfile`.
+    Note: `fly launch` creates 2 machines by default for high availability. Scale down to 1 for the free tier:
+
+    ```bash
+    fly scale count 1 --app qlash-server
+    ```
 
 4. Add the `FLY_API_TOKEN` secret to your GitHub repository for automated deploys:
-   ```bash
-   fly tokens create deploy -x 999999h
-   ```
-   Copy the token and add it as `FLY_API_TOKEN` in GitHub repo Settings > Secrets > Actions.
+
+    ```bash
+    fly tokens create deploy -x 999999h
+    ```
+
+    Copy the token and add it as `FLY_API_TOKEN` in GitHub repo Settings > Secrets > Actions.
 
 5. Add the `WS_URL` secret to GitHub (used by the build pipeline to inject into the client):
-   - Value: `wss://qlash-server.fly.dev` (or your custom domain)
-   - Add as `WS_URL` in GitHub repo Settings > Secrets > Actions.
+    - Value: `wss://qlash-server.fly.dev` (or your custom domain)
+    - Add as `WS_URL` in GitHub repo Settings > Secrets > Actions.
 
 ### Manual deploy
 

@@ -22,7 +22,7 @@ const ASSETS_TO_CACHE = [
     './index.js',
     './sanitize.js',
     './theme.js',
-    './manifest.json'
+    './manifest.json',
 ];
 
 // Library deck files (decks/library.json and decks/*.zip) are intentionally
@@ -34,7 +34,8 @@ const ASSETS_TO_CACHE = [
 self.addEventListener('install', (event) => {
     console.log('[Service Worker] Installing...');
     event.waitUntil(
-        caches.open(CACHE_NAME)
+        caches
+            .open(CACHE_NAME)
             .then((cache) => {
                 console.log('[Service Worker] Caching assets');
                 return cache.addAll(ASSETS_TO_CACHE);
@@ -42,7 +43,7 @@ self.addEventListener('install', (event) => {
             .then(() => {
                 console.log('[Service Worker] Installation complete');
                 // Skip waiting to activate immediately
-                return self.skipWaiting();
+                return globalThis.skipWaiting();
             })
             .catch((error) => {
                 console.error('[Service Worker] Installation failed:', error);
@@ -54,7 +55,8 @@ self.addEventListener('install', (event) => {
 self.addEventListener('activate', (event) => {
     console.log('[Service Worker] Activating...');
     event.waitUntil(
-        caches.keys()
+        caches
+            .keys()
             .then((cacheNames) => {
                 return Promise.all(
                     cacheNames.map((cacheName) => {
@@ -68,7 +70,7 @@ self.addEventListener('activate', (event) => {
             .then(() => {
                 console.log('[Service Worker] Activation complete');
                 // Take control of all clients immediately
-                return self.clients.claim();
+                return globalThis.clients.claim();
             })
     );
 });
@@ -94,33 +96,37 @@ self.addEventListener('fetch', (event) => {
         caches.open(CACHE_NAME).then((cache) => {
             return cache.match(event.request).then((cachedResponse) => {
                 // Start network fetch in parallel
-                const networkFetch = fetch(event.request).then((networkResponse) => {
-                    // Only cache successful responses
-                    if (networkResponse.ok) {
-                        // Clone before caching
-                        const responseToCache = networkResponse.clone();
+                const networkFetch = fetch(event.request)
+                    .then((networkResponse) => {
+                        // Only cache successful responses
+                        if (networkResponse.ok) {
+                            // Clone before caching
+                            const responseToCache = networkResponse.clone();
 
-                        // Check if content has changed
-                        if (cachedResponse) {
-                            // Compare Last-Modified timestamps to detect changes
-                            const cachedLastModified = cachedResponse.headers.get('last-modified');
-                            const networkLastModified = networkResponse.headers.get('last-modified');
+                            // Check if content has changed
+                            if (cachedResponse) {
+                                // Compare Last-Modified timestamps to detect changes
+                                const cachedLastModified =
+                                    cachedResponse.headers.get('last-modified');
+                                const networkLastModified =
+                                    networkResponse.headers.get('last-modified');
 
-                            if (cachedLastModified !== networkLastModified) {
-                                // Content changed - update cache and notify
+                                if (cachedLastModified !== networkLastModified) {
+                                    // Content changed - update cache and notify
+                                    cache.put(event.request, responseToCache);
+                                    notifyClientsOfUpdate();
+                                }
+                            } else {
+                                // No cached version - just cache it
                                 cache.put(event.request, responseToCache);
-                                notifyClientsOfUpdate();
                             }
-                        } else {
-                            // No cached version - just cache it
-                            cache.put(event.request, responseToCache);
                         }
-                    }
-                    return networkResponse;
-                }).catch((error) => {
-                    console.log('[Service Worker] Network fetch failed, using cache:', error);
-                    return cachedResponse;
-                });
+                        return networkResponse;
+                    })
+                    .catch((error) => {
+                        console.log('[Service Worker] Network fetch failed, using cache:', error);
+                        return cachedResponse;
+                    });
 
                 // Return cached version immediately, or wait for network
                 return cachedResponse || networkFetch;
@@ -133,16 +139,16 @@ self.addEventListener('fetch', (event) => {
  * Notify all clients that an update is available
  */
 function notifyClientsOfUpdate() {
-    self.clients.matchAll({ type: 'window' }).then((clients) => {
-        clients.forEach((client) => {
+    globalThis.clients.matchAll({ type: 'window' }).then((clients) => {
+        for (const client of clients) {
             client.postMessage({ type: 'UPDATE_AVAILABLE' });
-        });
+        }
     });
 }
 
 // Listen for skip waiting message from client
 self.addEventListener('message', (event) => {
     if (event.data === 'SKIP_WAITING') {
-        self.skipWaiting();
+        globalThis.skipWaiting();
     }
 });

@@ -37,7 +37,7 @@ function throttle(func, limit) {
         if (!inThrottle) {
             func.apply(this, args);
             inThrottle = true;
-            setTimeout(() => inThrottle = false, limit);
+            setTimeout(() => (inThrottle = false), limit);
         }
     };
 }
@@ -46,7 +46,7 @@ function throttle(func, limit) {
 // Global State Management
 // ============================================================================
 
-/** @type {Array<Object>} Current set of cards being studied */
+/** @type {Array<object>} Current set of cards being studied */
 let cards = [];
 
 /** @type {number} Index of the currently displayed card */
@@ -148,7 +148,7 @@ let undoBtn;
 let exportBackupBtn;
 let srStatsDashboard;
 
-/** @type {Array<Object>} Undo stack for going back during quiz */
+/** @type {Array<object>} Undo stack for going back during quiz */
 let undoStack = [];
 
 // ============================================================================
@@ -161,70 +161,76 @@ let undoStack = [];
  */
 function initializeApp() {
     // Cache DOM elements
-    fileInput = document.getElementById('file-input');
-    appContent = document.getElementById('app-content');
-    appTitle = document.getElementById('app-title');
-    appSubtitle = document.getElementById('app-subtitle');
-    questionText = document.getElementById('question-text');
-    questionBack = document.getElementById('question-back');
-    sourceDeckDisplay = document.getElementById('source-deck-display');
-    answerText = document.getElementById('answer-text');
-    userAnswerInput = document.getElementById('user-answer-input');
-    userAnswerContainer = document.getElementById('user-answer-container');
-    userAnswerDisplay = document.getElementById('user-answer-display');
-    optionsContainer = document.getElementById('options-container');
-    optionsContainerBack = document.getElementById('options-container-back');
-    selectedOptionsContainer = document.getElementById('selected-options-container');
-    selectedOptionsDisplay = document.getElementById('selected-options-display');
-    mcCorrectAnswerContainer = document.getElementById('mc-correct-answer-container');
-    mcCorrectAnswerText = document.getElementById('mc-correct-answer-text');
-    standardAnswerContainer = document.getElementById('standard-answer-container');
-    textExplanationContainer = document.getElementById('text-explanation-container');
-    textExplanationContent = document.getElementById('text-explanation-content');
-    showAnswerBtn = document.getElementById('show-answer');
-    markCorrectBtn = document.getElementById('mark-correct');
-    markIncorrectBtn = document.getElementById('mark-incorrect');
-    nextCardBtn = document.getElementById('next-card');
-    progressBar = document.getElementById('progress-bar');
-    cardsRemainingElement = document.getElementById('cards-remaining');
-    cardsCompletedElement = document.getElementById('cards-completed');
-    correctCountElement = document.getElementById('correct-count');
-    incorrectCountElement = document.getElementById('incorrect-count');
-    feedbackElement = document.getElementById('feedback');
-    finalScoreElement = document.getElementById('final-score');
-    deckStatsContainer = document.getElementById('deck-stats-container');
-    restartBtn = document.getElementById('restart-btn');
-    uploadNewBtn = document.getElementById('upload-new-btn');
-    returnToSrBtn = document.getElementById('return-to-sr-btn');
-    errorMessageElement = document.getElementById('error-message');
-    flipCard = document.getElementById('flip-card');
-    cardContainer = document.getElementById('card-container');
-    savedDecksContainer = document.getElementById('saved-decks');
-    startSelectedDecksBtn = document.getElementById('start-selected-decks');
-    selectAllDecksBtn = document.getElementById('select-all-decks');
-    deselectAllDecksBtn = document.getElementById('deselect-all-decks');
-    studyModeSelect = document.getElementById('study-mode');
-    deckSearchInput = document.getElementById('deck-search');
-    openSrManagerBtn = document.getElementById('open-sr-manager');
-    srManagerContainer = document.getElementById('spaced-repetition-manager-container');
-    srBucketsDisplay = document.getElementById('sr-buckets-display');
-    startSelectedBucketsBtn = document.getElementById('start-selected-buckets');
-    selectAllBucketsBtn = document.getElementById('select-all-buckets');
-    deselectAllBucketsBtn = document.getElementById('deselect-all-buckets');
-    cleanupOrphansBtn = document.getElementById('cleanup-orphans-btn');
-    bookView = document.getElementById('book-view');
-    bookViewCards = document.getElementById('book-view-cards');
-    bookViewTitle = document.getElementById('book-view-title');
-    bookViewBackBtn = document.getElementById('book-view-back');
-    undoBtn = document.getElementById('undo-btn');
-    exportBackupBtn = document.getElementById('export-backup-btn');
-    srStatsDashboard = document.getElementById('sr-stats-dashboard');
+    fileInput = document.querySelector('#file-input');
+    appContent = document.querySelector('#app-content');
+    appTitle = document.querySelector('#app-title');
+    appSubtitle = document.querySelector('#app-subtitle');
+    questionText = document.querySelector('#question-text');
+    questionBack = document.querySelector('#question-back');
+    sourceDeckDisplay = document.querySelector('#source-deck-display');
+    answerText = document.querySelector('#answer-text');
+    userAnswerInput = document.querySelector('#user-answer-input');
+    userAnswerContainer = document.querySelector('#user-answer-container');
+    userAnswerDisplay = document.querySelector('#user-answer-display');
+    optionsContainer = document.querySelector('#options-container');
+    optionsContainerBack = document.querySelector('#options-container-back');
+    selectedOptionsContainer = document.querySelector('#selected-options-container');
+    selectedOptionsDisplay = document.querySelector('#selected-options-display');
+    mcCorrectAnswerContainer = document.querySelector('#mc-correct-answer-container');
+    mcCorrectAnswerText = document.querySelector('#mc-correct-answer-text');
+    standardAnswerContainer = document.querySelector('#standard-answer-container');
+    textExplanationContainer = document.querySelector('#text-explanation-container');
+    textExplanationContent = document.querySelector('#text-explanation-content');
+    showAnswerBtn = document.querySelector('#show-answer');
+    markCorrectBtn = document.querySelector('#mark-correct');
+    markIncorrectBtn = document.querySelector('#mark-incorrect');
+    nextCardBtn = document.querySelector('#next-card');
+    progressBar = document.querySelector('#progress-bar');
+    cardsRemainingElement = document.querySelector('#cards-remaining');
+    cardsCompletedElement = document.querySelector('#cards-completed');
+    correctCountElement = document.querySelector('#correct-count');
+    incorrectCountElement = document.querySelector('#incorrect-count');
+    feedbackElement = document.querySelector('#feedback');
+    finalScoreElement = document.querySelector('#final-score');
+    deckStatsContainer = document.querySelector('#deck-stats-container');
+    restartBtn = document.querySelector('#restart-btn');
+    uploadNewBtn = document.querySelector('#upload-new-btn');
+    returnToSrBtn = document.querySelector('#return-to-sr-btn');
+    errorMessageElement = document.querySelector('#error-message');
+    flipCard = document.querySelector('#flip-card');
+    cardContainer = document.querySelector('#card-container');
+    savedDecksContainer = document.querySelector('#saved-decks');
+    startSelectedDecksBtn = document.querySelector('#start-selected-decks');
+    selectAllDecksBtn = document.querySelector('#select-all-decks');
+    deselectAllDecksBtn = document.querySelector('#deselect-all-decks');
+    studyModeSelect = document.querySelector('#study-mode');
+    deckSearchInput = document.querySelector('#deck-search');
+    openSrManagerBtn = document.querySelector('#open-sr-manager');
+    srManagerContainer = document.querySelector('#spaced-repetition-manager-container');
+    srBucketsDisplay = document.querySelector('#sr-buckets-display');
+    startSelectedBucketsBtn = document.querySelector('#start-selected-buckets');
+    selectAllBucketsBtn = document.querySelector('#select-all-buckets');
+    deselectAllBucketsBtn = document.querySelector('#deselect-all-buckets');
+    cleanupOrphansBtn = document.querySelector('#cleanup-orphans-btn');
+    bookView = document.querySelector('#book-view');
+    bookViewCards = document.querySelector('#book-view-cards');
+    bookViewTitle = document.querySelector('#book-view-title');
+    bookViewBackBtn = document.querySelector('#book-view-back');
+    undoBtn = document.querySelector('#undo-btn');
+    exportBackupBtn = document.querySelector('#export-backup-btn');
+    srStatsDashboard = document.querySelector('#sr-stats-dashboard');
 
     // Set up event listeners with debouncing/throttling for performance
     fileInput.addEventListener('change', handleFileUpload);
     showAnswerBtn.addEventListener('click', throttle(showAnswer, 300));
-    markCorrectBtn.addEventListener('click', throttle(() => markAnswer(true), 300));
-    markIncorrectBtn.addEventListener('click', throttle(() => markAnswer(false), 300));
+    markCorrectBtn.addEventListener(
+        'click',
+        throttle(() => markAnswer(true), 300)
+    );
+    markIncorrectBtn.addEventListener(
+        'click',
+        throttle(() => markAnswer(false), 300)
+    );
     nextCardBtn.addEventListener('click', throttle(showNextCard, 300));
     restartBtn.addEventListener('click', throttle(restartQuiz, 500));
     uploadNewBtn.addEventListener('click', throttle(resetAndUpload, 500));
@@ -240,8 +246,10 @@ function initializeApp() {
     deselectAllBucketsBtn.addEventListener('click', debounce(deselectAllSRBuckets, 200));
     cleanupOrphansBtn.addEventListener('click', throttle(cleanupOrphanedSRData, 500));
     bookViewBackBtn.addEventListener('click', throttle(closeBookView, 300));
-    document.getElementById('book-view-csv').addEventListener('click', throttle(exportToCsv, 300));
-    document.getElementById('book-view-anki').addEventListener('click', throttle(exportToAnki, 300));
+    document.querySelector('#book-view-csv').addEventListener('click', throttle(exportToCsv, 300));
+    document
+        .querySelector('#book-view-anki')
+        .addEventListener('click', throttle(exportToAnki, 300));
     undoBtn.addEventListener('click', throttle(undoLastAnswer, 300));
     exportBackupBtn.addEventListener('click', throttle(exportBackup, 500));
 
@@ -301,10 +309,15 @@ function initializeApp() {
 /**
  * Global keyboard shortcut handler for the study flow.
  * Delegates to screen-specific sub-handlers.
+ * @param e
  */
 function handleGlobalKeyboard(e) {
     // Don't intercept when typing in an input, textarea, or select
-    if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT') {
+    if (
+        e.target.tagName === 'INPUT' ||
+        e.target.tagName === 'TEXTAREA' ||
+        e.target.tagName === 'SELECT'
+    ) {
         return;
     }
 
@@ -351,6 +364,7 @@ function handleGlobalKeyboard(e) {
 
 /**
  * Handle keyboard shortcuts on card front (question side)
+ * @param e
  */
 function handleCardFrontKeys(e) {
     // Space or Enter: show answer
@@ -361,7 +375,7 @@ function handleCardFrontKeys(e) {
     }
 
     // Number keys 1-9: toggle MC option by position
-    const num = parseInt(e.key);
+    const num = Number.parseInt(e.key);
     if (num >= 1 && num <= 9) {
         const options = optionsContainer.querySelectorAll('.option-item');
         if (!optionsContainer.classList.contains('hidden') && num <= options.length) {
@@ -372,7 +386,7 @@ function handleCardFrontKeys(e) {
             optionItem.classList.toggle('selected', checkbox.checked);
             optionItem.setAttribute('aria-checked', String(checkbox.checked));
 
-            const originalIndex = parseInt(optionItem.dataset.index);
+            const originalIndex = Number.parseInt(optionItem.dataset.index);
             if (checkbox.checked) {
                 if (!selectedOptionIndices.includes(originalIndex)) {
                     selectedOptionIndices.push(originalIndex);
@@ -387,6 +401,7 @@ function handleCardFrontKeys(e) {
 
 /**
  * Handle keyboard shortcuts on card back (answer side)
+ * @param e
  */
 function handleCardBackKeys(e) {
     // Enter or Space: next card (only when next button is visible)
@@ -430,7 +445,7 @@ function handleCardBackKeys(e) {
     }
 
     // Number keys 1-9: toggle MC option explanation tooltip on back side
-    const num = parseInt(e.key);
+    const num = Number.parseInt(e.key);
     if (num >= 1 && num <= 9) {
         const backOptions = optionsContainerBack.querySelectorAll('.option-item');
         if (!optionsContainerBack.classList.contains('hidden') && num <= backOptions.length) {
@@ -450,6 +465,7 @@ function handleCardBackKeys(e) {
 
 /**
  * Handle keyboard shortcuts on the results/feedback screen
+ * @param e
  */
 function handleFeedbackKeys(e) {
     if (e.key === 'Enter') {
@@ -482,7 +498,7 @@ function setupServiceWorkerUpdates() {
  */
 function showUpdateNotification() {
     // Don't show if already showing
-    if (document.getElementById('update-notification')) return;
+    if (document.querySelector('#update-notification')) return;
 
     const notification = document.createElement('div');
     notification.id = 'update-notification';
@@ -499,31 +515,31 @@ function showUpdateNotification() {
     dismissBtn.className = 'dismiss';
     dismissBtn.addEventListener('click', dismissUpdate);
 
-    notification.appendChild(messageSpan);
-    notification.appendChild(updateBtn);
-    notification.appendChild(dismissBtn);
-    document.body.appendChild(notification);
+    notification.append(messageSpan);
+    notification.append(updateBtn);
+    notification.append(dismissBtn);
+    document.body.append(notification);
 }
 
 /**
  * Apply update by reloading the page
  */
 function applyUpdate() {
-    window.location.reload();
+    globalThis.location.reload();
 }
 
 /**
  * Dismiss update notification
  */
 function dismissUpdate() {
-    const notification = document.getElementById('update-notification');
+    const notification = document.querySelector('#update-notification');
     if (notification) {
         notification.remove();
     }
 }
 
 // Initialize when DOM is ready
-window.addEventListener('DOMContentLoaded', initializeApp);
+globalThis.addEventListener('DOMContentLoaded', initializeApp);
 
 // ============================================================================
 // File Upload Handlers
@@ -533,21 +549,21 @@ window.addEventListener('DOMContentLoaded', initializeApp);
  * Toggle visibility of JSON format example
  */
 function toggleJsonSample() {
-    const sampleJson = document.getElementById('sample-json');
+    const sampleJson = document.querySelector('#sample-json');
     sampleJson.classList.toggle('hidden');
 }
 
 // Expose SR manager functions to global scope for onclick handlers
-window.toggleBucketExpansion = toggleBucketExpansion;
-window.toggleBucketSelection = toggleBucketSelection;
-window.moveSRCard = moveSRCard;
-window.deleteSRCard = deleteSRCard;
+globalThis.toggleBucketExpansion = toggleBucketExpansion;
+globalThis.toggleBucketSelection = toggleBucketSelection;
+globalThis.moveSRCard = moveSRCard;
+globalThis.deleteSRCard = deleteSRCard;
 
 /**
  * Set up drop zone for drag-and-drop file import
  */
 function setupDropZone() {
-    const dropZone = document.getElementById('drop-zone');
+    const dropZone = document.querySelector('#drop-zone');
     if (!dropZone) return;
 
     // Clicking the drop zone triggers the file input
@@ -623,7 +639,7 @@ function handleFileUpload(event) {
         }
 
         const reader = new FileReader();
-        reader.onload = function(e) {
+        reader.addEventListener('load', function (e) {
             try {
                 const data = sanitizeParsedJSON(JSON.parse(e.target.result));
 
@@ -635,11 +651,11 @@ function handleFileUpload(event) {
 
                 // Otherwise treat as a card deck
                 processJsonData(data, file.name);
-            } catch (err) {
+            } catch (error) {
                 showError('Fehler beim Lesen der JSON-Datei.');
-                console.error(err);
+                console.error(error);
             }
-        };
+        });
         reader.readAsText(file);
     }
 
@@ -660,7 +676,7 @@ function handleZipUpload(event) {
     }
 
     const reader = new FileReader();
-    reader.onload = async function(e) {
+    reader.addEventListener('load', async function (e) {
         try {
             const zip = new JSZip();
             const zipContent = await zip.loadAsync(e.target.result);
@@ -669,13 +685,17 @@ function handleZipUpload(event) {
 
             // Process each file in the ZIP
             const promises = [];
-            zipContent.forEach((relativePath, zipEntry) => {
+            for (const [zipEntry, relativePath] of zipContent.entries()) {
                 if (!zipEntry.dir && relativePath.endsWith('.json')) {
-                    const promise = zipEntry.async('string').then(content => {
+                    const promise = zipEntry.async('string').then((content) => {
                         try {
                             const data = sanitizeParsedJSON(JSON.parse(content));
 
-                            if (!data.cards || !Array.isArray(data.cards) || data.cards.length === 0) {
+                            if (
+                                !data.cards ||
+                                !Array.isArray(data.cards) ||
+                                data.cards.length === 0
+                            ) {
                                 errorCount++;
                                 return;
                             }
@@ -692,30 +712,32 @@ function handleZipUpload(event) {
                             const deckName = relativePath.split('/').pop().replace('.json', '');
                             saveToLocalStorage(deckName, validCards, []);
                             importedDeckNames.push(deckName);
-                        } catch (e) {
+                        } catch {
                             errorCount++;
                         }
                     });
                     promises.push(promise);
                 }
-            });
+            }
 
             await Promise.all(promises);
 
             if (importedDeckNames.length > 0) {
                 displaySavedDecks('', importedDeckNames);
-                showMessage(`${importedDeckNames.length} Decks erfolgreich importiert${errorCount > 0 ? `, ${errorCount} fehlgeschlagen` : ''}.`);
+                showMessage(
+                    `${importedDeckNames.length} Decks erfolgreich importiert${errorCount > 0 ? `, ${errorCount} fehlgeschlagen` : ''}.`
+                );
             } else {
                 showError('Keine gültigen JSON-Dateien in der ZIP-Datei gefunden.');
             }
-            
+
             // Reset the file input
             event.target.value = '';
         } catch (error) {
             showError('Fehler beim Entpacken der ZIP-Datei.');
             console.error(error);
         }
-    };
+    });
     reader.readAsArrayBuffer(file);
 }
 
@@ -737,7 +759,7 @@ async function handleLibraryImportDeepLink() {
         const manifest = sanitizeParsedJSON(await manifestRes.json());
         if (!manifest || !Array.isArray(manifest.decks)) throw new Error('manifest malformed');
 
-        const deckMeta = manifest.decks.find(d => d.id === id);
+        const deckMeta = manifest.decks.find((d) => d.id === id);
         if (!deckMeta) {
             showError(`Bibliotheks-Deck „${id}“ wurde nicht gefunden.`);
             history.replaceState({}, '', 'cards.html');
@@ -754,15 +776,22 @@ async function handleLibraryImportDeepLink() {
 
         const importedDeckNames = [];
         const allCards = [];
-        const entries = Object.values(zip.files).filter(e => !e.dir && e.name.endsWith('.json'));
+        const entries = Object.values(zip.files).filter((e) => !e.dir && e.name.endsWith('.json'));
         for (const entry of entries) {
             const content = await entry.async('string');
             let data;
-            try { data = sanitizeParsedJSON(JSON.parse(content)); } catch { continue; }
+            try {
+                data = sanitizeParsedJSON(JSON.parse(content));
+            } catch {
+                continue;
+            }
             if (!data || !Array.isArray(data.cards)) continue;
             const validCards = validateCards(data.cards);
             if (validCards.length === 0) continue;
-            const deckName = entry.name.split('/').pop().replace(/\.json$/i, '');
+            const deckName = entry.name
+                .split('/')
+                .pop()
+                .replace(/\.json$/i, '');
             saveToLocalStorage(deckName, validCards, []);
             importedDeckNames.push(deckName);
             for (const card of validCards) {
@@ -785,20 +814,22 @@ async function handleLibraryImportDeepLink() {
                 libMeta[deckName] = {
                     libraryId: deckMeta.id,
                     libraryVersion: deckMeta.version,
-                    importedAt: new Date().toISOString()
+                    importedAt: new Date().toISOString(),
                 };
             }
             localStorage.setItem('flashcardLibraryMeta', JSON.stringify(libMeta));
-        } catch (e) {
-            console.warn('Could not persist library meta:', e);
+        } catch (error) {
+            console.warn('Could not persist library meta:', error);
         }
 
         history.replaceState({}, '', 'cards.html');
 
         displaySavedDecks('', importedDeckNames);
-        showMessage(`„${deckMeta.title}“ importiert (${allCards.length} Karten). Wähle Decks oder Kategorien für die nächste Runde.`);
-    } catch (err) {
-        console.error('Library import failed:', err);
+        showMessage(
+            `„${deckMeta.title}“ importiert (${allCards.length} Karten). Wähle Decks oder Kategorien für die nächste Runde.`
+        );
+    } catch (error) {
+        console.error('Library import failed:', error);
         showError('Bibliotheks-Deck konnte nicht importiert werden.');
         history.replaceState({}, '', 'cards.html');
     }
@@ -806,19 +837,23 @@ async function handleLibraryImportDeepLink() {
 
 /**
  * Process already-parsed JSON data as a card deck
- * @param {Object} data - Parsed JSON object
+ * @param {object} data - Parsed JSON object
  * @param {string} fileName - Original file name for deck naming
  */
 function processJsonData(data, fileName) {
     if (!data.cards || !Array.isArray(data.cards) || data.cards.length === 0) {
-        showError('Ungültiges JSON-Format. Bitte stelle sicher, dass deine Datei ein "cards" Array mit mindestens einer Karte enthält.');
+        showError(
+            'Ungültiges JSON-Format. Bitte stelle sicher, dass deine Datei ein "cards" Array mit mindestens einer Karte enthält.'
+        );
         return;
     }
 
     const validCards = validateCards(data.cards);
 
     if (validCards.length === 0) {
-        showError('Keine gültigen Karten gefunden. Jede Karte muss entweder ein "question" und ein "answer" Feld ODER ein "question", "options" und "correct" Feld haben.');
+        showError(
+            'Keine gültigen Karten gefunden. Jede Karte muss entweder ein "question" und ein "answer" Feld ODER ein "question", "options" und "correct" Feld haben.'
+        );
         return;
     }
 
@@ -828,19 +863,25 @@ function processJsonData(data, fileName) {
     updateAppTitle([deckName]);
     saveToLocalStorage(deckName, validCards, []);
     displaySavedDecks('', [deckName]);
-    initializeQuiz(validCards.map(card => ({ ...card, sourceDeck: deckName })));
+    initializeQuiz(validCards.map((card) => ({ ...card, sourceDeck: deckName })));
     fileInput.value = '';
 }
 
 /**
  * Handle backup file import (auto-detected from handleFileUpload)
- * @param {Object} backup - Parsed backup JSON object
+ * @param {object} backup - Parsed backup JSON object
  */
 function handleBackupImport(backup) {
     const deckCount = Object.keys(backup.flashcardDecks).length;
-    const srCount = backup.spacedRepetitionData ? Object.keys(backup.spacedRepetitionData).length : 0;
+    const srCount = backup.spacedRepetitionData
+        ? Object.keys(backup.spacedRepetitionData).length
+        : 0;
 
-    if (!confirm(`Backup erkannt!\n\n${deckCount} Decks und ${srCount} SR-Einträge werden wiederhergestellt.\n\nAchtung: Vorhandene Daten werden überschrieben!`)) {
+    if (
+        !confirm(
+            `Backup erkannt!\n\n${deckCount} Decks und ${srCount} SR-Einträge werden wiederhergestellt.\n\nAchtung: Vorhandene Daten werden überschrieben!`
+        )
+    ) {
         fileInput.value = '';
         return;
     }
@@ -856,7 +897,10 @@ function handleBackupImport(backup) {
 
         if (backup.flashcardIncorrectIndices) {
             previousIncorrectIndices = backup.flashcardIncorrectIndices;
-            localStorage.setItem('flashcardIncorrectIndices', JSON.stringify(previousIncorrectIndices));
+            localStorage.setItem(
+                'flashcardIncorrectIndices',
+                JSON.stringify(previousIncorrectIndices)
+            );
         }
     } catch (error) {
         console.error('Error restoring backup (storage quota exceeded?):', error);
@@ -872,21 +916,26 @@ function handleBackupImport(backup) {
 
 /**
  * Validate card format - checks for required fields
- * @param {Array<Object>} cards - Array of card objects to validate
- * @returns {Array<Object>} Array of valid cards
+ * @param {Array<object>} cards - Array of card objects to validate
+ * @returns {Array<object>} Array of valid cards
  */
 function validateCards(cards) {
-    return cards.filter(card => {
+    return cards.filter((card) => {
         // Check standard card format (question + answer)
         if (card.question && card.answer) {
             return true;
         }
         // Check multiple choice format (question + options + correct answers)
-        if (card.question && Array.isArray(card.options) && card.options.length > 0 &&
-            Array.isArray(card.correct) && card.correct.length > 0) {
+        if (
+            card.question &&
+            Array.isArray(card.options) &&
+            card.options.length > 0 &&
+            Array.isArray(card.correct) &&
+            card.correct.length > 0
+        ) {
             // Validate that all correct indices are within bounds
             const allIndicesValid = card.correct.every(
-                idx => Number.isInteger(idx) && idx >= 0 && idx < card.options.length
+                (idx) => Number.isInteger(idx) && idx >= 0 && idx < card.options.length
             );
             return allIndicesValid;
         }
@@ -903,11 +952,7 @@ function validateCards(cards) {
  * @param {Array<string>} deckNames - Names of active decks
  */
 function updateAppTitle(deckNames) {
-    if (deckNames.length === 1) {
-        appTitle.textContent = `Lernkarten - ${deckNames[0]}`;
-    } else {
-        appTitle.textContent = `Lernkarten - ${deckNames.length} Decks kombiniert`;
-    }
+    appTitle.textContent = deckNames.length === 1 ? `Lernkarten - ${deckNames[0]}` : `Lernkarten - ${deckNames.length} Decks kombiniert`;
     // Hide the subtitle when a deck is active
     appSubtitle.style.display = 'none';
 }
@@ -940,12 +985,12 @@ function loadSavedDecks() {
 /**
  * Save a deck to localStorage
  * @param {string} deckName - Name of the deck
- * @param {Array<Object>} deckCards - Array of card objects
+ * @param {Array<object>} deckCards - Array of card objects
  * @param {Array<number>} incorrectIndices - Indices of incorrectly answered cards
  */
 function saveToLocalStorage(deckName, deckCards, incorrectIndices = []) {
     savedDecks[deckName] = {
-        cards: deckCards
+        cards: deckCards,
     };
     try {
         localStorage.setItem('flashcardDecks', JSON.stringify(savedDecks));
@@ -1011,14 +1056,19 @@ function extractCategories(deckName) {
     return categories;
 }
 
+/**
+ *
+ * @param searchTerm
+ * @param preselectDeckNames
+ */
 function displaySavedDecks(searchTerm = '', preselectDeckNames = []) {
-    const savedDecksDiv = document.getElementById('saved-decks');
+    const savedDecksDiv = document.querySelector('#saved-decks');
     savedDecksDiv.innerHTML = '';
 
     if (Object.keys(savedDecks).length === 0) {
         const noDecksMessage = document.createElement('p');
         noDecksMessage.textContent = 'Keine gespeicherten Decks gefunden.';
-        savedDecksDiv.appendChild(noDecksMessage);
+        savedDecksDiv.append(noDecksMessage);
         startSelectedDecksBtn.disabled = true;
         return;
     }
@@ -1028,12 +1078,13 @@ function displaySavedDecks(searchTerm = '', preselectDeckNames = []) {
     const lowerSearch = searchTerm.toLowerCase();
 
     // Filter decks by search term (match deck name or category names)
-    const filteredDeckNames = Object.keys(savedDecks).filter(deckName => {
+    const filteredDeckNames = Object.keys(savedDecks).filter((deckName) => {
         if (!searchTerm) return true;
         if (deckName.toLowerCase().includes(lowerSearch)) return true;
         const categories = extractCategories(deckName);
         for (const catName of categories.keys()) {
-            if (catName !== '__uncategorized__' && catName.toLowerCase().includes(lowerSearch)) return true;
+            if (catName !== '__uncategorized__' && catName.toLowerCase().includes(lowerSearch))
+                return true;
         }
         return false;
     });
@@ -1041,15 +1092,15 @@ function displaySavedDecks(searchTerm = '', preselectDeckNames = []) {
     if (filteredDeckNames.length === 0 && searchTerm) {
         const noResultsMessage = document.createElement('p');
         noResultsMessage.textContent = 'Keine Decks gefunden.';
-        savedDecksDiv.appendChild(noResultsMessage);
+        savedDecksDiv.append(noResultsMessage);
         startSelectedDecksBtn.disabled = true;
         return;
     }
 
     for (const deckName of filteredDeckNames) {
         const categories = extractCategories(deckName);
-        const hasCategories = categories.size > 0 &&
-            !(categories.size === 1 && categories.has('__uncategorized__'));
+        const hasCategories =
+            categories.size > 0 && !(categories.size === 1 && categories.has('__uncategorized__'));
         const totalCards = savedDecks[deckName].cards.length;
 
         const folder = document.createElement('div');
@@ -1098,13 +1149,13 @@ function displaySavedDecks(searchTerm = '', preselectDeckNames = []) {
             deleteSavedDeck(deckName);
         });
 
-        header.appendChild(checkbox);
-        header.appendChild(chevron);
-        header.appendChild(folderIcon);
-        header.appendChild(deckTitle);
-        header.appendChild(cardCount);
-        header.appendChild(deleteButton);
-        folder.appendChild(header);
+        header.append(checkbox);
+        header.append(chevron);
+        header.append(folderIcon);
+        header.append(deckTitle);
+        header.append(cardCount);
+        header.append(deleteButton);
+        folder.append(header);
 
         // Toggle expand/collapse on header click (but not on checkbox or delete)
         if (hasCategories) {
@@ -1155,19 +1206,19 @@ function displaySavedDecks(searchTerm = '', preselectDeckNames = []) {
                 catCount.className = 'category-count';
                 catCount.textContent = ` (${count})`;
 
-                catLabel.appendChild(catIcon);
-                catLabel.appendChild(catText);
-                catLabel.appendChild(catCount);
+                catLabel.append(catIcon);
+                catLabel.append(catText);
+                catLabel.append(catCount);
 
-                catItem.appendChild(catCheckbox);
-                catItem.appendChild(catLabel);
-                catContainer.appendChild(catItem);
+                catItem.append(catCheckbox);
+                catItem.append(catLabel);
+                catContainer.append(catItem);
             }
 
-            folder.appendChild(catContainer);
+            folder.append(catContainer);
         }
 
-        savedDecksDiv.appendChild(folder);
+        savedDecksDiv.append(folder);
     }
 
     // Cascade preselection to category checkboxes (no-op for category-less decks)
@@ -1182,25 +1233,34 @@ function displaySavedDecks(searchTerm = '', preselectDeckNames = []) {
 
 /**
  * Handle deck-level checkbox change: check/uncheck all its category checkboxes
+ * @param deckName
+ * @param checked
  */
 function onDeckCheckboxChange(deckName, checked) {
     const escapedName = CSS.escape(deckName);
-    const catCheckboxes = document.querySelectorAll(`.category-checkbox[data-deck-name="${escapedName}"]`);
-    catCheckboxes.forEach(cb => { cb.checked = checked; });
+    const catCheckboxes = document.querySelectorAll(
+        `.category-checkbox[data-deck-name="${escapedName}"]`
+    );
+    for (const cb of catCheckboxes) {
+        cb.checked = checked;
+    }
 }
 
 /**
  * Handle category checkbox change: update parent deck checkbox state
+ * @param deckName
  */
 function onCategoryCheckboxChange(deckName) {
     const escapedName = CSS.escape(deckName);
-    const catCheckboxes = document.querySelectorAll(`.category-checkbox[data-deck-name="${escapedName}"]`);
+    const catCheckboxes = document.querySelectorAll(
+        `.category-checkbox[data-deck-name="${escapedName}"]`
+    );
     if (catCheckboxes.length === 0) return;
 
     const deckCheckbox = document.getElementById(`deck-checkbox-${deckName}`);
     if (!deckCheckbox) return;
 
-    const checkedCount = [...catCheckboxes].filter(cb => cb.checked).length;
+    const checkedCount = [...catCheckboxes].filter((cb) => cb.checked).length;
     if (checkedCount === 0) {
         deckCheckbox.checked = false;
         deckCheckbox.indeterminate = false;
@@ -1218,7 +1278,9 @@ function onCategoryCheckboxChange(deckName) {
  */
 function updateStartButtonState() {
     const deckChecked = document.querySelectorAll('.deck-checkbox:checked').length > 0;
-    const deckIndeterminate = [...document.querySelectorAll('.deck-checkbox')].some(cb => cb.indeterminate);
+    const deckIndeterminate = [...document.querySelectorAll('.deck-checkbox')].some(
+        (cb) => cb.indeterminate
+    );
     const catChecked = document.querySelectorAll('.category-checkbox:checked').length > 0;
     startSelectedDecksBtn.disabled = !(deckChecked || deckIndeterminate || catChecked);
 }
@@ -1233,7 +1295,9 @@ function getSelectedCategoriesPerDeck() {
     const deckCheckboxes = document.querySelectorAll('.deck-checkbox');
     for (const deckCb of deckCheckboxes) {
         const deckName = deckCb.dataset.deckName;
-        const catCheckboxes = document.querySelectorAll(`.category-checkbox[data-deck-name="${CSS.escape(deckName)}"]`);
+        const catCheckboxes = document.querySelectorAll(
+            `.category-checkbox[data-deck-name="${CSS.escape(deckName)}"]`
+        );
 
         if (catCheckboxes.length === 0) {
             // No categories in this deck — select all if deck is checked
@@ -1262,15 +1326,15 @@ function getSelectedCategoriesPerDeck() {
 
 /**
  * Filter cards from a deck by selected categories
+ * @param cards
+ * @param selectedCategories
  */
 function filterCardsByCategories(cards, selectedCategories) {
     if (selectedCategories === null) return cards; // null = all cards
-    return cards.filter(card => {
-        if (selectedCategories.has('__uncategorized__')) {
-            if (!card.categories || card.categories.length === 0) return true;
-        }
+    return cards.filter((card) => {
+        if (selectedCategories.has('__uncategorized__') && (!card.categories || card.categories.length === 0)) return true;
         if (card.categories && card.categories.length > 0) {
-            return card.categories.some(cat => selectedCategories.has(cat));
+            return card.categories.some((cat) => selectedCategories.has(cat));
         }
         return false;
     });
@@ -1297,16 +1361,16 @@ function startSelectedDecks() {
 
     // Merge selected decks, filtered by categories
     let mergedCards = [];
-    selectedPerDeck.forEach((selectedCats, deckName) => {
+    for (const [deckName, selectedCats] of selectedPerDeck.entries()) {
         if (savedDecks[deckName]) {
             const filtered = filterCardsByCategories(savedDecks[deckName].cards, selectedCats);
-            const cardsWithSource = filtered.map(card => ({
+            const cardsWithSource = filtered.map((card) => ({
                 ...card,
-                sourceDeck: deckName
+                sourceDeck: deckName,
             }));
             mergedCards = [...mergedCards, ...cardsWithSource];
         }
-    });
+    }
 
     // Initialize statistics tracking for each deck
     resetDeckStats(selectedDeckNames, selectedPerDeck);
@@ -1322,7 +1386,7 @@ function startSelectedDecks() {
  */
 function resetDeckStats(deckNames, selectedPerDeck) {
     deckStats = {};
-    deckNames.forEach(deckName => {
+    for (const deckName of deckNames) {
         let total = savedDecks[deckName].cards.length;
         if (selectedPerDeck && selectedPerDeck.has(deckName)) {
             const selectedCats = selectedPerDeck.get(deckName);
@@ -1333,22 +1397,22 @@ function resetDeckStats(deckNames, selectedPerDeck) {
         deckStats[deckName] = {
             correct: 0,
             incorrect: 0,
-            total: total
+            total: total,
         };
-    });
+    }
 }
 
 /**
  * Select all deck and category checkboxes
  */
 function selectAllDecks() {
-    document.querySelectorAll('.deck-checkbox').forEach(cb => {
+    for (const cb of document.querySelectorAll('.deck-checkbox')) {
         cb.checked = true;
         cb.indeterminate = false;
-    });
-    document.querySelectorAll('.category-checkbox').forEach(cb => {
+    }
+    for (const cb of document.querySelectorAll('.category-checkbox')) {
         cb.checked = true;
-    });
+    }
     updateStartButtonState();
 }
 
@@ -1356,13 +1420,13 @@ function selectAllDecks() {
  * Deselect all deck and category checkboxes
  */
 function deselectAllDecks() {
-    document.querySelectorAll('.deck-checkbox').forEach(cb => {
+    for (const cb of document.querySelectorAll('.deck-checkbox')) {
         cb.checked = false;
         cb.indeterminate = false;
-    });
-    document.querySelectorAll('.category-checkbox').forEach(cb => {
+    }
+    for (const cb of document.querySelectorAll('.category-checkbox')) {
         cb.checked = false;
-    });
+    }
     updateStartButtonState();
 }
 
@@ -1374,12 +1438,15 @@ function deleteSavedDeck(deckName) {
     if (confirm(`Möchtest du das Deck "${deckName}" wirklich löschen?`)) {
         delete savedDecks[deckName];
         localStorage.setItem('flashcardDecks', JSON.stringify(savedDecks));
-        
+
         if (previousIncorrectIndices[deckName]) {
             delete previousIncorrectIndices[deckName];
-            localStorage.setItem('flashcardIncorrectIndices', JSON.stringify(previousIncorrectIndices));
+            localStorage.setItem(
+                'flashcardIncorrectIndices',
+                JSON.stringify(previousIncorrectIndices)
+            );
         }
-        
+
         displaySavedDecks();
     }
 }
@@ -1390,7 +1457,7 @@ function deleteSavedDeck(deckName) {
 
 /**
  * Initialize quiz with the given cards
- * @param {Array<Object>} loadedCards - Cards to use in the quiz
+ * @param {Array<object>} loadedCards - Cards to use in the quiz
  */
 function initializeQuiz(loadedCards) {
     // Reset the quiz state
@@ -1398,11 +1465,11 @@ function initializeQuiz(loadedCards) {
     currentCardIndex = 0;
     correctCount = 0;
     incorrectCount = 0;
-    answeredCards = new Array(cards.length).fill(null);
+    answeredCards = Array.from({length: cards.length}).fill(null);
 
     // Check if this is from SR buckets
     const isFromSRBuckets = activeDecks.length === 1 && activeDecks[0] === 'SR Buckets';
-    
+
     // Only shuffle if not from SR buckets (bucket order should be preserved)
     if (!isFromSRBuckets) {
         // Randomize initial card order
@@ -1417,7 +1484,7 @@ function initializeQuiz(loadedCards) {
     undoBtn.disabled = true;
 
     // Show the app content
-    document.getElementById('file-input-container').style.display = 'none';
+    document.querySelector('#file-input-container').style.display = 'none';
     appContent.classList.remove('hidden');
 
     // Hide SR button during active quiz
@@ -1434,7 +1501,11 @@ function initializeQuiz(loadedCards) {
         }
         if (hintsToggle) {
             hintsToggle.classList.add('pulse');
-            hintsToggle.addEventListener('animationend', () => hintsToggle.classList.remove('pulse'), { once: true });
+            hintsToggle.addEventListener(
+                'animationend',
+                () => hintsToggle.classList.remove('pulse'),
+                { once: true }
+            );
         }
     }
 
@@ -1449,25 +1520,30 @@ function initializeQuiz(loadedCards) {
  */
 function prioritizeIncorrectCards() {
     if (activeDecks.length === 0) return;
-    
+
     // Create a copy of the cards array for manipulation
     const allCards = [...cards];
     const prioritizedCards = [];
     const remainingCards = [];
-    
+
     // First, identify cards from decks with incorrect answers
-    allCards.forEach(card => {
+    for (const card of allCards) {
         const deckName = card.sourceDeck;
         if (previousIncorrectIndices[deckName] && previousIncorrectIndices[deckName].length > 0) {
             // Find if this card was incorrect in its original deck
-            const originalIndex = savedDecks[deckName].cards.findIndex(c => 
-                c.question === card.question && 
-                (c.answer === card.answer || 
-                 (Array.isArray(c.options) && Array.isArray(card.options) && 
-                  JSON.stringify(c.options) === JSON.stringify(card.options)))
+            const originalIndex = savedDecks[deckName].cards.findIndex(
+                (c) =>
+                    c.question === card.question &&
+                    (c.answer === card.answer ||
+                        (Array.isArray(c.options) &&
+                            Array.isArray(card.options) &&
+                            JSON.stringify(c.options) === JSON.stringify(card.options)))
             );
-            
-            if (originalIndex !== -1 && previousIncorrectIndices[deckName].includes(originalIndex)) {
+
+            if (
+                originalIndex !== -1 &&
+                previousIncorrectIndices[deckName].includes(originalIndex)
+            ) {
                 prioritizedCards.push(card);
             } else {
                 remainingCards.push(card);
@@ -1475,7 +1551,7 @@ function prioritizeIncorrectCards() {
         } else {
             remainingCards.push(card);
         }
-    });
+    }
 
     // Shuffle both arrays
     shuffleArray(prioritizedCards);
@@ -1522,17 +1598,17 @@ function showCurrentCard() {
 
     // Check if we're currently showing the back side
     const isShowingBack = flipCard.classList.contains('flipped');
-    
+
     if (isShowingBack) {
         // Reset to front side and animate fly-in from bottom
         flipCard.classList.remove('flipped');
-        
+
         // Update card content immediately (while transitioning to front)
         updateCardContent(card);
-        
+
         // Start fly-in animation from bottom
         flipCard.classList.add('fly-in-bottom');
-        
+
         // Clean up animation class after animation completes
         setTimeout(() => {
             flipCard.classList.remove('fly-in-bottom');
@@ -1545,14 +1621,13 @@ function showCurrentCard() {
 
 /**
  * Update the card content with new question data
- * @param {Object} card - The card object to display
+ * @param {object} card - The card object to display
  */
 function updateCardContent(card) {
-    
     // Set question on both sides
     questionText.textContent = card.question;
     questionBack.textContent = card.question;
-    
+
     // Show source deck info
     sourceDeckDisplay.textContent = `Quelle: ${card.sourceDeck}`;
 
@@ -1581,7 +1656,7 @@ function updateCardContent(card) {
         }
 
         // Create option items with shuffled order
-        shuffledOptions.forEach((option, index) => {
+        for (const [index, option] of shuffledOptions.entries()) {
             const originalIndex = optionMapping[index];
             const optionItem = document.createElement('div');
             optionItem.className = 'option-item';
@@ -1600,8 +1675,8 @@ function updateCardContent(card) {
             label.htmlFor = `option-${index}`;
             label.textContent = `${index + 1}. ${option}`;
 
-            optionItem.appendChild(checkbox);
-            optionItem.appendChild(label);
+            optionItem.append(checkbox);
+            optionItem.append(label);
 
             // Toggle helper to keep click and keyboard logic in sync
             const toggleOption = () => {
@@ -1643,25 +1718,39 @@ function updateCardContent(card) {
 
             // Keyboard handler for option items: Space/Enter toggle, Arrow navigation
             optionItem.addEventListener('keydown', (e) => {
-                if (e.key === ' ' || e.key === 'Enter') {
+                switch (e.key) {
+                case ' ': 
+                case 'Enter': {
                     e.preventDefault();
                     e.stopPropagation();
                     toggleOption();
-                } else if (e.key === 'ArrowDown' || e.key === 'ArrowRight') {
+                
+                break;
+                }
+                case 'ArrowDown': 
+                case 'ArrowRight': {
                     e.preventDefault();
                     e.stopPropagation();
                     const next = optionItem.nextElementSibling;
                     if (next) next.focus();
-                } else if (e.key === 'ArrowUp' || e.key === 'ArrowLeft') {
+                
+                break;
+                }
+                case 'ArrowUp': 
+                case 'ArrowLeft': {
                     e.preventDefault();
                     e.stopPropagation();
                     const prev = optionItem.previousElementSibling;
                     if (prev) prev.focus();
+                
+                break;
+                }
+                // No default
                 }
             });
 
-            optionsContainer.appendChild(optionItem);
-        });
+            optionsContainer.append(optionItem);
+        }
 
         // Set answer text for back of card
         standardAnswerContainer.classList.add('hidden');
@@ -1670,7 +1759,6 @@ function updateCardContent(card) {
         // Display all options with color coding (will be filled when answer is shown)
         const correctIndices = card.correct;
         mcCorrectAnswerText.innerHTML = ''; // Will be populated in showAnswer()
-
     } else {
         // Handle standard question
         userAnswerInput.classList.remove('hidden');
@@ -1693,7 +1781,7 @@ function updateCardContent(card) {
     optionsContainerBack.classList.add('hidden');
     textExplanationContainer.classList.add('hidden');
     textExplanationContent.classList.add('hidden');
-    
+
     // Reset explanation label and animation
     const explanationLabel = document.querySelector('.explanation-label');
     const explanationIcon = document.querySelector('.explanation-icon');
@@ -1703,17 +1791,17 @@ function updateCardContent(card) {
     if (explanationIcon) {
         explanationIcon.style.animation = '';
     }
-    
+
     // Clean up any existing tooltips from previous cards
-    document.querySelectorAll('.option-explanation-indicator').forEach(indicator => {
+    for (const indicator of document.querySelectorAll('.option-explanation-indicator')) {
         if (indicator._tooltip) {
             indicator._tooltip.remove();
             indicator._tooltip = null;
         }
-    });
-    document.querySelectorAll('.option-explanation-tooltip').forEach(tooltip => {
+    }
+    for (const tooltip of document.querySelectorAll('.option-explanation-tooltip')) {
         tooltip.remove();
-    });
+    }
 
     // Reset buttons
     markCorrectBtn.style.display = 'inline-block';
@@ -1742,62 +1830,62 @@ function updateCardContent(card) {
  * Add explanation indicator to a multiple choice option
  * @param {HTMLElement} optionItem - The option element
  * @param {number} index - The option index
- * @param {Object} card - The card object
+ * @param {object} card - The card object
  */
 function addExplanationToOption(optionItem, index, card) {
     // Check if explanations exist for this card and this specific option
     if (card.explanations && card.explanations[index.toString()]) {
         const explanation = card.explanations[index.toString()];
-        
+
         // Create explanation indicator
         const indicator = document.createElement('span');
         indicator.className = 'option-explanation-indicator';
         indicator.setAttribute('tabindex', '0');
         indicator.setAttribute('role', 'button');
         indicator.setAttribute('aria-label', 'Erklärung anzeigen');
-        
+
         // Create tooltip
         const tooltip = document.createElement('span');
         tooltip.className = 'option-explanation-tooltip';
         tooltip.textContent = explanation;
-        
+
         // Append tooltip to body instead of indicator for better positioning
-        document.body.appendChild(tooltip);
-        
+        document.body.append(tooltip);
+
         // Store reference to tooltip on indicator for cleanup
         indicator._tooltip = tooltip;
-        
-        optionItem.appendChild(indicator);
-        
+
+        optionItem.append(indicator);
+
         // Re-enable pointer events for the indicator only
         indicator.style.pointerEvents = 'auto';
-        
+
         // Add event listeners for tooltip positioning
         let isHovering = false;
-        
+
         const showTooltip = () => {
             isHovering = true;
             const rect = indicator.getBoundingClientRect();
             const viewportWidth = window.innerWidth;
             const viewportHeight = window.innerHeight;
-            
+
             // Calculate available space
             const spaceAbove = rect.top;
             const spaceBelow = viewportHeight - rect.bottom;
-            
+
             // Position vertically (prefer above, but use below if not enough space)
             if (spaceAbove > 120 || spaceAbove > spaceBelow) {
                 // Position above
-                tooltip.style.bottom = (viewportHeight - rect.top + 8) + 'px';
+                tooltip.style.bottom = viewportHeight - rect.top + 8 + 'px';
                 tooltip.style.top = 'auto';
-                tooltip.setAttribute('data-arrow', 'down');
+                tooltip.dataset.arrow = 'down';
             } else {
                 // Position below
-                tooltip.style.top = (rect.bottom + 8) + 'px';
+                tooltip.style.top = rect.bottom + 8 + 'px';
                 tooltip.style.bottom = 'auto';
-                tooltip.setAttribute('data-arrow', 'up');
+                tooltip.dataset.arrow = 'up';
             }
-            
+
             // Position horizontally (ensure it stays in viewport)
             const tooltipWidth = 250; // Approximate max-width
             if (rect.left + tooltipWidth > viewportWidth - 16) {
@@ -1812,7 +1900,7 @@ function addExplanationToOption(optionItem, index, card) {
 
             tooltip.style.display = 'block';
         };
-        
+
         const hideTooltip = () => {
             isHovering = false;
             // Delay hiding to allow mouse to move to tooltip
@@ -1822,22 +1910,21 @@ function addExplanationToOption(optionItem, index, card) {
                 }
             }, 100);
         };
-        
+
         // Allow hovering over the tooltip itself
         tooltip.addEventListener('mouseenter', () => {
             isHovering = true;
         });
-        
+
         tooltip.addEventListener('mouseleave', () => {
             isHovering = false;
             hideTooltip();
         });
-        
+
         indicator.addEventListener('mouseenter', showTooltip);
         indicator.addEventListener('mouseleave', hideTooltip);
         indicator.addEventListener('focus', showTooltip);
         indicator.addEventListener('blur', hideTooltip);
-        
     }
 }
 
@@ -1847,15 +1934,15 @@ function addExplanationToOption(optionItem, index, card) {
 function toggleTextExplanation() {
     const isHidden = textExplanationContent.classList.contains('hidden');
     textExplanationContent.classList.toggle('hidden');
-    
+
     // Stop pulsating animation after first click
     const icon = textExplanationContainer.querySelector('.explanation-icon');
     const label = textExplanationContainer.querySelector('.explanation-label');
-    
+
     if (icon) {
         icon.style.animation = 'none';
     }
-    
+
     // Toggle label visibility based on explanation visibility
     if (label) {
         if (isHidden) {
@@ -1881,22 +1968,22 @@ function showAnswer() {
         // For multiple choice questions
         // Clone options to back side for color-coded feedback
         optionsContainerBack.innerHTML = optionsContainer.innerHTML;
-        
+
         // Apply color coding to back side option items
         const backOptionItems = optionsContainerBack.querySelectorAll('.option-item');
-        backOptionItems.forEach((optionItem) => {
-            const originalIndex = parseInt(optionItem.dataset.index);
+        for (const optionItem of backOptionItems) {
+            const originalIndex = Number.parseInt(optionItem.dataset.index);
             const isCorrectOption = card.correct.includes(originalIndex);
             const wasSelected = selectedOptionIndices.includes(originalIndex);
-            
+
             // Disable further interaction
             const checkbox = optionItem.querySelector('.option-checkbox');
             checkbox.disabled = true;
             optionItem.style.pointerEvents = 'none';
-            
+
             // Remove previous selection styling
             optionItem.classList.remove('selected');
-            
+
             // Apply color coding based on correctness
             if (wasSelected && isCorrectOption) {
                 // Correctly selected
@@ -1915,13 +2002,13 @@ function showAnswer() {
                 // Correctly not selected
                 optionItem.classList.add('mc-neutral');
             }
-        });
-        
+        }
+
         // Show back options container and hide other answer displays
         optionsContainerBack.classList.remove('hidden');
         selectedOptionsContainer.classList.add('hidden');
         mcCorrectAnswerContainer.classList.add('hidden');
-        
+
         // Automatically evaluate the answer with partial scoring
         let score;
         if (selectedOptionIndices.length > 0 || card.correct.length === 0) {
@@ -1938,7 +2025,7 @@ function showAnswer() {
             score = 0;
         }
         markAnswer(score);
-        
+
         // For multiple choice, always hide Richtig/Falsch buttons and show Next button
         markCorrectBtn.style.display = 'none';
         markIncorrectBtn.style.display = 'none';
@@ -1952,17 +2039,17 @@ function showAnswer() {
         } else {
             userAnswerContainer.classList.add('hidden');
         }
-        
+
         // Show explanation for text answers if available (always, not just for incorrect answers)
         if (card.explanation) {
             textExplanationContent.textContent = card.explanation;
             textExplanationContainer.classList.remove('hidden');
         }
-        
+
         // Check if the user's answer exactly matches the correct answer
         const correctAnswer = card.answer.trim();
         const isExactMatch = userAnswer.toLowerCase() === correctAnswer.toLowerCase();
-        
+
         if (isExactMatch) {
             // Automatically mark as correct and show only Next button
             markAnswer(true);
@@ -2002,8 +2089,8 @@ function showAnswer() {
  */
 function arraysEqual(a, b) {
     if (a.length !== b.length) return false;
-    for (let i = 0; i < a.length; i++) {
-        if (a[i] !== b[i]) return false;
+    for (const [i, element] of a.entries()) {
+        if (element !== b[i]) return false;
     }
     return true;
 }
@@ -2050,9 +2137,9 @@ function markAnswer(scoreOrBool) {
         deckStats[deckName].correct += score;
     }
     if (score < 1) {
-        incorrectCount += (1 - score);
+        incorrectCount += 1 - score;
         if (deckStats[deckName]) {
-            deckStats[deckName].incorrect += (1 - score);
+            deckStats[deckName].incorrect += 1 - score;
         }
     }
 
@@ -2061,15 +2148,16 @@ function markAnswer(scoreOrBool) {
         triggerConfetti();
     }
 
-    if (!isFullyCorrect) {
-        // Store the incorrect/partial card in the source deck's incorrect indices
-        if (deckName && savedDecks[deckName]) {
+    if (!isFullyCorrect && // Store the incorrect/partial card in the source deck's incorrect indices
+        deckName && savedDecks[deckName]) {
             const originalDeckCards = savedDecks[deckName].cards;
-            const originalIndex = originalDeckCards.findIndex(c =>
-                c.question === card.question &&
-                (c.answer === card.answer ||
-                (Array.isArray(c.options) && Array.isArray(card.options) &&
-                JSON.stringify(c.options) === JSON.stringify(card.options)))
+            const originalIndex = originalDeckCards.findIndex(
+                (c) =>
+                    c.question === card.question &&
+                    (c.answer === card.answer ||
+                        (Array.isArray(c.options) &&
+                            Array.isArray(card.options) &&
+                            JSON.stringify(c.options) === JSON.stringify(card.options)))
             );
 
             if (originalIndex !== -1) {
@@ -2081,7 +2169,6 @@ function markAnswer(scoreOrBool) {
                 }
             }
         }
-    }
 
     // Update incorrect indices in local storage
     updateIncorrectIndices();
@@ -2095,8 +2182,8 @@ function markAnswer(scoreOrBool) {
     if (Array.isArray(card.options) && Array.isArray(card.correct)) {
         const optionItems = document.querySelectorAll('.option-item');
 
-        optionItems.forEach(item => {
-            const optionIndex = parseInt(item.dataset.index);
+        for (const item of optionItems) {
+            const optionIndex = Number.parseInt(item.dataset.index);
             const isOptionCorrect = card.correct.includes(optionIndex);
             const isOptionSelected = selectedOptionIndices.includes(optionIndex);
 
@@ -2109,7 +2196,7 @@ function markAnswer(scoreOrBool) {
             } else if (isOptionSelected) {
                 item.classList.add('incorrect');
             }
-        });
+        }
     }
 
     updateStatistics();
@@ -2133,7 +2220,7 @@ function showNextCard() {
  */
 function updateStatistics() {
     const totalCards = cards.length;
-    const completedCards = answeredCards.filter(a => a !== null).length;
+    const completedCards = answeredCards.filter((a) => a !== null).length;
     const remainingCards = totalCards - completedCards;
     const percentageComplete = totalCards > 0 ? (completedCards / totalCards) * 100 : 0;
 
@@ -2154,7 +2241,8 @@ function updateStatistics() {
  */
 function showFeedback() {
     const totalAnswered = correctCount + incorrectCount;
-    const percentageCorrect = totalAnswered > 0 ? Math.round((correctCount / totalAnswered) * 100) : 0;
+    const percentageCorrect =
+        totalAnswered > 0 ? Math.round((correctCount / totalAnswered) * 100) : 0;
 
     finalScoreElement.textContent = `${percentageCorrect}% (${formatScore(correctCount)} von ${formatScore(totalAnswered)})`;
     feedbackElement.classList.remove('hidden');
@@ -2174,23 +2262,23 @@ function showFeedback() {
 
     // Display per-deck statistics
     deckStatsContainer.innerHTML = '';
-    
+
     if (activeDecks.length > 1) {
         const deckStatsHeader = document.createElement('h3');
         deckStatsHeader.textContent = 'Statistik pro Deck:';
-        deckStatsContainer.appendChild(deckStatsHeader);
-        
+        deckStatsContainer.append(deckStatsHeader);
+
         const deckStatsList = document.createElement('div');
         deckStatsList.className = 'deck-stats-list';
-        
+
         for (const deckName in deckStats) {
             const stats = deckStats[deckName];
             const totalAnswered = stats.correct + stats.incorrect;
-            
+
             if (totalAnswered === 0) continue;
-            
+
             const deckAccuracy = Math.round((stats.correct / totalAnswered) * 100);
-            
+
             const deckStatItem = document.createElement('div');
             deckStatItem.className = 'deck-stat-item';
             deckStatItem.innerHTML = `
@@ -2199,11 +2287,11 @@ function showFeedback() {
                 ${formatScore(stats.incorrect)} falsch,
                 ${deckAccuracy}% Genauigkeit
             `;
-            
-            deckStatsList.appendChild(deckStatItem);
+
+            deckStatsList.append(deckStatItem);
         }
-        
-        deckStatsContainer.appendChild(deckStatsList);
+
+        deckStatsContainer.append(deckStatsList);
     }
 
     // Focus first visible action button
@@ -2235,7 +2323,7 @@ function restartQuiz() {
     resetDeckStats(activeDecks);
 
     // Reset answered cards
-    answeredCards = new Array(cards.length).fill(null);
+    answeredCards = Array.from({length: cards.length}).fill(null);
 
     // Prioritize incorrect cards again and reshuffle
     shuffleCards();
@@ -2255,33 +2343,33 @@ function returnToSRManager() {
     // Hide quiz content
     appContent.classList.add('hidden');
     feedbackElement.classList.add('hidden');
-    
+
     // Show file input container and SR manager
-    document.getElementById('file-input-container').style.display = 'block';
+    document.querySelector('#file-input-container').style.display = 'block';
     srManagerContainer.classList.remove('hidden');
-    
+
     // Hide saved decks and upload section
-    const savedDecksContainer = document.getElementById('saved-decks-container');
+    const savedDecksContainer = document.querySelector('#saved-decks-container');
     const uploadSection = document.querySelector('.upload-section');
-    const subtitle = document.getElementById('app-subtitle');
-    
+    const subtitle = document.querySelector('#app-subtitle');
+
     savedDecksContainer.classList.add('hidden');
     if (uploadSection) uploadSection.classList.add('hidden');
     if (subtitle) subtitle.classList.add('hidden');
-    
+
     // Update button state
     openSrManagerBtn.textContent = '📚 Decks anzeigen';
     openSrManagerBtn.classList.add('active');
-    
+
     // Hide study mode selector in SR manager
     studyModeSelect.style.display = 'none';
-    
+
     // Refresh SR buckets display
     displaySpacedRepetitionBuckets();
-    
+
     // Reset the app title
     appTitle.textContent = 'Lernkarten App';
-    
+
     // Clear active decks
     activeDecks = [];
 }
@@ -2298,7 +2386,7 @@ function resetAndUpload() {
     }
 
     // Reset everything and show file upload
-    document.getElementById('file-input-container').style.display = 'block';
+    document.querySelector('#file-input-container').style.display = 'block';
     appContent.classList.add('hidden');
     feedbackElement.classList.add('hidden');
     cardContainer.classList.remove('hidden');
@@ -2308,13 +2396,9 @@ function resetAndUpload() {
     appTitle.textContent = 'Lernkarten';
     appSubtitle.style.display = 'block';
     studyModeSelect.style.display = 'inline-block';
-    
+
     // Show SR button only if in spaced-repetition mode
-    if (studyMode === 'spaced-repetition') {
-        openSrManagerBtn.style.display = 'inline-block';
-    } else {
-        openSrManagerBtn.style.display = 'none';
-    }
+    openSrManagerBtn.style.display = studyMode === 'spaced-repetition' ? 'inline-block' : 'none';
 
     // Clear any error messages
     errorMessageElement.classList.add('hidden');
@@ -2352,19 +2436,16 @@ function handleStudyModeChange(event) {
     studyMode = event.target.value;
 
     // Show/hide SR button based on mode
-    if (studyMode === 'spaced-repetition') {
-        openSrManagerBtn.style.display = 'inline-block';
-    } else {
-        openSrManagerBtn.style.display = 'none';
-    }
+    openSrManagerBtn.style.display = studyMode === 'spaced-repetition' ? 'inline-block' : 'none';
 
     // Lesemodus: if mid-quiz, switch to book view for current cards
     // If on deck selection screen (no active quiz), just set the mode — "Start" will handle it
     if (studyMode === 'read-through') {
         if (cards.length > 0 && !appContent.classList.contains('hidden')) {
-            const title = activeDecks.length === 1
-                ? `Lesemodus — ${activeDecks[0]}`
-                : `Lesemodus — ${activeDecks.length} Decks`;
+            const title =
+                activeDecks.length === 1
+                    ? `Lesemodus — ${activeDecks[0]}`
+                    : `Lesemodus — ${activeDecks.length} Decks`;
             bookViewReturnTo = 'decks';
             bookViewFromQuiz = true;
             appContent.classList.add('hidden');
@@ -2387,16 +2468,16 @@ function handleStudyModeChange(event) {
 function reorganizeCardsByStudyMode() {
     // Build card-to-answer map BEFORE shuffling to preserve answer associations
     const cardAnswerMap = new Map();
-    cards.forEach((card, index) => cardAnswerMap.set(card, answeredCards[index]));
+    for (const [index, card] of cards.entries()) cardAnswerMap.set(card, answeredCards[index]);
 
     // Randomize the card order
     shuffleArray(cards);
 
     switch (studyMode) {
-        case 'incorrect-only':
+        case 'incorrect-only': {
             // Filter to show only incorrect cards (current session + previous sessions)
             const incorrectCards = [];
-            cards.forEach((card) => {
+            for (const card of cards) {
                 const cardScore = cardAnswerMap.get(card);
                 const incorrectNow = cardScore !== null && cardScore < 1;
                 const incorrectBefore = isCardIncorrectFromPreviousSession(card);
@@ -2404,15 +2485,16 @@ function reorganizeCardsByStudyMode() {
                 if (incorrectNow || incorrectBefore) {
                     incorrectCards.push(card);
                 }
-            });
+            }
             if (incorrectCards.length > 0) {
                 cards = incorrectCards;
             } else {
                 showError('Keine falsch beantworteten Karten gefunden.');
             }
             break;
+        }
 
-        case 'spaced-repetition':
+        case 'spaced-repetition': {
             // Sort by next review date
             cards.sort((a, b) => {
                 const aKey = getCardKey(a);
@@ -2422,40 +2504,47 @@ function reorganizeCardsByStudyMode() {
                 return new Date(aData.nextReview) - new Date(bData.nextReview);
             });
             break;
+        }
     }
 
     // Rebuild answeredCards to match the new card order
-    answeredCards = cards.map(card => cardAnswerMap.get(card) ?? null);
+    answeredCards = cards.map((card) => cardAnswerMap.get(card) ?? null);
 }
 
 /**
  * Check if a card was answered incorrectly in a previous session
- * @param {Object} card - Card object
+ * @param {object} card - Card object
  * @returns {boolean} True if card was incorrect in previous session
  */
 function isCardIncorrectFromPreviousSession(card) {
     const deckName = card.sourceDeck;
-    if (!deckName || !previousIncorrectIndices[deckName] || previousIncorrectIndices[deckName].length === 0) {
+    if (
+        !deckName ||
+        !previousIncorrectIndices[deckName] ||
+        previousIncorrectIndices[deckName].length === 0
+    ) {
         return false;
     }
-    
+
     // Find the original index of this card in its source deck
     if (!savedDecks[deckName]) return false;
-    
-    const originalIndex = savedDecks[deckName].cards.findIndex(c => 
-        c.question === card.question && 
-        (c.answer === card.answer || 
-         (Array.isArray(c.options) && Array.isArray(card.options) && 
-          JSON.stringify(c.options) === JSON.stringify(card.options)))
+
+    const originalIndex = savedDecks[deckName].cards.findIndex(
+        (c) =>
+            c.question === card.question &&
+            (c.answer === card.answer ||
+                (Array.isArray(c.options) &&
+                    Array.isArray(card.options) &&
+                    JSON.stringify(c.options) === JSON.stringify(card.options)))
     );
-    
+
     return originalIndex !== -1 && previousIncorrectIndices[deckName].includes(originalIndex);
 }
 
 /**
  * Get unique key for a card (for spaced repetition tracking)
  * Uses ||| as separator since it won't appear in normal text
- * @param {Object} card - Card object
+ * @param {object} card - Card object
  * @returns {string} Unique card key
  */
 function getCardKey(card) {
@@ -2464,8 +2553,9 @@ function getCardKey(card) {
 
 /**
  * Update spaced repetition data after answering
- * @param {Object} card - Card object
+ * @param {object} card - Card object
  * @param {boolean} wasCorrect - Whether answer was correct
+ * @param score
  */
 function updateSpacedRepetition(card, wasCorrect, score) {
     const key = getCardKey(card);
@@ -2474,14 +2564,14 @@ function updateSpacedRepetition(card, wasCorrect, score) {
         easeFactor: 2.5,
         repetitions: 0,
         nextReview: new Date(),
-        history: []
+        history: [],
     };
 
     // Ensure history array exists (backward compat with old data)
     if (!data.history) data.history = [];
 
     // Record attempt (score: 0.0-1.0, or 1/0 for text cards)
-    data.history.push(score !== undefined ? score : (wasCorrect ? 1 : 0));
+    data.history.push(score === undefined ? wasCorrect ? 1 : 0 : score);
 
     if (wasCorrect) {
         if (data.repetitions === 0) {
@@ -2492,7 +2582,7 @@ function updateSpacedRepetition(card, wasCorrect, score) {
             data.interval = Math.round(data.interval * data.easeFactor);
         }
         data.repetitions++;
-        data.easeFactor = Math.min(3.0, Math.max(1.3, data.easeFactor + 0.1));
+        data.easeFactor = Math.min(3, Math.max(1.3, data.easeFactor + 0.1));
     } else {
         data.repetitions = 0;
         data.interval = 1;
@@ -2528,9 +2618,11 @@ function loadSpacedRepetitionData() {
         if (data) {
             spacedRepetitionData = JSON.parse(data);
             // Convert date strings back to Date objects
-            Object.keys(spacedRepetitionData).forEach(key => {
-                spacedRepetitionData[key].nextReview = new Date(spacedRepetitionData[key].nextReview);
-            });
+            for (const key of Object.keys(spacedRepetitionData)) {
+                spacedRepetitionData[key].nextReview = new Date(
+                    spacedRepetitionData[key].nextReview
+                );
+            }
         }
     } catch (error) {
         console.error('Error loading spaced repetition data:', error);
@@ -2555,16 +2647,16 @@ function showMessage(message) {
     const messageEl = document.createElement('div');
     messageEl.className = 'message-popup';
     messageEl.textContent = message;
-    document.body.appendChild(messageEl);
-    
+    document.body.append(messageEl);
+
     setTimeout(() => {
         messageEl.classList.add('show');
     }, 10);
-    
+
     setTimeout(() => {
         messageEl.classList.remove('show');
         setTimeout(() => {
-            document.body.removeChild(messageEl);
+            messageEl.remove();
         }, 300);
     }, 3000);
 }
@@ -2582,7 +2674,7 @@ function exportBackup() {
         exportDate: new Date().toISOString(),
         flashcardDecks: savedDecks,
         spacedRepetitionData: spacedRepetitionData,
-        flashcardIncorrectIndices: previousIncorrectIndices
+        flashcardIncorrectIndices: previousIncorrectIndices,
     };
 
     const blob = new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' });
@@ -2605,6 +2697,8 @@ function exportBackup() {
 /**
  * Capture a snapshot of the current state before marking an answer.
  * Called from markAnswer() before any state changes.
+ * @param card
+ * @param score
  */
 function captureUndoSnapshot(card, score) {
     const deckName = card.sourceDeck;
@@ -2617,9 +2711,13 @@ function captureUndoSnapshot(card, score) {
         incorrectCount: incorrectCount,
         deckStatsSnapshot: deckStats[deckName] ? { ...deckStats[deckName] } : null,
         deckName: deckName,
-        srDataSnapshot: spacedRepetitionData[key] ? JSON.parse(JSON.stringify(spacedRepetitionData[key])) : null,
+        srDataSnapshot: spacedRepetitionData[key]
+            ? JSON.parse(JSON.stringify(spacedRepetitionData[key]))
+            : null,
         srKey: key,
-        previousIncorrectSnapshot: previousIncorrectIndices[deckName] ? [...previousIncorrectIndices[deckName]] : null
+        previousIncorrectSnapshot: previousIncorrectIndices[deckName]
+            ? [...previousIncorrectIndices[deckName]]
+            : null,
     });
 
     undoBtn.disabled = false;
@@ -2685,35 +2783,46 @@ function undoLastAnswer() {
  * Trigger an improved confetti animation for correct answers
  */
 function triggerConfetti() {
-    const confettiContainer = document.getElementById('confetti-container');
+    const confettiContainer = document.querySelector('#confetti-container');
     if (!confettiContainer) {
         console.error('Confetti container not found');
         return;
     }
 
-
     // Vibrant color palette
     const colors = [
-        '#FF6B6B', '#4ECDC4', '#45B7D1', '#FFA07A', '#98D8C8',
-        '#F7DC6F', '#BB8FCE', '#85C1E2', '#F8B739', '#52D17C',
-        '#FF8ED4', '#6C5CE7', '#FD79A8', '#FDCB6E', '#00B894'
+        '#FF6B6B',
+        '#4ECDC4',
+        '#45B7D1',
+        '#FFA07A',
+        '#98D8C8',
+        '#F7DC6F',
+        '#BB8FCE',
+        '#85C1E2',
+        '#F8B739',
+        '#52D17C',
+        '#FF8ED4',
+        '#6C5CE7',
+        '#FD79A8',
+        '#FDCB6E',
+        '#00B894',
     ];
-    
+
     const numConfetti = 80;
 
     for (let i = 0; i < numConfetti; i++) {
         const piece = document.createElement('div');
-        
+
         // Random starting position (spread across top)
         const startX = Math.random() * 100;
         const startY = -20 - Math.random() * 50;
-        
+
         // Random color
         const color = colors[Math.floor(Math.random() * colors.length)];
-        
+
         // Random size variation
         const size = 10 + Math.random() * 6;
-        
+
         // Random shape
         const shapeRand = Math.random();
         let borderRadius = '0';
@@ -2723,13 +2832,13 @@ function triggerConfetti() {
         } else if (shapeRand > 0.33) {
             clipPath = 'polygon(50% 0%, 0% 100%, 100% 100%)';
         }
-        
+
         // Animation properties
         const duration = 1 + Math.random() * 0.5; // 1-1.5 seconds (very fast)
         const delay = Math.random() * 0.15;
         const horizontalDrift = (Math.random() - 0.5) * 200;
         const rotation = 360 + Math.random() * 720;
-        
+
         // Set all styles inline
         piece.style.cssText = `
             position: absolute;
@@ -2748,18 +2857,20 @@ function triggerConfetti() {
             animation: confetti-fall ${duration}s ease-in forwards;
             animation-delay: ${delay}s;
         `;
-        
+
         // Add to DOM
-        confettiContainer.appendChild(piece);
+        confettiContainer.append(piece);
 
         // Remove piece after animation completes
-        setTimeout(() => {
-            if (piece.parentNode) {
-                piece.remove();
-            }
-        }, (duration + delay) * 1000 + 100);
+        setTimeout(
+            () => {
+                if (piece.parentNode) {
+                    piece.remove();
+                }
+            },
+            (duration + delay) * 1000 + 100
+        );
     }
-    
 }
 
 // ============================================================================
@@ -2771,7 +2882,7 @@ let bookViewCurrentCards = [];
 
 /**
  * Render cards in book view format
- * @param {Array<Object>} cardsToShow - Cards to render
+ * @param {Array<object>} cardsToShow - Cards to render
  * @param {string} title - Title for the book view
  */
 function openBookView(cardsToShow, title) {
@@ -2780,7 +2891,7 @@ function openBookView(cardsToShow, title) {
     bookViewCards.innerHTML = '';
 
     // Enrich cards with SR data and sort: wrong/partial first, then correct, then unanswered
-    const enriched = cardsToShow.map(card => {
+    const enriched = cardsToShow.map((card) => {
         const key = getCardKey(card);
         const srData = spacedRepetitionData[key] || null;
         return { card, srData };
@@ -2801,7 +2912,7 @@ function openBookView(cardsToShow, title) {
 
     // Find where unanswered section starts (no SR data OR SR data with empty history)
     const hasAnswerHistory = (e) => e.srData && e.srData.history && e.srData.history.length > 0;
-    const firstUnansweredIdx = enriched.findIndex(e => !hasAnswerHistory(e));
+    const firstUnansweredIdx = enriched.findIndex((e) => !hasAnswerHistory(e));
     const answeredCount = firstUnansweredIdx === -1 ? enriched.length : firstUnansweredIdx;
 
     for (let i = 0; i < enriched.length; i++) {
@@ -2812,7 +2923,7 @@ function openBookView(cardsToShow, title) {
             const separator = document.createElement('div');
             separator.className = 'book-section-separator';
             separator.textContent = `Noch nicht beantwortet (${enriched.length - answeredCount})`;
-            bookViewCards.appendChild(separator);
+            bookViewCards.append(separator);
         }
 
         const cardEl = document.createElement('div');
@@ -2820,7 +2931,7 @@ function openBookView(cardsToShow, title) {
 
         let html = `<div class="book-card-number">Karte ${i + 1} von ${enriched.length}`;
         if (card.categories && card.categories.length > 0) {
-            html += ` · ${card.categories.map(c => sanitizeHTML(c)).join(', ')}`;
+            html += ` · ${card.categories.map((c) => sanitizeHTML(c)).join(', ')}`;
         }
         html += '</div>';
 
@@ -2828,19 +2939,20 @@ function openBookView(cardsToShow, title) {
         if (srData) {
             const history = srData.history || [];
             if (history.length > 0) {
-                const hasPartialScores = history.some(s => s > 0 && s < 1);
+                const hasPartialScores = history.some((s) => s > 0 && s < 1);
                 let badgeText;
                 if (hasPartialScores) {
                     // MC with partial scores: show percentages per attempt
-                    const pcts = history.map(s => Math.round(s * 100) + '%');
+                    const pcts = history.map((s) => Math.round(s * 100) + '%');
                     badgeText = `${pcts.join(' → ')} richtig durch die letzten ${history.length} Versuche`;
                 } else {
                     // Binary scores: show "X von Y Mal richtig"
-                    const correctAttempts = history.filter(s => s === 1).length;
+                    const correctAttempts = history.filter((s) => s === 1).length;
                     badgeText = `${correctAttempts} von ${history.length} Mal richtig beantwortet`;
                 }
                 const avgScore = history.reduce((a, b) => a + b, 0) / history.length;
-                const badgeClass = avgScore >= 0.8 ? 'book-sr-good' : avgScore >= 0.5 ? '' : 'book-sr-overdue';
+                const badgeClass =
+                    avgScore >= 0.8 ? 'book-sr-good' : avgScore >= 0.5 ? '' : 'book-sr-overdue';
                 html += `<div class="book-card-sr-badge ${badgeClass}">${sanitizeHTML(badgeText)}</div>`;
             }
         }
@@ -2871,11 +2983,11 @@ function openBookView(cardsToShow, title) {
         }
 
         cardEl.innerHTML = html;
-        bookViewCards.appendChild(cardEl);
+        bookViewCards.append(cardEl);
     }
 
     // Hide everything else, show book view
-    document.getElementById('file-input-container').style.display = 'none';
+    document.querySelector('#file-input-container').style.display = 'none';
     appContent.classList.add('hidden');
     studyModeSelect.style.display = 'none';
     openSrManagerBtn.style.display = 'none';
@@ -2896,12 +3008,12 @@ function closeBookView() {
 
     if (bookViewReturnTo === 'sr-manager') {
         // Return to SR manager
-        document.getElementById('file-input-container').style.display = 'block';
+        document.querySelector('#file-input-container').style.display = 'block';
         srManagerContainer.classList.remove('hidden');
-        document.getElementById('saved-decks-container').classList.add('hidden');
+        document.querySelector('#saved-decks-container').classList.add('hidden');
         const uploadSection = document.querySelector('.upload-section');
         if (uploadSection) uploadSection.classList.add('hidden');
-        const subtitle = document.getElementById('app-subtitle');
+        const subtitle = document.querySelector('#app-subtitle');
         if (subtitle) subtitle.classList.add('hidden');
         studyModeSelect.style.display = 'none';
         openSrManagerBtn.textContent = '📚 Decks anzeigen';
@@ -2916,10 +3028,10 @@ function closeBookView() {
         openSrManagerBtn.style.display = 'inline-block';
     } else {
         // Return to deck selection screen
-        const fileInputContainer = document.getElementById('file-input-container');
-        const savedDecksEl = document.getElementById('saved-decks-container');
+        const fileInputContainer = document.querySelector('#file-input-container');
+        const savedDecksEl = document.querySelector('#saved-decks-container');
         const uploadSection = document.querySelector('.upload-section');
-        const subtitle = document.getElementById('app-subtitle');
+        const subtitle = document.querySelector('#app-subtitle');
 
         fileInputContainer.style.display = 'block';
         savedDecksEl.classList.remove('hidden');
@@ -2927,7 +3039,8 @@ function closeBookView() {
         if (subtitle) subtitle.style.display = 'block';
         srManagerContainer.classList.add('hidden');
         studyModeSelect.style.display = 'inline-block';
-        openSrManagerBtn.style.display = studyMode === 'spaced-repetition' ? 'inline-block' : 'none';
+        openSrManagerBtn.style.display =
+            studyMode === 'spaced-repetition' ? 'inline-block' : 'none';
     }
 }
 
@@ -2940,7 +3053,9 @@ function closeBookView() {
 function exportToCsv() {
     if (bookViewCurrentCards.length === 0) return;
 
-    const rows = [['Frage', 'Antwort', 'Erklärung', 'Optionen', 'Korrekte Optionen', 'Kategorien', 'Deck']];
+    const rows = [
+        ['Frage', 'Antwort', 'Erklärung', 'Optionen', 'Korrekte Optionen', 'Kategorien', 'Deck'],
+    ];
 
     for (const card of bookViewCurrentCards) {
         const question = card.question || '';
@@ -2951,12 +3066,12 @@ function exportToCsv() {
 
         if (card.options && Array.isArray(card.options)) {
             options = card.options.join('; ');
-            correctOptions = (card.correct || []).map(i => card.options[i]).join('; ');
+            correctOptions = (card.correct || []).map((i) => card.options[i]).join('; ');
             // Collect explanations
             if (card.explanations) {
                 const parts = [];
                 for (const [idx, text] of Object.entries(card.explanations)) {
-                    parts.push(`${card.options[parseInt(idx)] || idx}: ${text}`);
+                    parts.push(`${card.options[Number.parseInt(idx)] || idx}: ${text}`);
                 }
                 explanation = parts.join('; ');
             }
@@ -2971,9 +3086,9 @@ function exportToCsv() {
         rows.push([question, answer, explanation, options, correctOptions, categories, deck]);
     }
 
-    const csvContent = rows.map(row =>
-        row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(',')
-    ).join('\n');
+    const csvContent = rows
+        .map((row) => row.map((cell) => `"${String(cell).replaceAll('"', '""')}"`).join(','))
+        .join('\n');
 
     // BOM for Excel UTF-8 detection
     const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8' });
@@ -2998,7 +3113,7 @@ function exportToAnki() {
         '#separator:tab',
         '#html:true',
         '#tags column:4',
-        '#columns:Front\tBack\tExtra\tTags'
+        '#columns:Front\tBack\tExtra\tTags',
     ];
 
     for (const card of bookViewCurrentCards) {
@@ -3009,12 +3124,14 @@ function exportToAnki() {
         if (card.options && Array.isArray(card.options)) {
             // MC: add options to front, correct answers + explanations to back
             front += '<br><br>';
-            front += card.options.map((opt, i) => {
-                const letter = String.fromCharCode(65 + i); // A, B, C...
-                return `${letter}) ${escapeAnkiField(opt)}`;
-            }).join('<br>');
+            front += card.options
+                .map((opt, i) => {
+                    const letter = String.fromCharCode(65 + i); // A, B, C...
+                    return `${letter}) ${escapeAnkiField(opt)}`;
+                })
+                .join('<br>');
 
-            const correctLabels = (card.correct || []).map(i => {
+            const correctLabels = (card.correct || []).map((i) => {
                 const letter = String.fromCharCode(65 + i);
                 return `${letter}) ${escapeAnkiField(card.options[i])}`;
             });
@@ -3024,7 +3141,7 @@ function exportToAnki() {
             if (card.explanations) {
                 const explanationParts = [];
                 for (const [idx, text] of Object.entries(card.explanations)) {
-                    const letter = String.fromCharCode(65 + parseInt(idx));
+                    const letter = String.fromCharCode(65 + Number.parseInt(idx));
                     explanationParts.push(`${letter}: ${escapeAnkiField(text)}`);
                 }
                 if (explanationParts.length > 0) {
@@ -3042,10 +3159,10 @@ function exportToAnki() {
         // Tags: categories + source deck, space-separated
         const tags = [];
         if (card.categories && card.categories.length > 0) {
-            tags.push(...card.categories.map(c => c.replace(/\s+/g, '_')));
+            tags.push(...card.categories.map((c) => c.replaceAll(/\s+/g, '_')));
         }
         if (card.sourceDeck) {
-            tags.push('deck::' + card.sourceDeck.replace(/\s+/g, '_'));
+            tags.push('deck::' + card.sourceDeck.replaceAll(/\s+/g, '_'));
         }
 
         lines.push(`${front}\t${back}\t${extra}\t${tags.join(' ')}`);
@@ -3066,11 +3183,10 @@ function exportToAnki() {
 
 /**
  * Escape a string for use in an Anki tab-separated field
+ * @param text
  */
 function escapeAnkiField(text) {
-    return text
-        .replace(/\t/g, ' ')
-        .replace(/\n/g, '<br>');
+    return text.replaceAll('\t', ' ').replaceAll('\n', '<br>');
 }
 
 /**
@@ -3083,19 +3199,20 @@ function startBookViewFromDecks() {
     const selectedDeckNames = [...selectedPerDeck.keys()];
 
     let allCards = [];
-    selectedPerDeck.forEach((selectedCats, deckName) => {
+    for (const [deckName, selectedCats] of selectedPerDeck.entries()) {
         if (savedDecks[deckName]) {
             const filtered = filterCardsByCategories(savedDecks[deckName].cards, selectedCats);
-            const cardsWithSource = filtered.map(card => ({ ...card, sourceDeck: deckName }));
+            const cardsWithSource = filtered.map((card) => ({ ...card, sourceDeck: deckName }));
             allCards = [...allCards, ...cardsWithSource];
         }
-    });
+    }
 
     if (allCards.length === 0) return;
 
-    const title = selectedDeckNames.length === 1
-        ? `Lesemodus — ${selectedDeckNames[0]}`
-        : `Lesemodus — ${selectedDeckNames.length} Decks`;
+    const title =
+        selectedDeckNames.length === 1
+            ? `Lesemodus — ${selectedDeckNames[0]}`
+            : `Lesemodus — ${selectedDeckNames.length} Decks`;
 
     bookViewReturnTo = 'decks';
     openBookView(allCards, title);
@@ -3108,14 +3225,14 @@ function startBookViewFromDecks() {
 function openBookViewForBucket(interval) {
     const cardsInBucket = [];
 
-    Object.entries(spacedRepetitionData).forEach(([key, data]) => {
+    for (const [key, data] of Object.entries(spacedRepetitionData)) {
         if (data.interval === interval) {
             const card = getCardFromKey(key);
             if (card) {
                 cardsInBucket.push(card);
             }
         }
-    });
+    }
 
     if (cardsInBucket.length === 0) {
         showMessage('Keine Karten in diesem Bucket gefunden.');
@@ -3136,11 +3253,11 @@ function openBookViewForBucket(interval) {
  * Toggle the Spaced Repetition Manager interface
  */
 function openSpacedRepetitionManager() {
-    const savedDecksContainer = document.getElementById('saved-decks-container');
+    const savedDecksContainer = document.querySelector('#saved-decks-container');
     const uploadSection = document.querySelector('.upload-section');
-    const subtitle = document.getElementById('app-subtitle');
+    const subtitle = document.querySelector('#app-subtitle');
     const isCurrentlyOpen = !srManagerContainer.classList.contains('hidden');
-    
+
     if (isCurrentlyOpen) {
         // Close SR manager, show saved decks
         srManagerContainer.classList.add('hidden');
@@ -3178,7 +3295,7 @@ function renderSRDashboard() {
     const now = new Date();
 
     // Count overdue cards
-    const overdueCount = srEntries.filter(d => new Date(d.nextReview) <= now).length;
+    const overdueCount = srEntries.filter((d) => new Date(d.nextReview) <= now).length;
 
     // Calculate average score from histories
     let totalAttempts = 0;
@@ -3238,13 +3355,17 @@ function renderSRDashboard() {
     srStatsDashboard.innerHTML = html;
 }
 
+/**
+ *
+ */
 function displaySpacedRepetitionBuckets() {
     // Always render dashboard (even if empty — shows deck count)
     renderSRDashboard();
 
     // Check if there are any cards with SR data
     if (Object.keys(spacedRepetitionData).length === 0) {
-        srBucketsDisplay.innerHTML = '<div class="sr-empty-message">Noch keine Karten im Spaced Repetition System. Beantworte Fragen im Spaced Repetition Modus, um Karten hier zu sehen.</div>';
+        srBucketsDisplay.innerHTML =
+            '<div class="sr-empty-message">Noch keine Karten im Spaced Repetition System. Beantworte Fragen im Spaced Repetition Modus, um Karten hier zu sehen.</div>';
         startSelectedBucketsBtn.disabled = true;
         return;
     }
@@ -3254,12 +3375,12 @@ function displaySpacedRepetitionBuckets() {
     const now = new Date();
     let cardsNotFound = 0;
 
-    Object.entries(spacedRepetitionData).forEach(([key, data]) => {
+    for (const [key, data] of Object.entries(spacedRepetitionData)) {
         const intervalKey = data.interval;
         if (!buckets[intervalKey]) {
             buckets[intervalKey] = [];
         }
-        
+
         // Parse the card from the key
         const card = getCardFromKey(key);
         if (card) {
@@ -3267,7 +3388,7 @@ function displaySpacedRepetitionBuckets() {
                 key,
                 card,
                 data,
-                isOverdue: data.nextReview <= now
+                isOverdue: data.nextReview <= now,
             });
         } else {
             console.warn('Card not found for key:', key);
@@ -3275,23 +3396,28 @@ function displaySpacedRepetitionBuckets() {
             // Still add it with the key as the question
             buckets[intervalKey].push({
                 key,
-                card: { question: key.split('|||')[1] || 'Unbekannte Frage', sourceDeck: 'Unbekannt' },
+                card: {
+                    question: key.split('|||')[1] || 'Unbekannte Frage',
+                    sourceDeck: 'Unbekannt',
+                },
                 data,
-                isOverdue: data.nextReview <= now
+                isOverdue: data.nextReview <= now,
             });
         }
-    });
-    
+    }
+
     // Sort buckets by interval
-    const sortedIntervals = Object.keys(buckets).map(Number).sort((a, b) => a - b);
+    const sortedIntervals = Object.keys(buckets)
+        .map(Number)
+        .sort((a, b) => a - b);
 
     // Build HTML
     let html = '';
-    sortedIntervals.forEach(interval => {
+    for (const interval of sortedIntervals) {
         const cards = buckets[interval];
         const intervalLabel = getIntervalLabel(interval);
-        const overdueCount = cards.filter(c => c.isOverdue).length;
-        
+        const overdueCount = cards.filter((c) => c.isOverdue).length;
+
         html += `
             <div class="sr-bucket" data-interval="${interval}">
                 <div class="sr-bucket-header" onclick="toggleBucketExpansion(${interval})">
@@ -3301,10 +3427,12 @@ function displaySpacedRepetitionBuckets() {
                         <span class="sr-bucket-count">${cards.length} Karten${overdueCount > 0 ? ` (${overdueCount} fällig)` : ''}</span>
                     </div>
                     <button class="sr-bucket-book-btn" onclick="event.stopPropagation(); openBookViewForBucket(${interval})" title="Buchansicht">📖</button>
-                    <span class="sr-bucket-interval">${interval} Tag${interval !== 1 ? 'e' : ''}</span>
+                    <span class="sr-bucket-interval">${interval} Tag${interval === 1 ? '' : 'e'}</span>
                 </div>
                 <div class="sr-bucket-cards" id="bucket-cards-${interval}">
-                    ${cards.map(({ key, card, data, isOverdue }) => `
+                    ${cards
+                        .map(
+                            ({ key, card, data, isOverdue }) => `
                         <div class="sr-card-item" data-card-key="${encodeURIComponent(key)}">
                             <div class="sr-card-question">${sanitizeHTML(card.question || 'Unbekannte Frage')}</div>
                             <div class="sr-card-meta">
@@ -3321,11 +3449,13 @@ function displaySpacedRepetitionBuckets() {
                                 </div>
                             </div>
                         </div>
-                    `).join('')}
+                    `
+                        )
+                        .join('')}
                 </div>
             </div>
         `;
-    });
+    }
 
     srBucketsDisplay.innerHTML = html;
     updateStartBucketButton();
@@ -3334,6 +3464,7 @@ function displaySpacedRepetitionBuckets() {
 /**
  * Get human-readable interval label
  * Maps intervals to 5 semantic learning stages
+ * @param interval
  */
 function getIntervalLabel(interval) {
     if (interval === 1) return 'Neu (Tag 1)';
@@ -3345,6 +3476,7 @@ function getIntervalLabel(interval) {
 
 /**
  * Toggle bucket expansion
+ * @param interval
  */
 function toggleBucketExpansion(interval) {
     const cardsContainer = document.getElementById(`bucket-cards-${interval}`);
@@ -3353,12 +3485,13 @@ function toggleBucketExpansion(interval) {
 
 /**
  * Toggle bucket selection
+ * @param interval
  */
 function toggleBucketSelection(interval) {
     const bucket = document.querySelector(`.sr-bucket[data-interval="${interval}"]`);
     const checkbox = bucket.querySelector('.sr-bucket-checkbox');
     bucket.classList.toggle('selected');
-    
+
     updateStartBucketButton();
 }
 
@@ -3368,20 +3501,21 @@ function toggleBucketSelection(interval) {
 function updateStartBucketButton() {
     const selectedCount = document.querySelectorAll('.sr-bucket.selected').length;
     startSelectedBucketsBtn.disabled = selectedCount === 0;
-    startSelectedBucketsBtn.textContent = selectedCount > 0
-        ? `Mit ${selectedCount} Bucket${selectedCount !== 1 ? 's' : ''} üben`
-        : 'Mit ausgewählten Buckets üben';
+    startSelectedBucketsBtn.textContent =
+        selectedCount > 0
+            ? `Mit ${selectedCount} Bucket${selectedCount === 1 ? '' : 's'} üben`
+            : 'Mit ausgewählten Buckets üben';
 }
 
 /**
  * Select all SR buckets
  */
 function selectAllSRBuckets() {
-    document.querySelectorAll('.sr-bucket').forEach(bucket => {
+    for (const bucket of document.querySelectorAll('.sr-bucket')) {
         bucket.classList.add('selected');
         const checkbox = bucket.querySelector('.sr-bucket-checkbox');
         if (checkbox) checkbox.checked = true;
-    });
+    }
     updateStartBucketButton();
 }
 
@@ -3389,11 +3523,11 @@ function selectAllSRBuckets() {
  * Deselect all SR buckets
  */
 function deselectAllSRBuckets() {
-    document.querySelectorAll('.sr-bucket').forEach(bucket => {
+    for (const bucket of document.querySelectorAll('.sr-bucket')) {
         bucket.classList.remove('selected');
         const checkbox = bucket.querySelector('.sr-bucket-checkbox');
         if (checkbox) checkbox.checked = false;
-    });
+    }
     updateStartBucketButton();
 }
 
@@ -3401,7 +3535,7 @@ function deselectAllSRBuckets() {
  * Start practice session with selected buckets
  */
 function startSelectedBuckets() {
-    const selectedBuckets = Array.from(document.querySelectorAll('.sr-bucket.selected'));
+    const selectedBuckets = [...document.querySelectorAll('.sr-bucket.selected')];
     if (selectedBuckets.length === 0) {
         showError('Bitte wähle mindestens einen Bucket aus.');
         return;
@@ -3409,21 +3543,21 @@ function startSelectedBuckets() {
 
     // Collect all cards from selected buckets
     const selectedCards = [];
-    selectedBuckets.forEach(bucket => {
-        const interval = parseInt(bucket.dataset.interval);
-        Object.entries(spacedRepetitionData).forEach(([key, data]) => {
+    for (const bucket of selectedBuckets) {
+        const interval = Number.parseInt(bucket.dataset.interval);
+        for (const [key, data] of Object.entries(spacedRepetitionData)) {
             if (data.interval === interval) {
                 const card = getCardFromKey(key);
                 if (card) {
                     // Add sourceDeck to maintain compatibility with quiz system
                     selectedCards.push({
                         ...card,
-                        sourceDeck: card.sourceDeck || 'SR Practice'
+                        sourceDeck: card.sourceDeck || 'SR Practice',
                     });
                 }
             }
-        });
-    });
+        }
+    }
 
     if (selectedCards.length === 0) {
         showError('Keine Karten in den ausgewählten Buckets gefunden.');
@@ -3436,32 +3570,32 @@ function startSelectedBuckets() {
         const bKey = getCardKey(b);
         const aData = spacedRepetitionData[aKey];
         const bData = spacedRepetitionData[bKey];
-        
+
         // First sort by interval (bucket)
         if (aData.interval !== bData.interval) {
             return aData.interval - bData.interval;
         }
-        
+
         // Within same interval, sort by nextReview date (most overdue first)
         return new Date(aData.nextReview) - new Date(bData.nextReview);
     });
 
     // Set active decks for title display
     activeDecks = ['SR Buckets'];
-    
+
     // Ensure study mode is set to spaced-repetition and hide selector
     studyMode = 'spaced-repetition';
     studyModeSelect.value = 'spaced-repetition';
     studyModeSelect.style.display = 'none';
-    
+
     // Update the app title
     updateAppTitle(['SR Buckets']);
 
     // Close SR manager and show quiz
-    const savedDecksContainer = document.getElementById('saved-decks-container');
+    const savedDecksContainer = document.querySelector('#saved-decks-container');
     const uploadSection = document.querySelector('.upload-section');
-    const subtitle = document.getElementById('app-subtitle');
-    
+    const subtitle = document.querySelector('#app-subtitle');
+
     srManagerContainer.classList.add('hidden');
     savedDecksContainer.classList.remove('hidden');
     if (uploadSection) uploadSection.classList.remove('hidden');
@@ -3475,16 +3609,18 @@ function startSelectedBuckets() {
 
 /**
  * Handler for move button click - extracts key from data attributes
+ * @param button
  */
 function handleMoveSRCard(button) {
     const cardItem = button.closest('.sr-card-item');
     const cardKey = decodeURIComponent(cardItem.dataset.cardKey);
-    const currentInterval = parseInt(button.dataset.interval);
+    const currentInterval = Number.parseInt(button.dataset.interval);
     moveSRCard(cardKey, currentInterval);
 }
 
 /**
  * Handler for delete button click - extracts key from data attributes
+ * @param button
  */
 function handleDeleteSRCard(button) {
     const cardItem = button.closest('.sr-card-item');
@@ -3494,19 +3630,24 @@ function handleDeleteSRCard(button) {
 
 /**
  * Move a card to a different interval bucket
+ * @param cardKey
+ * @param currentInterval
  */
 function moveSRCard(cardKey, currentInterval) {
-    const newInterval = prompt(`Karte zu welchem Intervall (in Tagen) verschieben?\nAktuell: ${currentInterval} Tag${currentInterval !== 1 ? 'e' : ''}`, currentInterval);
-    
+    const newInterval = prompt(
+        `Karte zu welchem Intervall (in Tagen) verschieben?\nAktuell: ${currentInterval} Tag${currentInterval === 1 ? '' : 'e'}`,
+        currentInterval
+    );
+
     if (newInterval === null) return; // Cancelled
-    
+
     const trimmed = newInterval.trim();
     if (trimmed === '') {
         showError('Bitte gib eine gültige Anzahl von Tagen ein.');
         return;
     }
-    
-    const interval = parseInt(trimmed);
+
+    const interval = Number.parseInt(trimmed);
     if (isNaN(interval) || interval < 1 || interval > 365) {
         showError('Bitte gib eine gültige Anzahl von Tagen ein (1-365).');
         return;
@@ -3514,12 +3655,12 @@ function moveSRCard(cardKey, currentInterval) {
 
     if (spacedRepetitionData[cardKey]) {
         spacedRepetitionData[cardKey].interval = interval;
-        
+
         // Recalculate next review date
         const nextReview = new Date();
         nextReview.setDate(nextReview.getDate() + interval);
         spacedRepetitionData[cardKey].nextReview = nextReview;
-        
+
         saveSpacedRepetitionData();
         displaySpacedRepetitionBuckets();
         showMessage(`Karte zu ${interval}-Tage-Intervall verschoben.`);
@@ -3530,6 +3671,7 @@ function moveSRCard(cardKey, currentInterval) {
 
 /**
  * Delete a card from the SR system
+ * @param cardKey
  */
 function deleteSRCard(cardKey) {
     if (!confirm('Diese Karte aus dem Spaced Repetition System entfernen?')) {
@@ -3553,40 +3695,44 @@ function cleanupOrphanedSRData() {
     const orphanedKeys = [];
     const deckQuestionSets = new Map();
 
-    Object.keys(spacedRepetitionData).forEach(key => {
+    for (const key of Object.keys(spacedRepetitionData)) {
         const sepIndex = key.indexOf('|||');
-        if (sepIndex < 0) return;
+        if (sepIndex === -1) continue;
         const deckName = key.slice(0, sepIndex);
         const question = key.slice(sepIndex + 3);
 
         const deck = savedDecks[deckName];
         if (!deck) {
             orphanedKeys.push(key);
-            return;
+            continue;
         }
 
         let questionSet = deckQuestionSets.get(deckName);
         if (!questionSet) {
-            questionSet = new Set((deck.cards || []).map(c => c && c.question));
+            questionSet = new Set((deck.cards || []).map((c) => c && c.question));
             deckQuestionSets.set(deckName, questionSet);
         }
         if (!questionSet.has(question)) {
             orphanedKeys.push(key);
         }
-    });
+    }
 
     if (orphanedKeys.length === 0) {
         showMessage('Keine verwaisten Einträge gefunden. Alles sauber!');
         return;
     }
 
-    if (!confirm(`${orphanedKeys.length} verwaiste Einträge gefunden (gelöschte Decks oder geänderte Fragen). Jetzt entfernen?`)) {
+    if (
+        !confirm(
+            `${orphanedKeys.length} verwaiste Einträge gefunden (gelöschte Decks oder geänderte Fragen). Jetzt entfernen?`
+        )
+    ) {
         return;
     }
 
-    orphanedKeys.forEach(key => {
+    for (const key of orphanedKeys) {
         delete spacedRepetitionData[key];
-    });
+    }
 
     saveSpacedRepetitionData();
     displaySpacedRepetitionBuckets();
@@ -3596,6 +3742,7 @@ function cleanupOrphanedSRData() {
 /**
  * Get card object from SR data key
  * Key format: "deckName|||question"
+ * @param key
  */
 function getCardFromKey(key) {
     const parts = key.split('|||');
@@ -3603,36 +3750,36 @@ function getCardFromKey(key) {
         console.warn('Invalid key format:', key);
         return null;
     }
-    
+
     const deckName = parts[0];
     const question = parts.slice(1).join('|||'); // Handle ||| in question (unlikely but safe)
-    
+
     // Try to find the card in saved decks
     if (savedDecks[deckName]) {
-        const found = savedDecks[deckName].cards.find(card => card.question === question);
+        const found = savedDecks[deckName].cards.find((card) => card.question === question);
         if (found) {
             return { ...found, sourceDeck: deckName };
         }
     }
-    
+
     // If deck not found or card not in deck, return a basic card object
     return {
         question: question,
         sourceDeck: deckName,
-        answer: 'Nicht verfügbar'
+        answer: 'Nicht verfügbar',
     };
 }
 
 /**
  * Format date for display
+ * @param date
  */
 function formatDate(date) {
     const now = new Date();
     const diffDays = Math.floor((date - now) / (1000 * 60 * 60 * 24));
-    
+
     if (diffDays < 0) return 'Überfällig';
     if (diffDays === 0) return 'Heute';
     if (diffDays === 1) return 'Morgen';
     return `in ${diffDays} Tagen`;
 }
-

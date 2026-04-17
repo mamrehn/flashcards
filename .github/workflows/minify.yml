@@ -2,193 +2,193 @@ name: Minify and Deploy
 run-name: Minify JS/CSS/HTML and deploy to gh-pages
 
 on:
-  push:
-    branches:
-      - 'main'
-  workflow_dispatch:
+    push:
+        branches:
+            - 'main'
+    workflow_dispatch:
 
 jobs:
-  checkout-minify-push:
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-    
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
+    checkout-minify-push:
+        runs-on: ubuntu-latest
+        permissions:
+            contents: write
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '22'
+        steps:
+            - name: Checkout repository
+              uses: actions/checkout@v4
+              with:
+                  fetch-depth: 0
 
-      - name: Install minification and inlining tools
-        run: |
-          npm install -g terser csso-cli html-minifier inline-source-cli
-          npm install --no-save jszip
+            - name: Setup Node.js
+              uses: actions/setup-node@v4
+              with:
+                  node-version: '22'
 
-      - name: Build deck library manifest
-        run: node scripts/build-library-manifest.js
+            - name: Install minification and inlining tools
+              run: |
+                  npm install -g terser csso-cli html-minifier inline-source-cli
+                  npm install --no-save jszip
 
-      - name: Inject WebSocket URL from secrets
-        env:
-          WS_URL: ${{ secrets.WS_URL }}
-        run: |
-          if [ -z "$WS_URL" ]; then
-            echo "WS_URL is empty or not set!"
-            exit 1
-          fi
-          echo "WS_URL is set (length: ${#WS_URL})"
-          sed -i "s|'__WS_URL__'|'$WS_URL'|g" quiz.js
-          if grep -q "__WS_URL__" quiz.js; then
-            echo "WS_URL injection may have failed"
-            exit 1
-          fi
-          echo "WS_URL injected successfully"
-      
-      - name: Minify JavaScript files
-        run: |
-          terser index.js --compress --mangle -o index.js
-          terser cards.js --compress --mangle -o cards.js
-          terser quiz.js --compress --mangle -o quiz.js
-          terser library.js --compress --mangle -o library.js
-          terser sanitize.js --compress --mangle -o sanitize.js
-          terser theme.js --compress --mangle -o theme.js
+            - name: Build deck library manifest
+              run: node scripts/build-library-manifest.js
 
-      - name: Minify CSS files
-        run: |
-          csso cards.css -o cards.css
-          csso quiz.css -o quiz.css
-          csso library.css -o library.css
-          csso theme.css -o theme.css
+            - name: Inject WebSocket URL from secrets
+              env:
+                  WS_URL: ${{ secrets.WS_URL }}
+              run: |
+                  if [ -z "$WS_URL" ]; then
+                    echo "WS_URL is empty or not set!"
+                    exit 1
+                  fi
+                  echo "WS_URL is set (length: ${#WS_URL})"
+                  sed -i "s|'__WS_URL__'|'$WS_URL'|g" quiz.js
+                  if grep -q "__WS_URL__" quiz.js; then
+                    echo "WS_URL injection may have failed"
+                    exit 1
+                  fi
+                  echo "WS_URL injected successfully"
 
-      - name: Add inline attributes to HTML files for inlining
-        run: |
-          # index.html
-          sed -i 's|<link rel="stylesheet" href="theme\.css">|<link inline rel="stylesheet" href="theme.css">|g' index.html
-          sed -i 's|<script src="theme\.js"></script>|<script inline src="theme.js"></script>|g' index.html
-          sed -i 's|<script src="index\.js"></script>|<script inline src="index.js"></script>|g' index.html
+            - name: Minify JavaScript files
+              run: |
+                  terser index.js --compress --mangle -o index.js
+                  terser cards.js --compress --mangle -o cards.js
+                  terser quiz.js --compress --mangle -o quiz.js
+                  terser library.js --compress --mangle -o library.js
+                  terser sanitize.js --compress --mangle -o sanitize.js
+                  terser theme.js --compress --mangle -o theme.js
 
-          # cards.html
-          sed -i 's|<link rel="stylesheet" href="theme\.css">|<link inline rel="stylesheet" href="theme.css">|g' cards.html
-          sed -i 's|<script src="theme\.js"></script>|<script inline src="theme.js"></script>|g' cards.html
-          sed -i 's|<link rel="stylesheet" href="cards\.css">|<link inline rel="stylesheet" href="cards.css">|g' cards.html
-          sed -i 's|<script src="sanitize\.js"></script>|<script inline src="sanitize.js"></script>|g' cards.html
-          sed -i 's|<script src="cards\.js"></script>|<script inline src="cards.js"></script>|g' cards.html
+            - name: Minify CSS files
+              run: |
+                  csso cards.css -o cards.css
+                  csso quiz.css -o quiz.css
+                  csso library.css -o library.css
+                  csso theme.css -o theme.css
 
-          # library.html
-          sed -i 's|<link rel="stylesheet" href="theme\.css">|<link inline rel="stylesheet" href="theme.css">|g' library.html
-          sed -i 's|<script src="theme\.js"></script>|<script inline src="theme.js"></script>|g' library.html
-          sed -i 's|<link rel="stylesheet" href="library\.css">|<link inline rel="stylesheet" href="library.css">|g' library.html
-          sed -i 's|<script src="sanitize\.js"></script>|<script inline src="sanitize.js"></script>|g' library.html
-          sed -i 's|<script src="library\.js"></script>|<script inline src="library.js"></script>|g' library.html
+            - name: Add inline attributes to HTML files for inlining
+              run: |
+                  # index.html
+                  sed -i 's|<link rel="stylesheet" href="theme\.css">|<link inline rel="stylesheet" href="theme.css">|g' index.html
+                  sed -i 's|<script src="theme\.js"></script>|<script inline src="theme.js"></script>|g' index.html
+                  sed -i 's|<script src="index\.js"></script>|<script inline src="index.js"></script>|g' index.html
 
-          # quiz.html - need to handle external CDN scripts differently
-          sed -i 's|<link rel="stylesheet" href="theme\.css">|<link inline rel="stylesheet" href="theme.css">|g' quiz.html
-          sed -i 's|<script src="theme\.js"></script>|<script inline src="theme.js"></script>|g' quiz.html
-          sed -i 's|<link rel="stylesheet" href="quiz\.css">|<link inline rel="stylesheet" href="quiz.css">|g' quiz.html
-          sed -i 's|<script src="sanitize\.js"></script>|<script inline src="sanitize.js"></script>|g' quiz.html
-          sed -i 's|<script src="quiz\.js"></script>|<script inline src="quiz.js"></script>|g' quiz.html
+                  # cards.html
+                  sed -i 's|<link rel="stylesheet" href="theme\.css">|<link inline rel="stylesheet" href="theme.css">|g' cards.html
+                  sed -i 's|<script src="theme\.js"></script>|<script inline src="theme.js"></script>|g' cards.html
+                  sed -i 's|<link rel="stylesheet" href="cards\.css">|<link inline rel="stylesheet" href="cards.css">|g' cards.html
+                  sed -i 's|<script src="sanitize\.js"></script>|<script inline src="sanitize.js"></script>|g' cards.html
+                  sed -i 's|<script src="cards\.js"></script>|<script inline src="cards.js"></script>|g' cards.html
 
-          # datenschutz.html
-          sed -i 's|<link rel="stylesheet" href="theme\.css">|<link inline rel="stylesheet" href="theme.css">|g' datenschutz.html
-          sed -i 's|<script src="theme\.js"></script>|<script inline src="theme.js"></script>|g' datenschutz.html
-          sed -i 's|<link rel="stylesheet" href="quiz\.css">|<link inline rel="stylesheet" href="quiz.css">|g' datenschutz.html
+                  # library.html
+                  sed -i 's|<link rel="stylesheet" href="theme\.css">|<link inline rel="stylesheet" href="theme.css">|g' library.html
+                  sed -i 's|<script src="theme\.js"></script>|<script inline src="theme.js"></script>|g' library.html
+                  sed -i 's|<link rel="stylesheet" href="library\.css">|<link inline rel="stylesheet" href="library.css">|g' library.html
+                  sed -i 's|<script src="sanitize\.js"></script>|<script inline src="sanitize.js"></script>|g' library.html
+                  sed -i 's|<script src="library\.js"></script>|<script inline src="library.js"></script>|g' library.html
 
-      - name: Inline CSS and JS into HTML files
-        run: |
-          # Inline index.html
-          inline-source index.html --compress false --root ./ > index.inline.html
-          mv index.inline.html index.html
-          
-          # Inline cards.html
-          inline-source cards.html --compress false --root ./ > cards.inline.html
-          mv cards.inline.html cards.html
-          
-          # Inline library.html
-          inline-source library.html --compress false --root ./ > library.inline.html
-          mv library.inline.html library.html
+                  # quiz.html - need to handle external CDN scripts differently
+                  sed -i 's|<link rel="stylesheet" href="theme\.css">|<link inline rel="stylesheet" href="theme.css">|g' quiz.html
+                  sed -i 's|<script src="theme\.js"></script>|<script inline src="theme.js"></script>|g' quiz.html
+                  sed -i 's|<link rel="stylesheet" href="quiz\.css">|<link inline rel="stylesheet" href="quiz.css">|g' quiz.html
+                  sed -i 's|<script src="sanitize\.js"></script>|<script inline src="sanitize.js"></script>|g' quiz.html
+                  sed -i 's|<script src="quiz\.js"></script>|<script inline src="quiz.js"></script>|g' quiz.html
 
-          # Inline quiz.html
-          inline-source quiz.html --compress false --root ./ > quiz.inline.html
-          mv quiz.inline.html quiz.html
+                  # datenschutz.html
+                  sed -i 's|<link rel="stylesheet" href="theme\.css">|<link inline rel="stylesheet" href="theme.css">|g' datenschutz.html
+                  sed -i 's|<script src="theme\.js"></script>|<script inline src="theme.js"></script>|g' datenschutz.html
+                  sed -i 's|<link rel="stylesheet" href="quiz\.css">|<link inline rel="stylesheet" href="quiz.css">|g' datenschutz.html
 
-          # Inline datenschutz.html
-          inline-source datenschutz.html --compress false --root ./ > datenschutz.inline.html
-          mv datenschutz.inline.html datenschutz.html
+            - name: Inline CSS and JS into HTML files
+              run: |
+                  # Inline index.html
+                  inline-source index.html --compress false --root ./ > index.inline.html
+                  mv index.inline.html index.html
 
-      - name: Minify inlined HTML files
-        run: |
-          html-minifier \
-            --collapse-boolean-attributes \
-            --collapse-whitespace \
-            --minify-css true \
-            --minify-js true \
-            --remove-comments \
-            --remove-redundant-attributes \
-            --remove-script-type-attributes \
-            --remove-style-link-type-attributes \
-            --use-short-doctype \
-            index.html -o index.html
-          
-          html-minifier \
-            --collapse-boolean-attributes \
-            --collapse-whitespace \
-            --minify-css true \
-            --minify-js true \
-            --remove-comments \
-            --remove-redundant-attributes \
-            --remove-script-type-attributes \
-            --remove-style-link-type-attributes \
-            --use-short-doctype \
-            cards.html -o cards.html
-          
-          html-minifier \
-            --collapse-boolean-attributes \
-            --collapse-whitespace \
-            --minify-css true \
-            --minify-js true \
-            --remove-comments \
-            --remove-redundant-attributes \
-            --remove-script-type-attributes \
-            --remove-style-link-type-attributes \
-            --use-short-doctype \
-            library.html -o library.html
+                  # Inline cards.html
+                  inline-source cards.html --compress false --root ./ > cards.inline.html
+                  mv cards.inline.html cards.html
 
-          html-minifier \
-            --collapse-boolean-attributes \
-            --collapse-whitespace \
-            --minify-css true \
-            --minify-js true \
-            --remove-comments \
-            --remove-redundant-attributes \
-            --remove-script-type-attributes \
-            --remove-style-link-type-attributes \
-            --use-short-doctype \
-            quiz.html -o quiz.html
-          
-          html-minifier \
-            --collapse-boolean-attributes \
-            --collapse-whitespace \
-            --minify-css true \
-            --remove-comments \
-            --remove-redundant-attributes \
-            --use-short-doctype \
-            datenschutz.html -o datenschutz.html
+                  # Inline library.html
+                  inline-source library.html --compress false --root ./ > library.inline.html
+                  mv library.inline.html library.html
 
-      - name: Configure Git
-        run: |
-          git config --global user.name "github-actions[bot]"
-          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+                  # Inline quiz.html
+                  inline-source quiz.html --compress false --root ./ > quiz.inline.html
+                  mv quiz.inline.html quiz.html
 
-      - name: Commit minified and inlined files
-        run: |
-          git add *.html decks/library.json
-          git diff --quiet && git diff --staged --quiet || git commit -m "Minify and inline for deployment (SHA: ${{ github.sha }})"
+                  # Inline datenschutz.html
+                  inline-source datenschutz.html --compress false --root ./ > datenschutz.inline.html
+                  mv datenschutz.inline.html datenschutz.html
 
-      - name: Deploy to gh-pages
-        run: |
-          git push --force origin HEAD:gh-pages || echo "No changes to push"
-          echo "🚀 Successfully deployed to gh-pages branch"
+            - name: Minify inlined HTML files
+              run: |
+                  html-minifier \
+                    --collapse-boolean-attributes \
+                    --collapse-whitespace \
+                    --minify-css true \
+                    --minify-js true \
+                    --remove-comments \
+                    --remove-redundant-attributes \
+                    --remove-script-type-attributes \
+                    --remove-style-link-type-attributes \
+                    --use-short-doctype \
+                    index.html -o index.html
+
+                  html-minifier \
+                    --collapse-boolean-attributes \
+                    --collapse-whitespace \
+                    --minify-css true \
+                    --minify-js true \
+                    --remove-comments \
+                    --remove-redundant-attributes \
+                    --remove-script-type-attributes \
+                    --remove-style-link-type-attributes \
+                    --use-short-doctype \
+                    cards.html -o cards.html
+
+                  html-minifier \
+                    --collapse-boolean-attributes \
+                    --collapse-whitespace \
+                    --minify-css true \
+                    --minify-js true \
+                    --remove-comments \
+                    --remove-redundant-attributes \
+                    --remove-script-type-attributes \
+                    --remove-style-link-type-attributes \
+                    --use-short-doctype \
+                    library.html -o library.html
+
+                  html-minifier \
+                    --collapse-boolean-attributes \
+                    --collapse-whitespace \
+                    --minify-css true \
+                    --minify-js true \
+                    --remove-comments \
+                    --remove-redundant-attributes \
+                    --remove-script-type-attributes \
+                    --remove-style-link-type-attributes \
+                    --use-short-doctype \
+                    quiz.html -o quiz.html
+
+                  html-minifier \
+                    --collapse-boolean-attributes \
+                    --collapse-whitespace \
+                    --minify-css true \
+                    --remove-comments \
+                    --remove-redundant-attributes \
+                    --use-short-doctype \
+                    datenschutz.html -o datenschutz.html
+
+            - name: Configure Git
+              run: |
+                  git config --global user.name "github-actions[bot]"
+                  git config --global user.email "github-actions[bot]@users.noreply.github.com"
+
+            - name: Commit minified and inlined files
+              run: |
+                  git add *.html decks/library.json
+                  git diff --quiet && git diff --staged --quiet || git commit -m "Minify and inline for deployment (SHA: ${{ github.sha }})"
+
+            - name: Deploy to gh-pages
+              run: |
+                  git push --force origin HEAD:gh-pages || echo "No changes to push"
+                  echo "🚀 Successfully deployed to gh-pages branch"

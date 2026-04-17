@@ -1,54 +1,86 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="de">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self'; base-uri 'self'; form-action 'self';">
-    <meta name="referrer" content="no-referrer">
-    <meta name="theme-color" content="#3498db">
-    <link rel="manifest" href="manifest.json">
-    
-    <!-- Resource hints for performance -->
-    <link rel="dns-prefetch" href="https://cdnjs.cloudflare.com">
-    <link rel="preconnect" href="https://cdnjs.cloudflare.com" crossorigin>
-    
-    <title>Lernkarten App</title>
-    <link rel="stylesheet" href="theme.css">
-    <script src="theme.js"></script>
-    <script src="sanitize.js"></script>
-    <link rel="stylesheet" href="cards.css">
-</head>
-<body>
-    <div class="container">
-        <div class="header">
-            <div class="header-content">
-                <h1 id="app-title">Lernkarten App</h1>
-                <p id="app-subtitle">Importiere neue Lernkarten oder wähle ein gespeichertes Deck</p>
-            </div>
-            <select id="study-mode" class="study-mode-select">
-                <option value="spaced-repetition">Spaced Repetition</option>
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <meta
+            http-equiv="Content-Security-Policy"
+            content="default-src 'self'; script-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self'; base-uri 'self'; form-action 'self';"
+        />
+        <meta name="referrer" content="no-referrer" />
+        <meta name="theme-color" content="#3498db" />
+        <link rel="manifest" href="manifest.json" />
 
-                <option value="incorrect-only">Nur falsche wiederholen</option>
-                <option value="read-through">Lesemodus</option>
-            </select>
-            <button id="open-sr-manager" class="btn btn-secondary sr-manager-btn" title="Spaced Repetition Karten verwalten / Decks anzeigen">
-                📊 Karten verwalten
-            </button>
-        </div>
+        <!-- Resource hints for performance -->
+        <link rel="dns-prefetch" href="https://cdnjs.cloudflare.com" />
+        <link rel="preconnect" href="https://cdnjs.cloudflare.com" crossorigin />
 
-        <div id="file-input-container">
-            <div class="upload-section">
-                <input type="file" id="file-input" accept=".json,.zip" multiple class="hidden">
-                <div class="drop-zone" id="drop-zone">
-                    <div class="drop-zone-content">
-                        <span class="drop-zone-icon">📂</span>
-                        <span class="drop-zone-text">Lernkarten oder Backup importieren</span>
-                        <span class="drop-zone-hint">Datei hierher ziehen oder klicken — .json, .zip oder Backup</span>
-                    </div>
+        <title>Lernkarten App</title>
+        <link rel="stylesheet" href="theme.css" />
+        <script src="theme.js"></script>
+        <script src="sanitize.js"></script>
+        <link rel="stylesheet" href="cards.css" />
+    </head>
+    <body>
+        <div class="container">
+            <div class="header">
+                <div class="header-content">
+                    <h1 id="app-title">Lernkarten App</h1>
+                    <p id="app-subtitle">
+                        Importiere neue Lernkarten oder wähle ein gespeichertes Deck
+                    </p>
                 </div>
-                <p class="upload-actions"><span class="json-toggle" onclick="toggleJsonSample()" tabindex="0" role="button" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();toggleJsonSample();}">JSON-Format Beispiel</span></p>
+                <select id="study-mode" class="study-mode-select">
+                    <option value="spaced-repetition">Spaced Repetition</option>
+
+                    <option value="incorrect-only">Nur falsche wiederholen</option>
+                    <option value="read-through">Lesemodus</option>
+                </select>
+                <button
+                    id="open-sr-manager"
+                    class="btn btn-secondary sr-manager-btn"
+                    title="Spaced Repetition Karten verwalten / Decks anzeigen"
+                >
+                    📊 Karten verwalten
+                </button>
             </div>
-            <div id="sample-json" class="hidden"><pre><code>{
+
+            <div id="file-input-container">
+                <div class="upload-section">
+                    <input
+                        type="file"
+                        id="file-input"
+                        accept=".json,.zip"
+                        multiple
+                        class="hidden"
+                    />
+                    <div class="drop-zone" id="drop-zone">
+                        <div class="drop-zone-content">
+                            <span class="drop-zone-icon">📂</span>
+                            <span class="drop-zone-text">Lernkarten oder Backup importieren</span>
+                            <span class="drop-zone-hint"
+                                >Datei hierher ziehen oder klicken — .json, .zip oder Backup</span
+                            >
+                        </div>
+                    </div>
+                    <p class="upload-actions">
+                        <span
+                            class="json-toggle"
+                            onclick="toggleJsonSample()"
+                            tabindex="0"
+                            role="button"
+                            onkeydown="
+                                if (event.key === 'Enter' || event.key === ' ') {
+                                    event.preventDefault();
+                                    toggleJsonSample();
+                                }
+                            "
+                            >JSON-Format Beispiel</span
+                        >
+                    </p>
+                </div>
+                <div id="sample-json" class="hidden">
+                    <pre><code>{
   "cards": [
     {
       "categories": ["Geografie", "Politik"],
@@ -76,218 +108,291 @@
     }
   ]
 }</code></pre>
-            </div>
-
-            <div id="saved-decks-container">
-                <div class="saved-decks-header">
-                    <h3>Gespeicherte Decks</h3>
-                    <button class="btn btn-secondary" id="export-backup-btn" title="Alle Decks, Lernfortschritt und Einstellungen als Backup-Datei speichern">💾 Backup exportieren</button>
-                </div>
-                <div class="deck-search-container">
-                    <input type="text" id="deck-search" class="deck-search-input" placeholder="🔍 Decks durchsuchen...">
-                </div>
-                <div id="deck-selection-controls">
-                    <button id="start-selected-decks" class="btn btn-primary" disabled>Mit ausgewählten Decks starten</button>
-                    <button id="select-all-decks" class="btn">Alle auswählen</button>
-                    <button id="deselect-all-decks" class="btn">Alle abwählen</button>
-                </div>
-                <div id="saved-decks">
-                    <!-- Saved decks will be dynamically inserted here -->
-                </div>
-            </div>
-
-            <div id="spaced-repetition-manager-container" class="hidden">
-                <h3>Spaced Repetition - Kartenverwaltung</h3>
-                <div id="sr-stats-dashboard">
-                    <!-- Dashboard stats rendered dynamically -->
-                </div>
-                <p class="sr-info">Karten sind nach Wiederholungsintervallen gruppiert. Wähle Buckets aus oder verwalte einzelne Karten.</p>
-
-                <div id="sr-bucket-selection-controls">
-                    <button id="start-selected-buckets" class="btn btn-primary" disabled>Mit ausgewählten Buckets üben</button>
-                    <button id="select-all-buckets" class="btn">Alle auswählen</button>
-                    <button id="deselect-all-buckets" class="btn">Alle abwählen</button>
-                    <button id="cleanup-orphans-btn" class="btn btn-secondary" title="Entfernt SR-Daten für gelöschte Decks oder geänderte Fragen">🧹 Aufräumen</button>
                 </div>
 
-                <div id="sr-buckets-display">
-                    <!-- Buckets will be dynamically inserted here -->
-                </div>
-            </div>
-        </div>
-
-        <div id="app-content" class="hidden">
-            <div class="stats">
-                <div class="stat-item">
-                    <div class="stat-value" id="cards-remaining">0</div>
-                    <div class="stat-label">Verbleibend</div>
-                </div>
-                <div class="stat-item">
-                    <div class="stat-value" id="cards-completed">0</div>
-                    <div class="stat-label">Bearbeitet</div>
-                </div>
-                <div class="stat-item">
-                    <div class="stat-value" id="correct-count">0</div>
-                    <div class="stat-label">Richtig</div>
-                </div>
-                <div class="stat-item">
-                    <div class="stat-value" id="incorrect-count">0</div>
-                    <div class="stat-label">Falsch</div>
-                </div>
-            </div>
-
-            <div class="progress-bar">
-                <div class="progress" id="progress-bar"></div>
-            </div>
-
-            <div class="card-container" id="card-container">
-                <div class="card" id="flip-card">
-                    <div class="card-front">
-                        <div class="card-content">
-                            <div class="question" id="question-text">Frage erscheint hier</div>
-                            <!-- Text input for standard questions -->
-                            <input type="text" class="user-answer-input" id="user-answer-input"
-                                placeholder="Deine Antwort...">
-
-                            <!-- Multiple choice options container -->
-                            <div id="options-container" class="options-container hidden">
-                                <!-- Options will be dynamically inserted here -->
-                            </div>
-                        </div>
-                        <div class="controls">
-                            <button class="btn btn-primary" id="show-answer">Antwort zeigen</button>
-                        </div>
+                <div id="saved-decks-container">
+                    <div class="saved-decks-header">
+                        <h3>Gespeicherte Decks</h3>
+                        <button
+                            class="btn btn-secondary"
+                            id="export-backup-btn"
+                            title="Alle Decks, Lernfortschritt und Einstellungen als Backup-Datei speichern"
+                        >
+                            💾 Backup exportieren
+                        </button>
                     </div>
-                    <div class="card-back">
-                        <div class="card-content">
-                            <div class="question" id="question-back">Frage erscheint hier</div>
-                            <div class="source-deck" id="source-deck-display"></div>
+                    <div class="deck-search-container">
+                        <input
+                            type="text"
+                            id="deck-search"
+                            class="deck-search-input"
+                            placeholder="🔍 Decks durchsuchen..."
+                        />
+                    </div>
+                    <div id="deck-selection-controls">
+                        <button id="start-selected-decks" class="btn btn-primary" disabled>
+                            Mit ausgewählten Decks starten
+                        </button>
+                        <button id="select-all-decks" class="btn">Alle auswählen</button>
+                        <button id="deselect-all-decks" class="btn">Alle abwählen</button>
+                    </div>
+                    <div id="saved-decks">
+                        <!-- Saved decks will be dynamically inserted here -->
+                    </div>
+                </div>
 
-                            <!-- Multiple choice options container (for back side with feedback) -->
-                            <div id="options-container-back" class="options-container hidden">
-                                <!-- Color-coded options will be cloned here -->
-                            </div>
+                <div id="spaced-repetition-manager-container" class="hidden">
+                    <h3>Spaced Repetition - Kartenverwaltung</h3>
+                    <div id="sr-stats-dashboard">
+                        <!-- Dashboard stats rendered dynamically -->
+                    </div>
+                    <p class="sr-info">
+                        Karten sind nach Wiederholungsintervallen gruppiert. Wähle Buckets aus oder
+                        verwalte einzelne Karten.
+                    </p>
 
-                            <!-- Text answer display -->
-                            <div id="user-answer-container" class="hidden">
-                                <div class="user-answer-display">
-                                    <strong>Deine Antwort:</strong>
-                                    <div id="user-answer-display"></div>
-                                </div>
-                            </div>
+                    <div id="sr-bucket-selection-controls">
+                        <button id="start-selected-buckets" class="btn btn-primary" disabled>
+                            Mit ausgewählten Buckets üben
+                        </button>
+                        <button id="select-all-buckets" class="btn">Alle auswählen</button>
+                        <button id="deselect-all-buckets" class="btn">Alle abwählen</button>
+                        <button
+                            id="cleanup-orphans-btn"
+                            class="btn btn-secondary"
+                            title="Entfernt SR-Daten für gelöschte Decks oder geänderte Fragen"
+                        >
+                            🧹 Aufräumen
+                        </button>
+                    </div>
 
-                            <!-- Multiple choice answer display -->
-                            <div id="selected-options-container" class="hidden">
-                                <div class="selected-options-display">
-                                    <strong>Deine Auswahl:</strong>
-                                    <div id="selected-options-display"></div>
-                                </div>
-                            </div>
-
-                            <!-- Standard answer display -->
-                            <div id="standard-answer-container">
-                                <div class="answer" id="answer-text">Antwort erscheint hier</div>
-                            </div>
-
-                            <!-- Explanation for text answers (shown only when marked incorrect) -->
-                            <div id="text-explanation-container" class="hidden">
-                                <div class="explanation-box" tabindex="0" role="button" aria-label="Erklärung anzeigen">
-                                    <span class="explanation-icon" title="Klicke für Erklärung">ℹ️</span>
-                                    <span class="explanation-label">Erklärung verfügbar</span>
-                                    <div class="explanation-content hidden" id="text-explanation-content"></div>
-                                </div>
-                            </div>
-
-                            <!-- Multiple choice correct answer display -->
-                            <div id="mc-correct-answer-container" class="hidden">
-                                <div class="answer">
-                                    <strong>Korrekte Antworten:</strong>
-                                    <div id="mc-correct-answer-text"></div>
-                                </div>
-                            </div>
-                        </div>
-                        <div class="controls">
-                            <button class="btn btn-success" id="mark-correct">Richtig</button>
-                            <button class="btn btn-danger" id="mark-incorrect">Falsch</button>
-                            <button class="btn btn-secondary" id="next-card">Nächste</button>
-                            <button class="btn btn-secondary" id="undo-btn" disabled title="Letzte Antwort rückgängig (Backspace)">↩ Zurück</button>
-                        </div>
+                    <div id="sr-buckets-display">
+                        <!-- Buckets will be dynamically inserted here -->
                     </div>
                 </div>
             </div>
 
-            <div id="keyboard-hints" class="keyboard-hints">
-                <button class="keyboard-hints-toggle" aria-label="Tastaturkürzel anzeigen" title="Tastaturkürzel (?)">
-                    <span>&#x2328;</span>
-                </button>
-                <div class="keyboard-hints-panel hidden">
-                    <div class="keyboard-hints-title">Tastaturkürzel</div>
-                    <div class="keyboard-hint"><kbd>Leertaste</kbd> Antwort zeigen / Weiter</div>
-                    <div class="keyboard-hint"><kbd>1</kbd>–<kbd>9</kbd> MC-Option wählen / Erklärung</div>
-                    <div class="keyboard-hint"><kbd>R</kbd> Richtig</div>
-                    <div class="keyboard-hint"><kbd>F</kbd> Falsch</div>
-                    <div class="keyboard-hint"><kbd>E</kbd> Erklärung ein/aus</div>
-                    <div class="keyboard-hint"><kbd>⌫</kbd> Letzte Antwort rückgängig</div>
-                    <div class="keyboard-hint"><kbd>?</kbd> Diese Hilfe</div>
+            <div id="app-content" class="hidden">
+                <div class="stats">
+                    <div class="stat-item">
+                        <div class="stat-value" id="cards-remaining">0</div>
+                        <div class="stat-label">Verbleibend</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-value" id="cards-completed">0</div>
+                        <div class="stat-label">Bearbeitet</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-value" id="correct-count">0</div>
+                        <div class="stat-label">Richtig</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-value" id="incorrect-count">0</div>
+                        <div class="stat-label">Falsch</div>
+                    </div>
                 </div>
+
+                <div class="progress-bar">
+                    <div class="progress" id="progress-bar"></div>
+                </div>
+
+                <div class="card-container" id="card-container">
+                    <div class="card" id="flip-card">
+                        <div class="card-front">
+                            <div class="card-content">
+                                <div class="question" id="question-text">Frage erscheint hier</div>
+                                <!-- Text input for standard questions -->
+                                <input
+                                    type="text"
+                                    class="user-answer-input"
+                                    id="user-answer-input"
+                                    placeholder="Deine Antwort..."
+                                />
+
+                                <!-- Multiple choice options container -->
+                                <div id="options-container" class="options-container hidden">
+                                    <!-- Options will be dynamically inserted here -->
+                                </div>
+                            </div>
+                            <div class="controls">
+                                <button class="btn btn-primary" id="show-answer">
+                                    Antwort zeigen
+                                </button>
+                            </div>
+                        </div>
+                        <div class="card-back">
+                            <div class="card-content">
+                                <div class="question" id="question-back">Frage erscheint hier</div>
+                                <div class="source-deck" id="source-deck-display"></div>
+
+                                <!-- Multiple choice options container (for back side with feedback) -->
+                                <div id="options-container-back" class="options-container hidden">
+                                    <!-- Color-coded options will be cloned here -->
+                                </div>
+
+                                <!-- Text answer display -->
+                                <div id="user-answer-container" class="hidden">
+                                    <div class="user-answer-display">
+                                        <strong>Deine Antwort:</strong>
+                                        <div id="user-answer-display"></div>
+                                    </div>
+                                </div>
+
+                                <!-- Multiple choice answer display -->
+                                <div id="selected-options-container" class="hidden">
+                                    <div class="selected-options-display">
+                                        <strong>Deine Auswahl:</strong>
+                                        <div id="selected-options-display"></div>
+                                    </div>
+                                </div>
+
+                                <!-- Standard answer display -->
+                                <div id="standard-answer-container">
+                                    <div class="answer" id="answer-text">
+                                        Antwort erscheint hier
+                                    </div>
+                                </div>
+
+                                <!-- Explanation for text answers (shown only when marked incorrect) -->
+                                <div id="text-explanation-container" class="hidden">
+                                    <div
+                                        class="explanation-box"
+                                        tabindex="0"
+                                        role="button"
+                                        aria-label="Erklärung anzeigen"
+                                    >
+                                        <span class="explanation-icon" title="Klicke für Erklärung"
+                                            >ℹ️</span
+                                        >
+                                        <span class="explanation-label">Erklärung verfügbar</span>
+                                        <div
+                                            class="explanation-content hidden"
+                                            id="text-explanation-content"
+                                        ></div>
+                                    </div>
+                                </div>
+
+                                <!-- Multiple choice correct answer display -->
+                                <div id="mc-correct-answer-container" class="hidden">
+                                    <div class="answer">
+                                        <strong>Korrekte Antworten:</strong>
+                                        <div id="mc-correct-answer-text"></div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="controls">
+                                <button class="btn btn-success" id="mark-correct">Richtig</button>
+                                <button class="btn btn-danger" id="mark-incorrect">Falsch</button>
+                                <button class="btn btn-secondary" id="next-card">Nächste</button>
+                                <button
+                                    class="btn btn-secondary"
+                                    id="undo-btn"
+                                    disabled
+                                    title="Letzte Antwort rückgängig (Backspace)"
+                                >
+                                    ↩ Zurück
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="keyboard-hints" class="keyboard-hints">
+                    <button
+                        class="keyboard-hints-toggle"
+                        aria-label="Tastaturkürzel anzeigen"
+                        title="Tastaturkürzel (?)"
+                    >
+                        <span>&#x2328;</span>
+                    </button>
+                    <div class="keyboard-hints-panel hidden">
+                        <div class="keyboard-hints-title">Tastaturkürzel</div>
+                        <div class="keyboard-hint">
+                            <kbd>Leertaste</kbd> Antwort zeigen / Weiter
+                        </div>
+                        <div class="keyboard-hint">
+                            <kbd>1</kbd>–<kbd>9</kbd> MC-Option wählen / Erklärung
+                        </div>
+                        <div class="keyboard-hint"><kbd>R</kbd> Richtig</div>
+                        <div class="keyboard-hint"><kbd>F</kbd> Falsch</div>
+                        <div class="keyboard-hint"><kbd>E</kbd> Erklärung ein/aus</div>
+                        <div class="keyboard-hint"><kbd>⌫</kbd> Letzte Antwort rückgängig</div>
+                        <div class="keyboard-hint"><kbd>?</kbd> Diese Hilfe</div>
+                    </div>
+                </div>
+
+                <div class="feedback hidden" id="feedback">
+                    <h2>Quiz abgeschlossen!</h2>
+                    <div id="overall-stats">
+                        <p>Gesamtergebnis: <span id="final-score">0%</span></p>
+                    </div>
+                    <div id="deck-stats-container">
+                        <!-- Individual deck statistics will appear here -->
+                    </div>
+                    <div style="margin-top: 1rem">
+                        <button class="btn btn-primary" id="restart-btn">Neu starten</button>
+                        <button class="btn btn-secondary" id="upload-new-btn">Neues Deck</button>
+                        <button
+                            class="btn btn-secondary"
+                            id="return-to-sr-btn"
+                            style="display: none"
+                        >
+                            Zurück zur SR-Verwaltung
+                        </button>
+                    </div>
+                </div>
+
+                <div id="error-message" class="error-message hidden"></div>
             </div>
 
-            <div class="feedback hidden" id="feedback">
-                <h2>Quiz abgeschlossen!</h2>
-                <div id="overall-stats">
-                    <p>Gesamtergebnis: <span id="final-score">0%</span></p>
+            <div id="book-view" class="hidden">
+                <div class="book-view-toolbar">
+                    <button class="btn btn-secondary" id="book-view-back">← Zurück</button>
+                    <span class="book-view-title" id="book-view-title">Lesemodus</span>
+                    <div class="book-view-export-btns">
+                        <button
+                            class="btn btn-secondary"
+                            id="book-view-print"
+                            onclick="window.print()"
+                        >
+                            🖨️ Drucken
+                        </button>
+                        <button class="btn btn-secondary" id="book-view-csv">📥 Kahoot/CSV</button>
+                        <button class="btn btn-secondary" id="book-view-anki">📥 Anki</button>
+                    </div>
                 </div>
-                <div id="deck-stats-container">
-                    <!-- Individual deck statistics will appear here -->
-                </div>
-                <div style="margin-top: 1rem;">
-                    <button class="btn btn-primary" id="restart-btn">Neu starten</button>
-                    <button class="btn btn-secondary" id="upload-new-btn">Neues Deck</button>
-                    <button class="btn btn-secondary" id="return-to-sr-btn" style="display: none;">Zurück zur SR-Verwaltung</button>
-                </div>
+                <div id="book-view-cards"></div>
             </div>
-
-            <div id="error-message" class="error-message hidden"></div>
         </div>
 
-        <div id="book-view" class="hidden">
-            <div class="book-view-toolbar">
-                <button class="btn btn-secondary" id="book-view-back">← Zurück</button>
-                <span class="book-view-title" id="book-view-title">Lesemodus</span>
-                <div class="book-view-export-btns">
-                    <button class="btn btn-secondary" id="book-view-print" onclick="window.print()">🖨️ Drucken</button>
-                    <button class="btn btn-secondary" id="book-view-csv">📥 Kahoot/CSV</button>
-                    <button class="btn btn-secondary" id="book-view-anki">📥 Anki</button>
-                </div>
-            </div>
-            <div id="book-view-cards"></div>
-        </div>
-    </div>
+        <!-- Confetti Container -->
+        <div id="confetti-container"></div>
 
-    <!-- Confetti Container -->
-    <div id="confetti-container"></div>
+        <!-- External Dependencies (loaded with defer for better performance) -->
+        <script
+            defer
+            src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"
+            integrity="sha512-XMVd28F1oH/O71fzwBnV7HucLxVwtxf26XV8P4wPk26EDxuGZ91N8bsOttmnomcCD3CS5ZMRL50H0GgOHvegtg=="
+            crossorigin="anonymous"
+            referrerpolicy="no-referrer"
+        ></script>
+        <!-- Main Application Script -->
+        <script defer src="cards.js"></script>
 
-    <!-- External Dependencies (loaded with defer for better performance) -->
-    <script defer src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"
-        integrity="sha512-XMVd28F1oH/O71fzwBnV7HucLxVwtxf26XV8P4wPk26EDxuGZ91N8bsOttmnomcCD3CS5ZMRL50H0GgOHvegtg=="
-        crossorigin="anonymous" referrerpolicy="no-referrer"></script>
-    <!-- Main Application Script -->
-    <script defer src="cards.js"></script>
-    
-    <!-- Service Worker Registration -->
-    <script>
-        if ('serviceWorker' in navigator) {
-            window.addEventListener('load', () => {
-                navigator.serviceWorker.register('./sw.js')
-                    .then(registration => {
-                        console.log('ServiceWorker registered:', registration.scope);
-                    })
-                    .catch(error => {
-                        console.log('ServiceWorker registration failed:', error);
-                    });
-            });
-        }
-    </script>
-</body>
+        <!-- Service Worker Registration -->
+        <script>
+            if ('serviceWorker' in navigator) {
+                window.addEventListener('load', () => {
+                    navigator.serviceWorker
+                        .register('./sw.js')
+                        .then((registration) => {
+                            console.log('ServiceWorker registered:', registration.scope);
+                        })
+                        .catch((error) => {
+                            console.log('ServiceWorker registration failed:', error);
+                        });
+                });
+            }
+        </script>
+    </body>
 </html>
-                

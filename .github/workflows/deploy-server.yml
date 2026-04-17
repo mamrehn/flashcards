@@ -2,26 +2,26 @@ name: Deploy Quiz Server
 run-name: Deploy WebSocket server to Fly.io
 
 on:
-  push:
-    branches:
-      - 'main'
-    paths:
-      - 'server/**'
-  workflow_dispatch:
+    push:
+        branches:
+            - 'main'
+        paths:
+            - 'server/**'
+    workflow_dispatch:
 
 jobs:
-  deploy:
-    runs-on: ubuntu-latest
+    deploy:
+        runs-on: ubuntu-latest
 
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+        steps:
+            - name: Checkout repository
+              uses: actions/checkout@v4
 
-      - name: Setup Fly CLI
-        uses: superfly/flyctl-actions/setup-flyctl@master
+            - name: Setup Fly CLI
+              uses: superfly/flyctl-actions/setup-flyctl@master
 
-      - name: Deploy to Fly.io
-        run: flyctl deploy --remote-only
-        working-directory: server
-        env:
-          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+            - name: Deploy to Fly.io
+              run: flyctl deploy --remote-only
+              working-directory: server
+              env:
+                  FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}

@@ -1,195 +1,259 @@
-﻿<!DOCTYPE html>
+﻿<!doctype html>
 <html lang="de">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <meta
+            http-equiv="Content-Security-Policy"
+            content="default-src 'self'; script-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com; style-src 'self' 'unsafe-inline'; connect-src 'self' wss://qlash-server.fly.dev; img-src 'self' data:; font-src 'self'; base-uri 'self'; form-action 'self';"
+        />
+        <meta name="referrer" content="no-referrer" />
+        <title>Multiplayer Quiz</title>
+        <script
+            src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"
+            integrity="sha512-CNgIRecGo7nphbeZ04Sc13ka07paqdeTu0WR1IM4kNcpmBAUSHSQX0FslNhTDadL4O5SAGapGt4FodqL8My0mA=="
+            crossorigin="anonymous"
+            referrerpolicy="no-referrer"
+        ></script>
+        <script
+            defer
+            src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"
+            integrity="sha512-XMVd28F1oH/O71fzwBnV7HucLxVwtxf26XV8P4wPk26EDxuGZ91N8bsOttmnomcCD3CS5ZMRL50H0GgOHvegtg=="
+            crossorigin="anonymous"
+            referrerpolicy="no-referrer"
+        ></script>
+        <link rel="stylesheet" href="theme.css" />
+        <script src="theme.js"></script>
+        <script src="sanitize.js"></script>
+        <link rel="stylesheet" href="quiz.css" />
+    </head>
 
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta http-equiv="Content-Security-Policy"
-        content="default-src 'self'; script-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com; style-src 'self' 'unsafe-inline'; connect-src 'self' wss://qlash-server.fly.dev; img-src 'self' data:; font-src 'self'; base-uri 'self'; form-action 'self';">
-    <meta name="referrer" content="no-referrer">
-    <title>Multiplayer Quiz</title>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"
-        integrity="sha512-CNgIRecGo7nphbeZ04Sc13ka07paqdeTu0WR1IM4kNcpmBAUSHSQX0FslNhTDadL4O5SAGapGt4FodqL8My0mA=="
-        crossorigin="anonymous" referrerpolicy="no-referrer"></script>
-    <script defer src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"
-        integrity="sha512-XMVd28F1oH/O71fzwBnV7HucLxVwtxf26XV8P4wPk26EDxuGZ91N8bsOttmnomcCD3CS5ZMRL50H0GgOHvegtg=="
-        crossorigin="anonymous" referrerpolicy="no-referrer"></script>
-    <link rel="stylesheet" href="theme.css">
-    <script src="theme.js"></script>
-    <script src="sanitize.js"></script>
-    <link rel="stylesheet" href="quiz.css">
-</head>
+    <body>
+        <div class="container">
+            <header>
+                <h1>Multiplayer Quiz</h1>
+            </header>
 
-<body>
-    <div class="container">
-        <header>
-            <h1>Multiplayer Quiz</h1>
-        </header>
+            <div id="role-selection" class="view active card">
+                <h2>Wähle deine Rolle</h2>
+                <button id="host-btn" class="btn">Quiz hosten</button>
+                <button id="player-btn" class="btn">Quiz beitreten</button>
+                <button id="reconnect-host-btn" class="btn btn-reconnect hidden">
+                    Erneut als Host verbinden
+                </button>
+                <button id="reconnect-player-btn" class="btn btn-reconnect hidden">
+                    Erneut zum Quiz verbinden
+                </button>
+            </div>
 
-        <div id="role-selection" class="view active card">
-            <h2>Wähle deine Rolle</h2>
-            <button id="host-btn" class="btn">Quiz hosten</button>
-            <button id="player-btn" class="btn">Quiz beitreten</button>
-            <button id="reconnect-host-btn" class="btn btn-reconnect hidden">Erneut als Host verbinden</button>
-            <button id="reconnect-player-btn" class="btn btn-reconnect hidden">Erneut zum Quiz verbinden</button>
-        </div>
+            <div id="host-view" class="view card">
+                <h2 id="host-view-heading">Quiz hosten</h2>
 
-        <div id="host-view" class="view card">
-            <h2 id="host-view-heading">Quiz hosten</h2>
-
-            <div id="host-setup">
-                <div class="duration-setting" style="margin-top: 15px;">
-                    <label>Fragedauer (Sekunden):</label>
-                    <div class="duration-range-row">
-                        <div class="duration-input-group">
-                            <label for="question-duration-min">Min:</label>
-                            <input type="number" id="question-duration-min" value="20" min="5" max="60"
-                                class="duration-input">
+                <div id="host-setup">
+                    <div class="duration-setting" style="margin-top: 15px">
+                        <label>Fragedauer (Sekunden):</label>
+                        <div class="duration-range-row">
+                            <div class="duration-input-group">
+                                <label for="question-duration-min">Min:</label>
+                                <input
+                                    type="number"
+                                    id="question-duration-min"
+                                    value="20"
+                                    min="5"
+                                    max="60"
+                                    class="duration-input"
+                                />
+                            </div>
+                            <div class="duration-input-group">
+                                <label for="question-duration-max">Max:</label>
+                                <input
+                                    type="number"
+                                    id="question-duration-max"
+                                    value="40"
+                                    min="5"
+                                    max="60"
+                                    class="duration-input"
+                                />
+                            </div>
                         </div>
-                        <div class="duration-input-group">
-                            <label for="question-duration-max">Max:</label>
-                            <input type="number" id="question-duration-max" value="40" min="5" max="60"
-                                class="duration-input">
+                    </div>
+                    <button id="start-quiz-btn" class="btn btn-accent" style="margin-top: 10px">
+                        Quiz starten
+                    </button>
+
+                    <div class="upload-section">
+                        <input
+                            type="file"
+                            id="json-file"
+                            accept=".json,.zip"
+                            multiple
+                            class="hidden"
+                        />
+                        <div class="drop-zone" id="quiz-drop-zone">
+                            <div class="drop-zone-content">
+                                <span class="drop-zone-icon">📂</span>
+                                <span class="drop-zone-text">MC-Fragen importieren</span>
+                                <span class="drop-zone-hint"
+                                    >Datei hierher ziehen oder klicken — .json oder .zip</span
+                                >
+                            </div>
+                        </div>
+                        <p id="file-status"></p>
+                    </div>
+
+                    <h3>Oder Fragen manuell erstellen:</h3>
+                    <form id="question-form">
+                        <div>
+                            <label for="question-text">Frage:</label>
+                            <input
+                                type="text"
+                                id="question-text"
+                                placeholder="Gib deine Frage ein"
+                            />
+                        </div>
+                        <div class="option-group">
+                            <input type="text" class="option-input" placeholder="Option 1" />
+                            <input type="checkbox" class="correct-checkbox" />
+                            <label>Richtig</label>
+                        </div>
+                        <div class="option-group">
+                            <input type="text" class="option-input" placeholder="Option 2" />
+                            <input type="checkbox" class="correct-checkbox" />
+                            <label>Richtig</label>
+                        </div>
+                        <button type="button" id="add-option-btn" class="btn">
+                            Option hinzufügen
+                        </button>
+                        <button type="submit" class="btn">Frage hinzufügen</button>
+                    </form>
+
+                    <div id="questions-list">
+                        <h3>Hinzugefügte Fragen:</h3>
+                        <div id="questions-container">
+                            <p>Noch keine Fragen hinzugefügt</p>
                         </div>
                     </div>
                 </div>
-                <button id="start-quiz-btn" class="btn btn-accent" style="margin-top: 10px;">Quiz starten</button>
 
-                <div class="upload-section">
-                    <input type="file" id="json-file" accept=".json,.zip" multiple class="hidden">
-                    <div class="drop-zone" id="quiz-drop-zone">
-                        <div class="drop-zone-content">
-                            <span class="drop-zone-icon">📂</span>
-                            <span class="drop-zone-text">MC-Fragen importieren</span>
-                            <span class="drop-zone-hint">Datei hierher ziehen oder klicken — .json oder .zip</span>
-                        </div>
-                    </div>
-                    <p id="file-status"></p>
+                <div id="qr-container" class="hidden">
+                    <h3>QR-Code scannen oder URL eingeben, um beizutreten:</h3>
+                    <div id="qrcode" style="cursor: pointer"></div>
+                    <p>URL eingeben: <a id="join-link" href="#" target="_blank"></a></p>
+                    <p>
+                        Dann Code eingeben:
+                        <span
+                            id="room-id"
+                            style="font-size: 1.4em; font-weight: bold; letter-spacing: 0.1em"
+                        ></span>
+                    </p>
+                    <p>Verbundene Spieler: <span id="player-count">0</span></p>
+                    <div class="players-list" id="players-list"></div>
+                    <button id="start-questions-btn" class="btn btn-accent hidden">
+                        Fragen starten
+                    </button>
                 </div>
 
-                <h3>Oder Fragen manuell erstellen:</h3>
-                <form id="question-form">
-                    <div>
-                        <label for="question-text">Frage:</label>
-                        <input type="text" id="question-text" placeholder="Gib deine Frage ein">
+                <div id="host-question-display" class="hidden">
+                    <h3 id="current-question-text"></h3>
+                    <ul id="host-current-options" class="host-options-list"></ul>
+                    <div class="question-counter" id="question-counter"></div>
+                    <div class="timer-bar-container">
+                        <div class="timer-bar" id="timer-bar"></div>
                     </div>
-                    <div class="option-group">
-                        <input type="text" class="option-input" placeholder="Option 1">
-                        <input type="checkbox" class="correct-checkbox">
-                        <label>Richtig</label>
+                    <p>
+                        Spieler haben geantwortet: <span id="answers-count">0</span>/<span
+                            id="total-players"
+                            >0</span
+                        >
+                    </p>
+                    <div id="host-scoreboard" class="scoreboard hidden">
+                        <h4>Aktuelle Rangliste (Top 10)</h4>
+                        <ol id="scoreboard-list"></ol>
                     </div>
-                    <div class="option-group">
-                        <input type="text" class="option-input" placeholder="Option 2">
-                        <input type="checkbox" class="correct-checkbox">
-                        <label>Richtig</label>
-                    </div>
-                    <button type="button" id="add-option-btn" class="btn">Option hinzufügen</button>
-                    <button type="submit" class="btn">Frage hinzufügen</button>
-                </form>
+                    <button id="show-next-btn" class="btn hidden">Nächste Frage</button>
+                    <button id="show-results-btn" class="btn hidden">Endergebnisse anzeigen</button>
+                </div>
 
-                <div id="questions-list">
-                    <h3>Hinzugefügte Fragen:</h3>
-                    <div id="questions-container">
-                        <p>Noch keine Fragen hinzugefügt</p>
-                    </div>
+                <div id="host-results" class="view card hidden">
+                    <h3>Endgültige Rangliste</h3>
+                    <div id="leaderboard"></div>
+                    <button id="new-quiz-btn" class="btn">Neues Quiz hosten</button>
                 </div>
             </div>
 
-            <div id="qr-container" class="hidden">
-                <h3>QR-Code scannen oder URL eingeben, um beizutreten:</h3>
-                <div id="qrcode" style="cursor: pointer;"></div>
-                <p>URL eingeben: <a id="join-link" href="#" target="_blank"></a></p>
-                <p>Dann Code eingeben: <span id="room-id"
-                        style="font-size: 1.4em; font-weight: bold; letter-spacing: 0.1em;"></span></p>
-                <p>Verbundene Spieler: <span id="player-count">0</span></p>
-                <div class="players-list" id="players-list"></div>
-                <button id="start-questions-btn" class="btn btn-accent hidden">Fragen starten</button>
-            </div>
-
-            <div id="host-question-display" class="hidden">
-                <h3 id="current-question-text"></h3>
-                <ul id="host-current-options" class="host-options-list"></ul>
-                <div class="question-counter" id="question-counter"></div>
-                <div class="timer-bar-container">
-                    <div class="timer-bar" id="timer-bar"></div>
+            <div id="player-view" class="view card">
+                <div id="join-form">
+                    <h2>Einem Quiz beitreten</h2>
+                    <input
+                        type="text"
+                        id="room-code-input"
+                        placeholder="Host-ID eingeben oder QR scannen"
+                    />
+                    <input type="text" id="player-name-input" placeholder="Dein Name" />
+                    <button id="join-btn" class="btn">Quiz beitreten</button>
+                    <p>Oder scanne den vom Host bereitgestellten QR-Code</p>
                 </div>
-                <p>Spieler haben geantwortet: <span id="answers-count">0</span>/<span id="total-players">0</span></p>
-                <div id="host-scoreboard" class="scoreboard hidden">
-                    <h4>Aktuelle Rangliste (Top 10)</h4>
-                    <ol id="scoreboard-list"></ol>
-                </div>
-                <button id="show-next-btn" class="btn hidden">Nächste Frage</button>
-                <button id="show-results-btn" class="btn hidden">Endergebnisse anzeigen</button>
-            </div>
 
-            <div id="host-results" class="view card hidden">
-                <h3>Endgültige Rangliste</h3>
-                <div id="leaderboard"></div>
-                <button id="new-quiz-btn" class="btn">Neues Quiz hosten</button>
+                <div id="waiting-room" class="hidden">
+                    <h2>Warten auf den Quizstart</h2>
+                    <p id="waiting-message">Du bist dem Raum erfolgreich beigetreten!</p>
+                    <div class="loader"></div>
+                    <p>Der Host wird das Quiz bald starten...</p>
+                </div>
+
+                <div id="player-question" class="hidden">
+                    <h3 id="player-question-text"></h3>
+                    <div class="question-counter" id="player-question-counter"></div>
+                    <div class="timer-bar-container">
+                        <div class="timer-bar" id="player-timer-bar"></div>
+                    </div>
+                    <div id="options-container"></div>
+                    <button id="submit-answer-btn" class="btn hidden">Antwort absenden</button>
+                </div>
+
+                <div id="player-result" class="hidden">
+                    <div id="result-display"></div>
+                    <div class="score-display">
+                        Deine Punktzahl: <span id="player-score">0</span>
+                    </div>
+                    <p id="waiting-for-next">Warten auf nächste Frage...</p>
+                </div>
+
+                <div id="player-final-result" class="view card hidden">
+                    <h2>Quiz beendet!</h2>
+                    <div id="player-leaderboard-container" style="margin-bottom: 15px"></div>
+                    <div class="score-display">
+                        Deine Endpunktzahl: <span id="final-score">0</span>
+                    </div>
+                    <p>Vielen Dank fürs Mitspielen!</p>
+                    <button id="play-again-btn" class="btn">Nochmal spielen</button>
+                </div>
             </div>
         </div>
 
-        <div id="player-view" class="view card">
-            <div id="join-form">
-                <h2>Einem Quiz beitreten</h2>
-                <input type="text" id="room-code-input" placeholder="Host-ID eingeben oder QR scannen">
-                <input type="text" id="player-name-input" placeholder="Dein Name">
-                <button id="join-btn" class="btn">Quiz beitreten</button>
-                <p>Oder scanne den vom Host bereitgestellten QR-Code</p>
-            </div>
-
-            <div id="waiting-room" class="hidden">
-                <h2>Warten auf den Quizstart</h2>
-                <p id="waiting-message">Du bist dem Raum erfolgreich beigetreten!</p>
-                <div class="loader"></div>
-                <p>Der Host wird das Quiz bald starten...</p>
-            </div>
-
-            <div id="player-question" class="hidden">
-                <h3 id="player-question-text"></h3>
-                <div class="question-counter" id="player-question-counter"></div>
-                <div class="timer-bar-container">
-                    <div class="timer-bar" id="player-timer-bar"></div>
-                </div>
-                <div id="options-container"></div>
-                <button id="submit-answer-btn" class="btn hidden">Antwort absenden</button>
-            </div>
-
-            <div id="player-result" class="hidden">
-                <div id="result-display"></div>
-                <div class="score-display">Deine Punktzahl: <span id="player-score">0</span></div>
-                <p id="waiting-for-next">Warten auf nächste Frage...</p>
-            </div>
-
-            <div id="player-final-result" class="view card hidden">
-                <h2>Quiz beendet!</h2>
-                <div id="player-leaderboard-container" style="margin-bottom: 15px;"></div>
-                <div class="score-display">Deine Endpunktzahl: <span id="final-score">0</span></div>
-                <p>Vielen Dank fürs Mitspielen!</p>
-                <button id="play-again-btn" class="btn">Nochmal spielen</button>
+        <div id="qr-modal-overlay" class="qr-modal-overlay hidden">
+            <div id="qr-modal-content" class="qr-modal-content">
+                <button id="qr-modal-close" class="qr-modal-close">&times;</button>
+                <h3>Zum Beitreten scannen oder URL eingeben</h3>
+                <div id="large-qrcode"></div>
+                <p>URL eingeben: <a id="join-link-modal" href="#" target="_blank"></a></p>
+                <p>
+                    Dann Code eingeben:
+                    <span
+                        id="modal-room-id"
+                        style="font-size: 1.4em; font-weight: bold; letter-spacing: 0.1em"
+                    ></span>
+                </p>
             </div>
         </div>
-    </div>
 
-    <div id="qr-modal-overlay" class="qr-modal-overlay hidden">
-        <div id="qr-modal-content" class="qr-modal-content">
-            <button id="qr-modal-close" class="qr-modal-close">&times;</button>
-            <h3>Zum Beitreten scannen oder URL eingeben</h3>
-            <div id="large-qrcode"></div>
-            <p>URL eingeben: <a id="join-link-modal" href="#" target="_blank"></a></p>
-            <p>Dann Code eingeben: <span id="modal-room-id"
-                    style="font-size: 1.4em; font-weight: bold; letter-spacing: 0.1em;"></span></p>
-        </div>
-    </div>
+        <div id="confetti-container"></div>
 
-    <div id="confetti-container"></div>
+        <footer style="text-align: center; margin-top: 20px; font-size: 0.9em">
+            <p><a href="datenschutz.html" class="footer-link">Datenschutzhinweise</a></p>
+        </footer>
 
-    <footer style="text-align: center; margin-top: 20px; font-size: 0.9em;">
-        <p><a href="datenschutz.html" class="footer-link">Datenschutzhinweise</a></p>
-    </footer>
-
-    <!-- Main Application Script -->
-    <script src="quiz.js"></script>
-</body>
-
+        <!-- Main Application Script -->
+        <script src="quiz.js"></script>
+    </body>
 </html>

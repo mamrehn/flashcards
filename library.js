@@ -26,11 +26,14 @@ const els = {
     empty: null,
     banner: null,
     title: null,
-    subtitle: null
+    subtitle: null,
 };
 
 document.addEventListener('DOMContentLoaded', init);
 
+/**
+ *
+ */
 async function init() {
     cacheElements();
     bindEvents();
@@ -38,30 +41,39 @@ async function init() {
     routeFromURL();
 }
 
+/**
+ *
+ */
 function cacheElements() {
-    els.loading = document.getElementById('loading-state');
-    els.error = document.getElementById('error-state');
-    els.gridContainer = document.getElementById('grid-view');
-    els.grid = document.getElementById('deck-grid');
-    els.detail = document.getElementById('detail-view');
-    els.detailContent = document.getElementById('detail-content');
-    els.backToGrid = document.getElementById('back-to-grid');
-    els.search = document.getElementById('library-search');
-    els.empty = document.getElementById('empty-state');
-    els.banner = document.getElementById('message-banner');
-    els.title = document.getElementById('library-title');
-    els.subtitle = document.getElementById('library-subtitle');
+    els.loading = document.querySelector('#loading-state');
+    els.error = document.querySelector('#error-state');
+    els.gridContainer = document.querySelector('#grid-view');
+    els.grid = document.querySelector('#deck-grid');
+    els.detail = document.querySelector('#detail-view');
+    els.detailContent = document.querySelector('#detail-content');
+    els.backToGrid = document.querySelector('#back-to-grid');
+    els.search = document.querySelector('#library-search');
+    els.empty = document.querySelector('#empty-state');
+    els.banner = document.querySelector('#message-banner');
+    els.title = document.querySelector('#library-title');
+    els.subtitle = document.querySelector('#library-subtitle');
 }
 
+/**
+ *
+ */
 function bindEvents() {
     els.backToGrid.addEventListener('click', () => {
         history.pushState({}, '', 'library.html');
         routeFromURL();
     });
     els.search.addEventListener('input', () => renderGrid(els.search.value.trim().toLowerCase()));
-    window.addEventListener('popstate', routeFromURL);
+    globalThis.addEventListener('popstate', routeFromURL);
 }
 
+/**
+ *
+ */
 async function loadManifest() {
     try {
         // Cache-busting via timestamp ensures returning visitors notice the
@@ -74,14 +86,18 @@ async function loadManifest() {
             throw new Error('Manifest hat ein unerwartetes Format.');
         }
         els.loading.classList.add('hidden');
-    } catch (err) {
-        console.error('Failed to load library manifest:', err);
+    } catch (error) {
+        console.error('Failed to load library manifest:', error);
         els.loading.classList.add('hidden');
-        els.error.textContent = 'Bibliothek konnte nicht geladen werden. Bitte später erneut versuchen.';
+        els.error.textContent =
+            'Bibliothek konnte nicht geladen werden. Bitte später erneut versuchen.';
         els.error.classList.remove('hidden');
     }
 }
 
+/**
+ *
+ */
 function routeFromURL() {
     if (!manifest) return;
     const params = new URLSearchParams(location.search);
@@ -93,26 +109,35 @@ function routeFromURL() {
     }
 }
 
+/**
+ *
+ */
 function showGrid() {
     els.detail.classList.add('hidden');
     els.gridContainer.classList.remove('hidden');
     els.title.textContent = '📚 Lernkarten-Bibliothek';
-    els.subtitle.textContent = manifest.decks.length === 0
-        ? 'Noch keine Decks verfügbar.'
-        : `${manifest.decks.length} Deck${manifest.decks.length === 1 ? '' : 's'} verfügbar`;
+    els.subtitle.textContent =
+        manifest.decks.length === 0
+            ? 'Noch keine Decks verfügbar.'
+            : `${manifest.decks.length} Deck${manifest.decks.length === 1 ? '' : 's'} verfügbar`;
     renderGrid('');
 }
 
+/**
+ *
+ * @param filter
+ */
 function renderGrid(filter) {
     els.grid.innerHTML = '';
     const meta = readLibraryMeta();
-    const filtered = manifest.decks.filter(d => {
+    const filtered = manifest.decks.filter((d) => {
         if (!filter) return true;
         if (d.title.toLowerCase().includes(filter)) return true;
-        if (d.categories.some(c => c.name.toLowerCase().includes(filter))) return true;
+        if (d.categories.some((c) => c.name.toLowerCase().includes(filter))) return true;
         const m = d.meta || {};
-        return [m.subject, m.gradeLevel, m.learningUnit, m.description, m.author]
-            .some(v => typeof v === 'string' && v.toLowerCase().includes(filter));
+        return [m.subject, m.gradeLevel, m.learningUnit, m.description, m.author].some(
+            (v) => typeof v === 'string' && v.toLowerCase().includes(filter)
+        );
     });
 
     if (filtered.length === 0) {
@@ -125,10 +150,15 @@ function renderGrid(filter) {
     els.empty.classList.add('hidden');
 
     for (const deck of filtered) {
-        els.grid.appendChild(buildDeckCard(deck, meta[deck.title]));
+        els.grid.append(buildDeckCard(deck, meta[deck.title]));
     }
 }
 
+/**
+ *
+ * @param deck
+ * @param importedMeta
+ */
 function buildDeckCard(deck, importedMeta) {
     const card = document.createElement('a');
     card.className = 'deck-card';
@@ -140,18 +170,18 @@ function buildDeckCard(deck, importedMeta) {
     });
 
     const chips = buildMetaChips(deck.meta);
-    if (chips) card.appendChild(chips);
+    if (chips) card.append(chips);
 
     const title = document.createElement('h2');
     title.className = 'deck-card-title';
     title.textContent = deck.title;
-    card.appendChild(title);
+    card.append(title);
 
     if (deck.meta && deck.meta.description) {
         const desc = document.createElement('p');
         desc.className = 'deck-card-description';
         desc.textContent = deck.meta.description;
-        card.appendChild(desc);
+        card.append(desc);
     }
 
     const stats = document.createElement('div');
@@ -159,11 +189,11 @@ function buildDeckCard(deck, importedMeta) {
     const line = document.createElement('p');
     line.className = 'stats-line';
     line.textContent = `📝 ${deck.questionCount} Fragen${formatTypeBreakdown(deck.types, ' (', ')')}`;
-    stats.appendChild(line);
-    card.appendChild(stats);
+    stats.append(line);
+    card.append(stats);
 
     if (deck.categories.length > 0) {
-        card.appendChild(buildCategoryList(deck.categories, 5));
+        card.append(buildCategoryList(deck.categories, 5));
     }
 
     if (importedMeta) {
@@ -177,8 +207,8 @@ function buildDeckCard(deck, importedMeta) {
             pill.className = 'status-pill update';
             pill.textContent = '🔄 Aktualisierung verfügbar';
         }
-        status.appendChild(pill);
-        card.appendChild(status);
+        status.append(pill);
+        card.append(status);
     }
 
     return card;
@@ -187,6 +217,7 @@ function buildDeckCard(deck, importedMeta) {
 /**
  * Compose chips for the small filename-encoded codes (subject/grade/unit).
  * Returns null when the deck has no meta block (older zips without one).
+ * @param meta
  */
 function buildMetaChips(meta) {
     if (!meta) return null;
@@ -198,7 +229,7 @@ function buildMetaChips(meta) {
         const chip = document.createElement('span');
         chip.className = 'meta-chip';
         chip.textContent = code;
-        wrap.appendChild(chip);
+        wrap.append(chip);
     }
     return wrap;
 }
@@ -206,6 +237,8 @@ function buildMetaChips(meta) {
 /**
  * Bullet list of categories with per-category counts. Caps at `limit`
  * with a "+N weitere" tail so tiles stay compact.
+ * @param categories
+ * @param limit
  */
 function buildCategoryList(categories, limit) {
     const list = document.createElement('ul');
@@ -217,15 +250,15 @@ function buildCategoryList(categories, limit) {
         const count = document.createElement('span');
         count.className = 'cat-count';
         count.textContent = `(${cat.count})`;
-        li.appendChild(name);
-        li.appendChild(count);
-        list.appendChild(li);
+        li.append(name);
+        li.append(count);
+        list.append(li);
     }
     if (categories.length > limit) {
         const more = document.createElement('li');
         more.className = 'cat-more';
         more.textContent = `${categories.length - limit} weitere`;
-        list.appendChild(more);
+        list.append(more);
     }
     return list;
 }
@@ -233,6 +266,9 @@ function buildCategoryList(categories, limit) {
 /**
  * "(23 Text + 26 MC)" — only shown when both types are present, so the
  * breakdown clearly explains the total rather than looking additive.
+ * @param types
+ * @param prefix
+ * @param suffix
  */
 function formatTypeBreakdown(types, prefix, suffix) {
     const parts = [];
@@ -242,16 +278,21 @@ function formatTypeBreakdown(types, prefix, suffix) {
     return `${prefix}${parts.join(' + ')}${suffix}`;
 }
 
+/**
+ *
+ * @param deckId
+ */
 function showDetail(deckId) {
-    const deck = manifest.decks.find(d => d.id === deckId);
+    const deck = manifest.decks.find((d) => d.id === deckId);
     if (!deck) {
         els.gridContainer.classList.add('hidden');
         els.detail.classList.remove('hidden');
         els.detailContent.innerHTML = '';
         const msg = document.createElement('div');
         msg.className = 'state-message';
-        msg.textContent = 'Dieses Deck wurde nicht in der Bibliothek gefunden. Vielleicht wurde es entfernt.';
-        els.detailContent.appendChild(msg);
+        msg.textContent =
+            'Dieses Deck wurde nicht in der Bibliothek gefunden. Vielleicht wurde es entfernt.';
+        els.detailContent.append(msg);
         return;
     }
 
@@ -264,6 +305,11 @@ function showDetail(deckId) {
     renderDetail(deck, meta);
 }
 
+/**
+ *
+ * @param deck
+ * @param importedMeta
+ */
 function renderDetail(deck, importedMeta) {
     els.detailContent.innerHTML = '';
 
@@ -271,38 +317,42 @@ function renderDetail(deck, importedMeta) {
     card.className = 'detail-card';
 
     const chips = buildMetaChips(deck.meta);
-    if (chips) card.appendChild(chips);
+    if (chips) card.append(chips);
 
     const title = document.createElement('h2');
     title.className = 'detail-title';
     title.textContent = deck.title;
-    card.appendChild(title);
+    card.append(title);
 
     if (deck.meta && deck.meta.description) {
         const desc = document.createElement('p');
         desc.className = 'detail-description';
         desc.textContent = deck.meta.description;
-        card.appendChild(desc);
+        card.append(desc);
     }
 
     const metaLine = document.createElement('div');
     metaLine.className = 'detail-meta-line';
     metaLine.textContent = `Version ${deck.version} · ${formatBytes(deck.size)}`;
-    card.appendChild(metaLine);
+    card.append(metaLine);
 
     if (importedMeta) {
         if (importedMeta.libraryVersion === deck.version) {
-            card.appendChild(buildBanner(
-                'imported-banner',
-                '✓ Bereits importiert',
-                'Du hast dieses Deck in der aktuellen Version. Re-Import behält deinen Fortschritt für unveränderte Fragen.'
-            ));
+            card.append(
+                buildBanner(
+                    'imported-banner',
+                    '✓ Bereits importiert',
+                    'Du hast dieses Deck in der aktuellen Version. Re-Import behält deinen Fortschritt für unveränderte Fragen.'
+                )
+            );
         } else {
-            card.appendChild(buildBanner(
-                'update-banner',
-                '🔄 Aktualisierung verfügbar',
-                `Deine importierte Version (${importedMeta.libraryVersion}) ist nicht mehr aktuell. Beim Aktualisieren bleibt dein Lernfortschritt für unveränderte Fragen erhalten — nur Fragen mit geändertem Wortlaut starten neu.`
-            ));
+            card.append(
+                buildBanner(
+                    'update-banner',
+                    '🔄 Aktualisierung verfügbar',
+                    `Deine importierte Version (${importedMeta.libraryVersion}) ist nicht mehr aktuell. Beim Aktualisieren bleibt dein Lernfortschritt für unveränderte Fragen erhalten — nur Fragen mit geändertem Wortlaut starten neu.`
+                )
+            );
         }
     }
 
@@ -313,29 +363,29 @@ function renderDetail(deck, importedMeta) {
     const summaryCount = document.createElement('p');
     summaryCount.className = 'detail-summary-count';
     summaryCount.textContent = `${deck.questionCount} Fragen`;
-    summary.appendChild(summaryCount);
+    summary.append(summaryCount);
     const breakdown = formatDetailBreakdown(deck.types);
     if (breakdown) {
         const breakdownEl = document.createElement('p');
         breakdownEl.className = 'detail-summary-breakdown';
         breakdownEl.textContent = breakdown;
-        summary.appendChild(breakdownEl);
+        summary.append(breakdownEl);
     }
-    card.appendChild(summary);
+    card.append(summary);
 
     if (deck.categories.length > 0) {
         const heading = document.createElement('h3');
         heading.className = 'detail-section-title';
         heading.textContent = `Kategorien (${deck.categories.length})`;
-        card.appendChild(heading);
-        card.appendChild(buildCategoryList(deck.categories, deck.categories.length));
+        card.append(heading);
+        card.append(buildCategoryList(deck.categories, deck.categories.length));
     }
 
     if (deck.meta && deck.meta.author) {
         const author = document.createElement('div');
         author.className = 'detail-author';
         author.textContent = `Autor:in: ${deck.meta.author}`;
-        card.appendChild(author);
+        card.append(author);
     }
 
     const actions = document.createElement('div');
@@ -346,37 +396,48 @@ function renderDetail(deck, importedMeta) {
         updateBtn.className = 'btn btn-update';
         updateBtn.textContent = '🔄 Aktualisieren (Fortschritt erhalten)';
         updateBtn.addEventListener('click', () => updateDeck(deck, updateBtn));
-        actions.appendChild(updateBtn);
+        actions.append(updateBtn);
     }
 
     const importBtn = document.createElement('button');
     importBtn.className = 'btn btn-primary';
-    importBtn.textContent = importedMeta && importedMeta.libraryVersion === deck.version
-        ? '▶ Lernen starten'
-        : '⬇ Importieren & lernen';
+    importBtn.textContent =
+        importedMeta && importedMeta.libraryVersion === deck.version
+            ? '▶ Lernen starten'
+            : '⬇ Importieren & lernen';
     importBtn.addEventListener('click', () => {
         location.href = `cards.html?import=${encodeURIComponent(deck.id)}`;
     });
-    actions.appendChild(importBtn);
+    actions.append(importBtn);
 
-    card.appendChild(actions);
-    els.detailContent.appendChild(card);
+    card.append(actions);
+    els.detailContent.append(card);
 }
 
+/**
+ *
+ * @param cls
+ * @param title
+ * @param detail
+ */
 function buildBanner(cls, title, detail) {
     const banner = document.createElement('div');
     banner.className = cls;
     const t = document.createElement('div');
     t.className = 'banner-title';
     t.textContent = title;
-    banner.appendChild(t);
+    banner.append(t);
     const d = document.createElement('div');
     d.className = 'banner-detail';
     d.textContent = detail;
-    banner.appendChild(d);
+    banner.append(d);
     return banner;
 }
 
+/**
+ *
+ * @param types
+ */
 function formatDetailBreakdown(types) {
     const parts = [];
     if (types.text > 0) parts.push(`${types.text} Text-Antworten`);
@@ -385,6 +446,10 @@ function formatDetailBreakdown(types) {
     return `davon ${parts.join(' · ')}`;
 }
 
+/**
+ *
+ * @param n
+ */
 function formatBytes(n) {
     if (n < 1024) return `${n} B`;
     if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
@@ -395,22 +460,30 @@ function formatBytes(n) {
  * Re-import a deck in place from the library, writing the new version
  * into localStorage. Existing SR stats survive automatically for any
  * question whose text is unchanged (keys are deckName|||question).
+ * @param deck
+ * @param btn
  */
 async function updateDeck(deck, btn) {
     btn.disabled = true;
     btn.textContent = 'Aktualisiere …';
     try {
         await importDeckFromLibrary(deck);
-        showMessage(`„${deck.title}“ wurde aktualisiert. Ungeänderte Fragen behalten ihren Fortschritt.`);
+        showMessage(
+            `„${deck.title}“ wurde aktualisiert. Ungeänderte Fragen behalten ihren Fortschritt.`
+        );
         renderDetail(deck, readLibraryMeta()[deck.title]);
-    } catch (err) {
-        console.error(err);
+    } catch (error) {
+        console.error(error);
         showMessage('Aktualisierung fehlgeschlagen.', true);
         btn.disabled = false;
         btn.textContent = '🔄 Aktualisieren (Fortschritt erhalten)';
     }
 }
 
+/**
+ *
+ * @param deckMeta
+ */
 async function importDeckFromLibrary(deckMeta) {
     const url = `decks/${encodeURIComponent(deckMeta.filename)}?v=${encodeURIComponent(deckMeta.version)}`;
     const res = await fetch(url);
@@ -418,7 +491,7 @@ async function importDeckFromLibrary(deckMeta) {
     const buf = await res.arrayBuffer();
 
     if (typeof JSZip === 'undefined') {
-        throw new Error('JSZip nicht geladen.');
+        throw new TypeError('JSZip nicht geladen.');
     }
     const zip = await JSZip.loadAsync(buf);
 
@@ -431,16 +504,23 @@ async function importDeckFromLibrary(deckMeta) {
     savedDecks = sanitizeParsedJSON(savedDecks) || {};
 
     let importedAny = false;
-    const entries = Object.values(zip.files).filter(e => !e.dir && e.name.endsWith('.json'));
+    const entries = Object.values(zip.files).filter((e) => !e.dir && e.name.endsWith('.json'));
     for (const entry of entries) {
         const content = await entry.async('string');
         let data;
-        try { data = sanitizeParsedJSON(JSON.parse(content)); } catch { continue; }
+        try {
+            data = sanitizeParsedJSON(JSON.parse(content));
+        } catch {
+            continue;
+        }
         if (!data || !Array.isArray(data.cards)) continue;
         const validCards = data.cards.filter(isValidCard);
         if (validCards.length === 0) continue;
 
-        const deckName = entry.name.split('/').pop().replace(/\.json$/i, '');
+        const deckName = entry.name
+            .split('/')
+            .pop()
+            .replace(/\.json$/i, '');
         savedDecks[deckName] = { cards: validCards };
         importedAny = true;
     }
@@ -453,22 +533,33 @@ async function importDeckFromLibrary(deckMeta) {
     meta[deckMeta.title] = {
         libraryId: deckMeta.id,
         libraryVersion: deckMeta.version,
-        importedAt: new Date().toISOString()
+        importedAt: new Date().toISOString(),
     };
     localStorage.setItem(LIBRARY_META_KEY, JSON.stringify(meta));
 }
 
+/**
+ *
+ * @param card
+ */
 function isValidCard(card) {
     if (!card || typeof card !== 'object') return false;
     if (typeof card.question !== 'string' || card.question.trim() === '') return false;
     if (typeof card.answer === 'string' && card.answer.trim() !== '') return true;
-    if (Array.isArray(card.options) && card.options.length > 0 &&
-        Array.isArray(card.correct) && card.correct.length > 0) {
-        return card.correct.every(i => Number.isInteger(i) && i >= 0 && i < card.options.length);
+    if (
+        Array.isArray(card.options) &&
+        card.options.length > 0 &&
+        Array.isArray(card.correct) &&
+        card.correct.length > 0
+    ) {
+        return card.correct.every((i) => Number.isInteger(i) && i >= 0 && i < card.options.length);
     }
     return false;
 }
 
+/**
+ *
+ */
 function readLibraryMeta() {
     try {
         const raw = localStorage.getItem(LIBRARY_META_KEY);
@@ -480,6 +571,11 @@ function readLibraryMeta() {
     }
 }
 
+/**
+ *
+ * @param text
+ * @param isError
+ */
 function showMessage(text, isError) {
     els.banner.textContent = text;
     els.banner.classList.remove('hidden', 'error');

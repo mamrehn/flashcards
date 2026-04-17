@@ -1,33 +1,33 @@
 {
-  "name": "flashcards",
-  "version": "1.0.0",
-  "description": "Flashcards Learning App",
-  "private": true,
-  "scripts": {
-    "lint": "eslint .",
-    "lint:fix": "eslint . --fix",
-    "format": "prettier --write .",
-    "prepare": "husky"
-  },
-  "devDependencies": {
-    "@eslint/js": "^9.0.0",
-    "eslint": "^9.0.0",
-    "eslint-config-prettier": "^9.1.0",
-    "eslint-plugin-jsdoc": "latest",
-    "eslint-plugin-sonarjs": "latest",
-    "eslint-plugin-unicorn": "latest",
-    "globals": "^15.0.0",
-    "husky": "^9.0.11",
-    "lint-staged": "^15.2.2",
-    "prettier": "^3.2.5"
-  },
-  "lint-staged": {
-    "*.js": [
-      "eslint --fix",
-      "prettier --write"
-    ],
-    "*.{json,css,html}": [
-      "prettier --write"
-    ]
-  }
+    "name": "flashcards",
+    "version": "1.0.0",
+    "description": "Flashcards Learning App",
+    "private": true,
+    "scripts": {
+        "lint": "eslint .",
+        "lint:fix": "eslint . --fix",
+        "format": "prettier --write .",
+        "prepare": "husky"
+    },
+    "devDependencies": {
+        "@eslint/js": "^9.0.0",
+        "eslint": "^9.0.0",
+        "eslint-config-prettier": "^9.1.0",
+        "eslint-plugin-jsdoc": "latest",
+        "eslint-plugin-sonarjs": "latest",
+        "eslint-plugin-unicorn": "latest",
+        "globals": "^15.0.0",
+        "husky": "^9.0.11",
+        "lint-staged": "^15.2.2",
+        "prettier": "^3.2.5"
+    },
+    "lint-staged": {
+        "*.js": [
+            "eslint --fix",
+            "prettier --write"
+        ],
+        "*.{json,css,html}": [
+            "prettier --write"
+        ]
+    }
 }

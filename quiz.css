@@ -2,21 +2,21 @@
     /* Violet-tinted palette — mirrors cards.css structure but hue-rotated
        toward purple so the multiplayer arena is instantly distinguishable
        from the blue single-player study app. */
-    --primary-color: #6b42a6;       /* cards' #4a6fa5 rotated to violet */
-    --secondary-color: #46178f;     /* cards' #166088 rotated to deep violet */
-    --accent-color: #ff3366;        /* magenta-leaning red for high-energy CTA */
+    --primary-color: #6b42a6; /* cards' #4a6fa5 rotated to violet */
+    --secondary-color: #46178f; /* cards' #166088 rotated to deep violet */
+    --accent-color: #ff3366; /* magenta-leaning red for high-energy CTA */
     --light-color: var(--surface-secondary);
     --dark-color: #343a40;
-    --correct-color: #28a745;       /* green stays universal for correct */
-    --wrong-color: #dc3545;         /* red stays universal for wrong */
+    --correct-color: #28a745; /* green stays universal for correct */
+    --wrong-color: #dc3545; /* red stays universal for wrong */
     --warning-color: #ffc107;
 
-    --quiz-surface: #f2e9ff;        /* cards' #e9f2ff rotated */
-    --quiz-surface-alt: #f5f0ff;    /* cards' #f0f5ff rotated */
+    --quiz-surface: #f2e9ff; /* cards' #e9f2ff rotated */
+    --quiz-surface-alt: #f5f0ff; /* cards' #f0f5ff rotated */
     --quiz-hover: #ece0ff;
     --success-bg: #d4edda;
     --success-border: #c3e6cb;
-    --cards-highlight-bg: #f2e9ff;  /* cards' #e9f2ff rotated */
+    --cards-highlight-bg: #f2e9ff; /* cards' #e9f2ff rotated */
     --cards-highlight-border: #b592e3; /* cards' #92b5e3 rotated */
     --progress-track: #e9ecef;
     --primary-rgb: 107, 66, 166;
@@ -152,7 +152,8 @@ header h1 {
     margin-bottom: 0.75rem;
 }
 
-input, select {
+input,
+select {
     width: 100%;
     padding: 0.5rem 0.75rem;
     margin: 0.3rem 0;
@@ -163,7 +164,8 @@ input, select {
     color: var(--text-color);
 }
 
-input:focus, select:focus {
+input:focus,
+select:focus {
     outline: none;
     border-color: var(--primary-color);
     box-shadow: 0 0 0 0.15rem rgba(var(--primary-rgb), 0.25);
@@ -266,13 +268,13 @@ input:focus, select:focus {
     margin-bottom: 0.4rem;
 }
 
-.option-group input[type="text"] {
+.option-group input[type='text'] {
     flex-grow: 1;
     margin-right: 0.5rem;
     min-width: 150px;
 }
 
-.option-group input[type="checkbox"] {
+.option-group input[type='checkbox'] {
     width: auto;
     margin-left: 0.5rem;
 }
@@ -320,14 +322,16 @@ input:focus, select:focus {
     border-color: var(--primary-color);
 }
 
-.option-btn.correct-answer, .option-btn.correct {
+.option-btn.correct-answer,
+.option-btn.correct {
     background-color: var(--correct-color);
     color: white;
     border-color: var(--correct-color);
     font-weight: bold;
 }
 
-.option-btn.incorrect-answer.selected, .option-btn.incorrect {
+.option-btn.incorrect-answer.selected,
+.option-btn.incorrect {
     background-color: var(--wrong-color);
     color: white;
     border-color: var(--wrong-color);
@@ -443,7 +447,7 @@ input:focus, select:focus {
     left: 0;
     width: 100%;
     height: 100%;
-    background: rgba(0,0,0,0.8);
+    background: rgba(0, 0, 0, 0.8);
     display: flex;
     justify-content: center;
     align-items: center;
@@ -456,7 +460,7 @@ input:focus, select:focus {
     border-radius: 12px;
     position: relative;
     text-align: center;
-    box-shadow: 0 8px 16px rgba(0,0,0,0.3);
+    box-shadow: 0 8px 16px rgba(0, 0, 0, 0.3);
     max-width: 90%;
 }
 
@@ -495,17 +499,20 @@ input:focus, select:focus {
 }
 
 /* Leaderboard / scoreboard rank highlights */
-.leaderboard-item.rank-1, .scoreboard-item.rank-1 {
+.leaderboard-item.rank-1,
+.scoreboard-item.rank-1 {
     background-color: #ffeb3b;
     font-weight: bold;
     border-color: #fbc02d;
 }
-.leaderboard-item.rank-2, .scoreboard-item.rank-2 {
+.leaderboard-item.rank-2,
+.scoreboard-item.rank-2 {
     background-color: #e0e0e0;
     font-weight: bold;
     border-color: #bdbdbd;
 }
-.leaderboard-item.rank-3, .scoreboard-item.rank-3 {
+.leaderboard-item.rank-3,
+.scoreboard-item.rank-3 {
     background-color: #ffccbc;
     font-weight: bold;
     border-color: #e64a19;
@@ -576,8 +583,12 @@ input:focus, select:focus {
 }
 
 @keyframes spin {
-    0% { transform: rotate(0deg); }
-    100% { transform: rotate(360deg); }
+    0% {
+        transform: rotate(0deg);
+    }
+    100% {
+        transform: rotate(360deg);
+    }
 }
 
 /* Timer bar */
@@ -669,7 +680,9 @@ input:focus, select:focus {
     font-weight: 500;
     z-index: 10001;
     opacity: 0;
-    transition: opacity 0.3s ease, transform 0.3s ease;
+    transition:
+        opacity 0.3s ease,
+        transform 0.3s ease;
     max-width: 90%;
     text-align: center;
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
@@ -706,9 +719,15 @@ input:focus, select:focus {
     body {
         font-size: 16px;
     }
-    h1 { font-size: 1.5rem; }
-    h2 { font-size: 1.3rem; }
-    h3 { font-size: 1.15rem; }
+    h1 {
+        font-size: 1.5rem;
+    }
+    h2 {
+        font-size: 1.3rem;
+    }
+    h3 {
+        font-size: 1.15rem;
+    }
 
     .container {
         padding: 0.4rem;
@@ -736,18 +755,18 @@ input:focus, select:focus {
    We locally override --text-color / --text-muted so quiz-page text
    reads cleanly against both the deep-violet surfaces and the default
    dark body; this is scoped to quiz.css and does not affect cards. */
-[data-theme="dark"] {
-    --primary-color: #c4a6ea;       /* lighter violet — higher contrast on dark */
-    --secondary-color: #a78bd1;     /* used for link-hover / secondary buttons */
+[data-theme='dark'] {
+    --primary-color: #c4a6ea; /* lighter violet — higher contrast on dark */
+    --secondary-color: #a78bd1; /* used for link-hover / secondary buttons */
     --accent-color: #ff7a96;
     --dark-color: #f5f5f5;
     --correct-color: #5cd66f;
     --wrong-color: #ff8560;
 
-    --text-color: #f5f5f5;          /* was #e0e0e0 — brighter body text */
-    --text-muted: #c0bed0;          /* was #a0a0b0 — readable hints */
+    --text-color: #f5f5f5; /* was #e0e0e0 — brighter body text */
+    --text-muted: #c0bed0; /* was #a0a0b0 — readable hints */
 
-    --quiz-surface: #2a2040;        /* slightly darker to raise text contrast */
+    --quiz-surface: #2a2040; /* slightly darker to raise text contrast */
     --quiz-surface-alt: #352a52;
     --quiz-hover: #443666;
     --cards-highlight-bg: #352a52;
@@ -757,46 +776,46 @@ input:focus, select:focus {
     --primary-rgb: 196, 166, 234;
 }
 
-[data-theme="dark"] a:hover,
-[data-theme="dark"] a:focus-visible {
-    color: #e0cdf5;                 /* brighter than primary — pops on hover */
+[data-theme='dark'] a:hover,
+[data-theme='dark'] a:focus-visible {
+    color: #e0cdf5; /* brighter than primary — pops on hover */
 }
 
-[data-theme="dark"] .question-item,
-[data-theme="dark"] .player-item,
-[data-theme="dark"] .host-options-list li {
+[data-theme='dark'] .question-item,
+[data-theme='dark'] .player-item,
+[data-theme='dark'] .host-options-list li {
     color: var(--text-color);
 }
 
-[data-theme="dark"] #current-question-text,
-[data-theme="dark"] #player-question-text {
+[data-theme='dark'] #current-question-text,
+[data-theme='dark'] #player-question-text {
     color: var(--primary-color);
 }
 
-[data-theme="dark"] .qr-modal-close:hover {
+[data-theme='dark'] .qr-modal-close:hover {
     color: #fff;
 }
 
-[data-theme="dark"] .btn-accent:hover {
+[data-theme='dark'] .btn-accent:hover {
     background-color: #e04a6d;
 }
 
-[data-theme="dark"] .leaderboard-item.rank-1,
-[data-theme="dark"] .scoreboard-item.rank-1 {
+[data-theme='dark'] .leaderboard-item.rank-1,
+[data-theme='dark'] .scoreboard-item.rank-1 {
     background-color: rgba(255, 235, 59, 0.25);
     border-color: rgba(251, 192, 45, 0.4);
     color: #ffeb3b;
 }
 
-[data-theme="dark"] .leaderboard-item.rank-2,
-[data-theme="dark"] .scoreboard-item.rank-2 {
+[data-theme='dark'] .leaderboard-item.rank-2,
+[data-theme='dark'] .scoreboard-item.rank-2 {
     background-color: rgba(224, 224, 224, 0.15);
     border-color: rgba(189, 189, 189, 0.3);
     color: #e0e0e0;
 }
 
-[data-theme="dark"] .leaderboard-item.rank-3,
-[data-theme="dark"] .scoreboard-item.rank-3 {
+[data-theme='dark'] .leaderboard-item.rank-3,
+[data-theme='dark'] .scoreboard-item.rank-3 {
     background-color: rgba(255, 204, 188, 0.2);
     border-color: rgba(230, 74, 25, 0.3);
     color: #ffccbc;

@@ -17,11 +17,11 @@
     --progress-track: #e9ecef;
     --explanation-bg: #e7f3ff;
     --explanation-hover-bg: #d0e9ff;
-    --explanation-border: #2196F3;
-    --explanation-border-light: #90CAF9;
-    --explanation-text: #1565C0;
+    --explanation-border: #2196f3;
+    --explanation-border-light: #90caf9;
+    --explanation-text: #1565c0;
     --explanation-content-text: #0d47a1;
-    --tooltip-bg: #1565C0;
+    --tooltip-bg: #1565c0;
     --btn-secondary-bg: #6c757d;
     --btn-secondary-hover: #5a6268;
     --sr-gradient-start: #4a6fa5;
@@ -83,7 +83,6 @@ body {
     margin-bottom: 1rem;
     text-align: center;
 }
-
 
 #file-input {
     display: none;
@@ -147,7 +146,7 @@ body {
 }
 
 .deck-folder-header:hover {
-    background-color: var(--hover-bg, rgba(0,0,0,0.04));
+    background-color: var(--hover-bg, rgba(0, 0, 0, 0.04));
 }
 
 .deck-chevron {
@@ -858,7 +857,8 @@ body {
         opacity: 1;
     }
     100% {
-        transform: translateY(60vh) translateX(var(--confetti-x, 0px)) rotateZ(var(--confetti-rotate, 720deg));
+        transform: translateY(60vh) translateX(var(--confetti-x, 0px))
+            rotateZ(var(--confetti-rotate, 720deg));
         opacity: 0;
     }
 }
@@ -871,11 +871,11 @@ body {
         gap: 0.75rem;
         padding: 0.75rem;
     }
-    
+
     .header h1 {
         font-size: 1.1rem;
     }
-    
+
     .header p {
         font-size: 1.05rem;
     }
@@ -938,7 +938,7 @@ body {
 
 .explanation-box:hover {
     background-color: var(--explanation-hover-bg);
-    border-color: #1976D2;
+    border-color: #1976d2;
     transform: translateY(-1px);
     box-shadow: 0 2px 8px rgba(33, 150, 243, 0.2);
 }
@@ -950,7 +950,8 @@ body {
 }
 
 @keyframes pulse {
-    0%, 100% {
+    0%,
+    100% {
         transform: scale(1);
     }
     50% {
@@ -1032,7 +1033,7 @@ body {
 }
 
 /* Arrow pointing down (tooltip is above) */
-.option-explanation-tooltip[data-arrow="down"]::after {
+.option-explanation-tooltip[data-arrow='down']::after {
     content: '';
     position: absolute;
     top: 100%;
@@ -1042,7 +1043,7 @@ body {
 }
 
 /* Arrow pointing up (tooltip is below) */
-.option-explanation-tooltip[data-arrow="up"]::after {
+.option-explanation-tooltip[data-arrow='up']::after {
     content: '';
     position: absolute;
     bottom: 100%;
@@ -1138,7 +1139,11 @@ body {
 }
 
 .sr-bucket-header:hover {
-    background: linear-gradient(135deg, var(--sr-gradient-hover-start) 0%, var(--sr-gradient-hover-end) 100%);
+    background: linear-gradient(
+        135deg,
+        var(--sr-gradient-hover-start) 0%,
+        var(--sr-gradient-hover-end) 100%
+    );
 }
 
 .sr-bucket-info {
@@ -1317,8 +1322,12 @@ body {
 }
 
 /* SR card review status colors */
-.sr-overdue { color: var(--danger); }
-.sr-on-time { color: var(--success); }
+.sr-overdue {
+    color: var(--danger);
+}
+.sr-on-time {
+    color: var(--success);
+}
 
 /* ============================================================================
    Keyboard Focus Styles
@@ -1424,7 +1433,10 @@ body {
     align-items: center;
     justify-content: center;
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
-    transition: background-color 0.3s, transform 0.2s, opacity 0.2s;
+    transition:
+        background-color 0.3s,
+        transform 0.2s,
+        opacity 0.2s;
     opacity: 0.75;
     color: var(--text-color);
     padding: 0;
@@ -1436,8 +1448,16 @@ body {
 }
 
 @keyframes hintsPulse {
-    0%, 100% { transform: scale(1); opacity: 0.75; }
-    50% { transform: scale(1.15); opacity: 1; box-shadow: 0 2px 12px rgba(74, 111, 165, 0.4); }
+    0%,
+    100% {
+        transform: scale(1);
+        opacity: 0.75;
+    }
+    50% {
+        transform: scale(1.15);
+        opacity: 1;
+        box-shadow: 0 2px 12px rgba(74, 111, 165, 0.4);
+    }
 }
 
 .keyboard-hints-toggle:hover,
@@ -1446,7 +1466,7 @@ body {
     transform: scale(1.1);
 }
 
-[data-theme="dark"] .keyboard-hints-toggle {
+[data-theme='dark'] .keyboard-hints-toggle {
     background-color: rgba(50, 50, 50, 0.9);
     border-color: rgba(128, 128, 128, 0.4);
 }
@@ -1478,7 +1498,7 @@ body {
 /* ============================================================================
    Dark Mode Overrides
    ============================================================================ */
-[data-theme="dark"] {
+[data-theme='dark'] {
     --primary: #6b9fd4;
     --secondary: #4a8ab8;
     --light: #2a2a3c;
@@ -1512,31 +1532,31 @@ body {
     --sr-info-hover: #18a2bc;
 }
 
-[data-theme="dark"] .btn-success:hover {
+[data-theme='dark'] .btn-success:hover {
     background-color: #43a047;
 }
 
-[data-theme="dark"] .btn-danger:hover {
+[data-theme='dark'] .btn-danger:hover {
     background-color: #e53935;
 }
 
-[data-theme="dark"] .sr-delete-btn {
+[data-theme='dark'] .sr-delete-btn {
     background: var(--danger);
 }
 
-[data-theme="dark"] .sr-delete-btn:hover {
+[data-theme='dark'] .sr-delete-btn:hover {
     background: #e53935;
 }
 
-[data-theme="dark"] .btn:focus-visible {
+[data-theme='dark'] .btn:focus-visible {
     box-shadow: 0 0 0 4px rgba(107, 159, 212, 0.3);
 }
 
-[data-theme="dark"] .btn-success:focus-visible {
+[data-theme='dark'] .btn-success:focus-visible {
     box-shadow: 0 0 0 4px rgba(76, 175, 80, 0.3);
 }
 
-[data-theme="dark"] .btn-danger:focus-visible {
+[data-theme='dark'] .btn-danger:focus-visible {
     box-shadow: 0 0 0 4px rgba(239, 83, 80, 0.3);
 }
 

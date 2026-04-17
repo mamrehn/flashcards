@@ -1,30 +1,38 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="de">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Datenschutz & Datenbank</title>
-  <link rel="stylesheet" href="theme.css">
-  <script src="theme.js"></script>
-  <link rel="stylesheet" href="quiz.css">
-</head>
-<body>
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>Datenschutz & Datenbank</title>
+        <link rel="stylesheet" href="theme.css" />
+        <script src="theme.js"></script>
+        <link rel="stylesheet" href="quiz.css" />
+    </head>
+    <body>
+        <h1>Datenschutzinformationen zur Nutzung der Quiz App</h1>
 
-  <h1>Datenschutzinformationen zur Nutzung der Quiz App</h1>
+        <p>
+            Beim Verwenden dieser Quiz App werden bestimmte Daten des Spielers temporär im
+            Arbeitsspeicher des Servers verarbeitet, um den Fortschritt und die Interaktionen
+            während einer Fragerunde zu ermöglichen.
+        </p>
 
-  <p>Beim Verwenden dieser Quiz App werden bestimmte Daten des Spielers temporär im Arbeitsspeicher des Servers verarbeitet, um den Fortschritt und die Interaktionen während einer Fragerunde zu ermöglichen.</p>
+        <h2>Gespeicherte Daten</h2>
+        <p>Folgende Daten werden temporär erhoben und verarbeitet:</p>
+        <ul>
+            <li>Nickname (frei wählbar, keine Pflicht zur echten Namensangabe)</li>
+            <li>Session-ID (automatisch generiert)</li>
+            <li>Antworten auf Aufgaben bzw. Lernkarten</li>
+            <li>Statistische Informationen wie Antwortzeiten oder Fortschritt</li>
+        </ul>
 
-  <h2>Gespeicherte Daten</h2>
-  <p>Folgende Daten werden temporär erhoben und verarbeitet:</p>
-  <ul>
-    <li>Nickname (frei wählbar, keine Pflicht zur echten Namensangabe)</li>
-    <li>Session-ID (automatisch generiert)</li>
-    <li>Antworten auf Aufgaben bzw. Lernkarten</li>
-    <li>Statistische Informationen wie Antwortzeiten oder Fortschritt</li>
-  </ul>
-
-  <h2>Datensicherheit und Löschkonzept</h2>
-  <p>Die Daten werden ausschließlich in Echtzeit über eine WebSocket-Verbindung verarbeitet und nur im Arbeitsspeicher des Servers gehalten. Es erfolgt keine dauerhafte Speicherung in einer Datenbank. Die Daten werden automatisch gelöscht, wenn der Raum beendet wird oder spätestens nach <strong>2 Stunden</strong>. Es erfolgt keine Profilbildung. Die Nutzung erfolgt anonymisiert.</p>
-
-</body>
+        <h2>Datensicherheit und Löschkonzept</h2>
+        <p>
+            Die Daten werden ausschließlich in Echtzeit über eine WebSocket-Verbindung verarbeitet
+            und nur im Arbeitsspeicher des Servers gehalten. Es erfolgt keine dauerhafte Speicherung
+            in einer Datenbank. Die Daten werden automatisch gelöscht, wenn der Raum beendet wird
+            oder spätestens nach <strong>2 Stunden</strong>. Es erfolgt keine Profilbildung. Die
+            Nutzung erfolgt anonymisiert.
+        </p>
+    </body>
 </html>

@@ -5,9 +5,12 @@
  */
 // During build, '__WS_URL__' is replaced. In dev, it remains.
 const RAW_URL = '__WS_URL__';
-const WS_URL = (typeof window !== 'undefined' && window.WS_URL && window.WS_URL !== '__WS_URL__')
-    ? window.WS_URL
-    : (RAW_URL !== '__WS_URL__' ? RAW_URL : 'wss://qlash-server.fly.dev');
+const WS_URL =
+    globalThis.window !== undefined && globalThis.WS_URL && globalThis.WS_URL !== '__WS_URL__'
+        ? globalThis.WS_URL
+        : RAW_URL === '__WS_URL__'
+          ? 'wss://qlash-server.fly.dev'
+          : RAW_URL;
 
 // --- Utility functions ---
 /**
@@ -19,14 +22,14 @@ function showMessage(message, type = 'info') {
     // console.log(`Message (${type}): ${message}`);
 
     // Remove existing toast if present
-    const existing = document.getElementById('toast-notification');
+    const existing = document.querySelector('#toast-notification');
     if (existing) existing.remove();
 
     const toast = document.createElement('div');
     toast.id = 'toast-notification';
     toast.className = `toast-notification toast-${type}`;
     toast.textContent = message;
-    document.body.appendChild(toast);
+    document.body.append(toast);
 
     // Trigger show animation
     requestAnimationFrame(() => toast.classList.add('show'));
@@ -34,7 +37,9 @@ function showMessage(message, type = 'info') {
     // Auto-dismiss after 4 seconds
     setTimeout(() => {
         toast.classList.remove('show');
-        setTimeout(() => { if (toast.parentNode) toast.remove(); }, 300);
+        setTimeout(() => {
+            if (toast.parentNode) toast.remove();
+        }, 300);
     }, 4000);
 }
 
@@ -43,14 +48,14 @@ function showMessage(message, type = 'info') {
  * @param {string} viewToShowId - The ID of the view element to show.
  */
 function showView(viewToShowId) {
-    document.querySelectorAll('.view').forEach(view => view.classList.remove('active'));
+    for (const view of document.querySelectorAll('.view')) view.classList.remove('active');
     const viewElement = document.getElementById(viewToShowId);
     if (viewElement) viewElement.classList.add('active');
-    else console.error("View not found:", viewToShowId);
+    else console.error('View not found:', viewToShowId);
 
     // Hide role selection buttons once a role is chosen
     if (viewToShowId === 'host-view' || viewToShowId === 'player-view') {
-        document.getElementById('role-selection').classList.add('hidden');
+        document.querySelector('#role-selection').classList.add('hidden');
     }
 }
 
@@ -89,6 +94,9 @@ function shuffleArray(array) {
 function connectWithRetry(url, maxRetries = 3) {
     return new Promise((resolve, reject) => {
         let attempt = 0;
+        /**
+         *
+         */
         function tryConnect() {
             attempt++;
             const ws = new WebSocket(url);
@@ -102,12 +110,12 @@ function connectWithRetry(url, maxRetries = 3) {
                 } else {
                     reject(new Error('WebSocket connection failed after retries'));
                 }
-            }, 10000); // 10s timeout per attempt
+            }, 10_000); // 10s timeout per attempt
 
-            ws.onopen = () => {
+            ws.addEventListener('open', () => {
                 clearTimeout(timeout);
                 resolve(ws);
-            };
+            });
             ws.onerror = () => {
                 clearTimeout(timeout);
                 ws.onopen = null;
@@ -139,10 +147,10 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // Initialize QR modal elements as soon as DOM is ready
-    qrModalOverlay = document.getElementById('qr-modal-overlay');
-    qrModalCloseBtn = document.getElementById('qr-modal-close');
-    largeQrcodeContainer = document.getElementById('large-qrcode');
-    modalRoomIdSpan = document.getElementById('modal-room-id');
+    qrModalOverlay = document.querySelector('#qr-modal-overlay');
+    qrModalCloseBtn = document.querySelector('#qr-modal-close');
+    largeQrcodeContainer = document.querySelector('#large-qrcode');
+    modalRoomIdSpan = document.querySelector('#modal-room-id');
 
     // Event listener for closing the QR code modal when clicking the close button
     if (qrModalCloseBtn) {
@@ -163,34 +171,33 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-
     // Event listener for "Host a Quiz" button
-    document.getElementById('host-btn').addEventListener('click', () => {
+    document.querySelector('#host-btn').addEventListener('click', () => {
         showView('host-view');
         initializeHostFeatures();
     });
     // Event listener for "Join a Quiz" button
-    document.getElementById('player-btn').addEventListener('click', () => {
+    document.querySelector('#player-btn').addEventListener('click', () => {
         showView('player-view');
         initializePlayerFeatures();
     });
 
     // Determine initial view: URL params or role selection
-    const urlParams = new URLSearchParams(window.location.search);
+    const urlParams = new URLSearchParams(globalThis.location.search);
     const hostIdFromUrl = urlParams.get('host');
 
     if (hostIdFromUrl) {
         // URL param: navigate directly to player view and pre-fill room code
         showView('player-view');
         initializePlayerFeatures();
-        document.getElementById('room-code-input').value = hostIdFromUrl;
+        document.querySelector('#room-code-input').value = hostIdFromUrl;
     } else {
         showView('role-selection');
     }
 
     // Show reconnect buttons if a saved session exists in localStorage
-    const reconnectHostBtn = document.getElementById('reconnect-host-btn');
-    const reconnectPlayerBtn = document.getElementById('reconnect-player-btn');
+    const reconnectHostBtn = document.querySelector('#reconnect-host-btn');
+    const reconnectPlayerBtn = document.querySelector('#reconnect-player-btn');
     const savedSession = getActiveSession();
 
     if (savedSession && savedSession.role === 'host') {
@@ -218,7 +225,11 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
         showView('player-view');
-        initializePlayerFeatures({ roomId: session.roomId, sessionId: session.sessionId, playerName: session.playerName });
+        initializePlayerFeatures({
+            roomId: session.roomId,
+            sessionId: session.sessionId,
+            playerName: session.playerName,
+        });
     });
 
     // Reconnect WebSocket when tab becomes visible again
@@ -248,11 +259,11 @@ let hostBeforeUnloadHandler = null;
 let hostWsReconnectAttempts = 0;
 let hostPendingQuestion = null;
 const HOST_MAX_RECONNECT_ATTEMPTS = 30;
-const RECONNECT_DELAY_MS = 10000;
+const RECONNECT_DELAY_MS = 10_000;
 
 /**
  * Returns an array of non-host players from quizState.
- * @returns {Array<Object>} Array of player objects excluding the host.
+ * @returns {Array<object>} Array of player objects excluding the host.
  */
 function getNonHostPlayers() {
     if (!hostGlobalQuizState) return [];
@@ -261,10 +272,10 @@ function getNonHostPlayers() {
 
 /**
  * Returns only connected players (for answer counting).
- * @returns {Array<Object>} Array of connected player objects.
+ * @returns {Array<object>} Array of connected player objects.
  */
 function getConnectedNonHostPlayers() {
-    return getNonHostPlayers().filter(p => p.isConnected !== false);
+    return getNonHostPlayers().filter((p) => p.isConnected !== false);
 }
 
 /**
@@ -277,6 +288,7 @@ function getNonHostPlayerCount() {
 
 /**
  * Initializes all features and event listeners for the host role.
+ * @param reconnectInfo
  */
 async function initializeHostFeatures(reconnectInfo) {
     // console.log("Initializing Host Features. Initialized flag:", isHostInitialized);
@@ -292,45 +304,45 @@ async function initializeHostFeatures(reconnectInfo) {
             roomId: null, // This will be the 4-digit alphanumeric code
             durationMin: 20, // Minimum question duration in seconds
             durationMax: 40, // Maximum question duration in seconds
-            questionDurations: [] // Per-question durations (computed at quiz start)
+            questionDurations: [], // Per-question durations (computed at quiz start)
         };
     }
 
     const quizState = hostGlobalQuizState;
     // Cache DOM elements for performance
-    const jsonFileInput = document.getElementById('json-file');
-    const fileStatus = document.getElementById('file-status');
-    const questionForm = document.getElementById('question-form');
-    const questionText = document.getElementById('question-text');
-    const addOptionBtn = document.getElementById('add-option-btn');
-    const questionsContainer = document.getElementById('questions-container');
-    const durationMinInput = document.getElementById('question-duration-min');
-    const durationMaxInput = document.getElementById('question-duration-max');
-    const startQuizBtn = document.getElementById('start-quiz-btn');
-    const qrContainer = document.getElementById('qr-container');
-    const hostSetup = document.getElementById('host-setup');
-    const qrcodeElement = document.getElementById('qrcode');
-    const roomIdElement = document.getElementById('room-id');
-    const joinLinkElement = document.getElementById('join-link');
-    const joinLinkModalElement = document.getElementById('join-link-modal');
-    const playerCountElement = document.getElementById('player-count');
-    const playersList = document.getElementById('players-list');
-    const startQuestionsBtn = document.getElementById('start-questions-btn');
-    const hostQuestionDisplay = document.getElementById('host-question-display');
-    const currentQuestionTextEl = document.getElementById('current-question-text');
-    const hostCurrentOptionsEl = document.getElementById('host-current-options');
-    const questionCounterEl = document.getElementById('question-counter');
-    const timerBar = document.getElementById('timer-bar');
-    const answersCount = document.getElementById('answers-count');
-    const totalPlayers = document.getElementById('total-players');
-    const hostScoreboardEl = document.getElementById('host-scoreboard');
-    const scoreboardListEl = document.getElementById('scoreboard-list');
-    const showNextBtn = document.getElementById('show-next-btn');
-    const showResultsBtn = document.getElementById('show-results-btn');
-    const hostResults = document.getElementById('host-results');
-    const leaderboard = document.getElementById('leaderboard');
-    const newQuizBtn = document.getElementById('new-quiz-btn');
-    hostViewHeading = document.getElementById('host-view-heading'); // Cache the heading
+    const jsonFileInput = document.querySelector('#json-file');
+    const fileStatus = document.querySelector('#file-status');
+    const questionForm = document.querySelector('#question-form');
+    const questionText = document.querySelector('#question-text');
+    const addOptionBtn = document.querySelector('#add-option-btn');
+    const questionsContainer = document.querySelector('#questions-container');
+    const durationMinInput = document.querySelector('#question-duration-min');
+    const durationMaxInput = document.querySelector('#question-duration-max');
+    const startQuizBtn = document.querySelector('#start-quiz-btn');
+    const qrContainer = document.querySelector('#qr-container');
+    const hostSetup = document.querySelector('#host-setup');
+    const qrcodeElement = document.querySelector('#qrcode');
+    const roomIdElement = document.querySelector('#room-id');
+    const joinLinkElement = document.querySelector('#join-link');
+    const joinLinkModalElement = document.querySelector('#join-link-modal');
+    const playerCountElement = document.querySelector('#player-count');
+    const playersList = document.querySelector('#players-list');
+    const startQuestionsBtn = document.querySelector('#start-questions-btn');
+    const hostQuestionDisplay = document.querySelector('#host-question-display');
+    const currentQuestionTextEl = document.querySelector('#current-question-text');
+    const hostCurrentOptionsEl = document.querySelector('#host-current-options');
+    const questionCounterEl = document.querySelector('#question-counter');
+    const timerBar = document.querySelector('#timer-bar');
+    const answersCount = document.querySelector('#answers-count');
+    const totalPlayers = document.querySelector('#total-players');
+    const hostScoreboardEl = document.querySelector('#host-scoreboard');
+    const scoreboardListEl = document.querySelector('#scoreboard-list');
+    const showNextBtn = document.querySelector('#show-next-btn');
+    const showResultsBtn = document.querySelector('#show-results-btn');
+    const hostResults = document.querySelector('#host-results');
+    const leaderboard = document.querySelector('#leaderboard');
+    const newQuizBtn = document.querySelector('#new-quiz-btn');
+    hostViewHeading = document.querySelector('#host-view-heading'); // Cache the heading
 
     // Set default duration input values
     durationMinInput.value = quizState.durationMin;
@@ -342,11 +354,15 @@ async function initializeHostFeatures(reconnectInfo) {
 
         // Validates a single MC question; freetext (no options/correct) is filtered out
         const isValidMCQuestion = (q) =>
-            q && typeof q.question === 'string' && q.question.trim().length > 0 &&
-            Array.isArray(q.options) && q.options.length > 0 &&
-            q.options.every(o => typeof o === 'string') &&
-            Array.isArray(q.correct) && q.correct.length > 0 &&
-            q.correct.every(idx => Number.isInteger(idx) && idx >= 0 && idx < q.options.length);
+            q &&
+            typeof q.question === 'string' &&
+            q.question.trim().length > 0 &&
+            Array.isArray(q.options) &&
+            q.options.length > 0 &&
+            q.options.every((o) => typeof o === 'string') &&
+            Array.isArray(q.correct) &&
+            q.correct.length > 0 &&
+            q.correct.every((idx) => Number.isInteger(idx) && idx >= 0 && idx < q.options.length);
 
         // Extracts MC questions from a parsed JSON blob (array or {cards:[...]})
         const extractMCQuestions = (data) => {
@@ -362,20 +378,22 @@ async function initializeHostFeatures(reconnectInfo) {
         };
 
         // Reads a single File as text
-        const readFileText = (file) => new Promise((resolve, reject) => {
-            const reader = new FileReader();
-            reader.onload = (e) => resolve(e.target.result);
-            reader.onerror = () => reject(reader.error);
-            reader.readAsText(file);
-        });
+        const readFileText = (file) =>
+            new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.addEventListener('load', (e) => resolve(e.target.result));
+                reader.onerror = () => reject(reader.error);
+                reader.readAsText(file);
+            });
 
         // Reads a single File as ArrayBuffer
-        const readFileBuffer = (file) => new Promise((resolve, reject) => {
-            const reader = new FileReader();
-            reader.onload = (e) => resolve(e.target.result);
-            reader.onerror = () => reject(reader.error);
-            reader.readAsArrayBuffer(file);
-        });
+        const readFileBuffer = (file) =>
+            new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.addEventListener('load', (e) => resolve(e.target.result));
+                reader.onerror = () => reject(reader.error);
+                reader.readAsArrayBuffer(file);
+            });
 
         // Processes a list of Files (JSON or ZIP), aggregates MC questions
         const importFiles = async (files) => {
@@ -386,8 +404,10 @@ async function initializeHostFeatures(reconnectInfo) {
             let failedFiles = 0;
 
             for (const file of files) {
-                const isJson = file.type === 'application/json' || file.name.toLowerCase().endsWith('.json');
-                const isZip = file.type === 'application/zip' || file.name.toLowerCase().endsWith('.zip');
+                const isJson =
+                    file.type === 'application/json' || file.name.toLowerCase().endsWith('.json');
+                const isZip =
+                    file.type === 'application/zip' || file.name.toLowerCase().endsWith('.zip');
                 if (!isJson && !isZip) {
                     failedFiles++;
                     continue;
@@ -396,29 +416,34 @@ async function initializeHostFeatures(reconnectInfo) {
                 try {
                     if (isZip) {
                         if (typeof JSZip === 'undefined') {
-                            fileStatus.textContent = 'ZIP-Unterstützung nicht verfügbar (JSZip nicht geladen).';
+                            fileStatus.textContent =
+                                'ZIP-Unterstützung nicht verfügbar (JSZip nicht geladen).';
                             return;
                         }
                         const buffer = await readFileBuffer(file);
                         const zip = await JSZip.loadAsync(buffer);
                         const entries = [];
-                        zip.forEach((relPath, entry) => {
+                        for (const [entry, relPath] of zip.entries()) {
                             if (!entry.dir && relPath.toLowerCase().endsWith('.json')) {
                                 entries.push(entry);
                             }
-                        });
+                        }
                         for (const entry of entries) {
                             try {
                                 const content = await entry.async('string');
                                 const data = JSON.parse(content);
                                 const mc = extractMCQuestions(data);
-                                const total = Array.isArray(data) ? data.length :
-                                              (data && Array.isArray(data.cards)) ? data.cards.length :
-                                              (data && Array.isArray(data.questions)) ? data.questions.length : 0;
+                                const total = Array.isArray(data)
+                                    ? data.length
+                                    : data && Array.isArray(data.cards)
+                                      ? data.cards.length
+                                      : data && Array.isArray(data.questions)
+                                        ? data.questions.length
+                                        : 0;
                                 skippedFreetext += Math.max(0, total - mc.length);
                                 collected.push(...mc);
                                 processedFiles++;
-                            } catch (err) {
+                            } catch {
                                 failedFiles++;
                             }
                         }
@@ -426,40 +451,48 @@ async function initializeHostFeatures(reconnectInfo) {
                         const text = await readFileText(file);
                         const data = JSON.parse(text);
                         const mc = extractMCQuestions(data);
-                        const total = Array.isArray(data) ? data.length :
-                                      (data && Array.isArray(data.cards)) ? data.cards.length :
-                                      (data && Array.isArray(data.questions)) ? data.questions.length : 0;
+                        const total = Array.isArray(data)
+                            ? data.length
+                            : data && Array.isArray(data.cards)
+                              ? data.cards.length
+                              : data && Array.isArray(data.questions)
+                                ? data.questions.length
+                                : 0;
                         skippedFreetext += Math.max(0, total - mc.length);
                         collected.push(...mc);
                         processedFiles++;
                     }
-                } catch (err) {
-                    console.error('Import error:', err);
+                } catch (error) {
+                    console.error('Import error:', error);
                     failedFiles++;
                 }
             }
 
             if (collected.length > 0) {
                 quizState.questions = collected;
-                const parts = [`Importiert: ${collected.length} MC-Fragen aus ${processedFiles} Datei(en).`];
-                if (skippedFreetext > 0) parts.push(`${skippedFreetext} Freitext-Frage(n) übersprungen.`);
+                const parts = [
+                    `Importiert: ${collected.length} MC-Fragen aus ${processedFiles} Datei(en).`,
+                ];
+                if (skippedFreetext > 0)
+                    parts.push(`${skippedFreetext} Freitext-Frage(n) übersprungen.`);
                 if (failedFiles > 0) parts.push(`${failedFiles} Datei(en) fehlgeschlagen.`);
                 fileStatus.textContent = parts.join(' ');
             } else {
                 quizState.questions = [];
-                fileStatus.textContent = 'Keine gültigen MC-Fragen gefunden. Nur Multiple-Choice-Fragen werden importiert.';
+                fileStatus.textContent =
+                    'Keine gültigen MC-Fragen gefunden. Nur Multiple-Choice-Fragen werden importiert.';
             }
             renderQuestionsList();
         };
 
         // File input change
         jsonFileInput.addEventListener('change', (event) => {
-            importFiles(Array.from(event.target.files || []));
+            importFiles([...event.target.files || []]);
             event.target.value = '';
         });
 
         // Drag-and-drop on the drop zone
-        const quizDropZone = document.getElementById('quiz-drop-zone');
+        const quizDropZone = document.querySelector('#quiz-drop-zone');
         if (quizDropZone) {
             quizDropZone.addEventListener('click', () => jsonFileInput.click());
 
@@ -482,7 +515,7 @@ async function initializeHostFeatures(reconnectInfo) {
                 quizDropZone.classList.remove('drag-over');
                 const files = e.dataTransfer && e.dataTransfer.files;
                 if (files && files.length > 0) {
-                    importFiles(Array.from(files));
+                    importFiles([...files]);
                 }
             });
         }
@@ -494,7 +527,7 @@ async function initializeHostFeatures(reconnectInfo) {
             const optionGroup = document.createElement('div');
             optionGroup.className = 'option-group';
             optionGroup.innerHTML = `<input type="text" class="option-input" placeholder="Option ${newIndex}"><input type="checkbox" class="correct-checkbox"><label>Richtig</label>`;
-            questionForm.insertBefore(optionGroup, addOptionBtn);
+            addOptionBtn.before(optionGroup);
         });
 
         // Event listener for submitting a new question
@@ -510,7 +543,7 @@ async function initializeHostFeatures(reconnectInfo) {
             const options = [];
             const correct = [];
 
-            optionInputs.forEach((inputEl) => {
+            for (const inputEl of optionInputs) {
                 const optionText = inputEl.value.trim();
                 if (optionText) {
                     const currentIndex = options.length;
@@ -520,7 +553,7 @@ async function initializeHostFeatures(reconnectInfo) {
                         correct.push(currentIndex);
                     }
                 }
-            });
+            }
 
             if (options.length < 2) {
                 showMessage('Bitte füge mindestens zwei gültige Optionen hinzu', 'error');
@@ -533,7 +566,7 @@ async function initializeHostFeatures(reconnectInfo) {
 
             quizState.questions.push({ question, options, correct });
             questionText.value = '';
-            questionForm.querySelectorAll('.option-group').forEach((group, index) => {
+            for (const [index, group] of questionForm.querySelectorAll('.option-group').entries()) {
                 const input = group.querySelector('.option-input');
                 const checkbox = group.querySelector('.correct-checkbox');
                 if (index < 2) {
@@ -542,7 +575,7 @@ async function initializeHostFeatures(reconnectInfo) {
                 } else {
                     group.remove();
                 }
-            });
+            }
             renderQuestionsList();
         });
 
@@ -552,8 +585,8 @@ async function initializeHostFeatures(reconnectInfo) {
                 showMessage('Bitte füge mindestens eine Frage hinzu.', 'error');
                 return;
             }
-            const dMin = parseInt(durationMinInput.value, 10);
-            const dMax = parseInt(durationMaxInput.value, 10);
+            const dMin = Number.parseInt(durationMinInput.value, 10);
+            const dMax = Number.parseInt(durationMaxInput.value, 10);
             if (isNaN(dMin) || isNaN(dMax) || dMin < 5 || dMax > 80 || dMin > dMax) {
                 showMessage('Bitte gültige Fragedauer eingeben: Min 5-80, Max >= Min.', 'error');
                 return;
@@ -565,16 +598,25 @@ async function initializeHostFeatures(reconnectInfo) {
             for (let i = 0; i < quizState.questions.length; i++) {
                 const q = quizState.questions[i];
                 if (q.question.length > MAX_QUESTION_LENGTH) {
-                    showMessage(`Frage ${i + 1} ist zu lang (${q.question.length}/${MAX_QUESTION_LENGTH} Zeichen).`, 'error');
+                    showMessage(
+                        `Frage ${i + 1} ist zu lang (${q.question.length}/${MAX_QUESTION_LENGTH} Zeichen).`,
+                        'error'
+                    );
                     return;
                 }
                 if (q.options.length > MAX_OPTIONS) {
-                    showMessage(`Frage ${i + 1} hat zu viele Optionen (${q.options.length}/${MAX_OPTIONS}).`, 'error');
+                    showMessage(
+                        `Frage ${i + 1} hat zu viele Optionen (${q.options.length}/${MAX_OPTIONS}).`,
+                        'error'
+                    );
                     return;
                 }
-                const longOption = q.options.findIndex(o => o.length > MAX_OPTION_LENGTH);
+                const longOption = q.options.findIndex((o) => o.length > MAX_OPTION_LENGTH);
                 if (longOption !== -1) {
-                    showMessage(`Frage ${i + 1}, Option ${longOption + 1} ist zu lang (${q.options[longOption].length}/${MAX_OPTION_LENGTH} Zeichen).`, 'error');
+                    showMessage(
+                        `Frage ${i + 1}, Option ${longOption + 1} ist zu lang (${q.options[longOption].length}/${MAX_OPTION_LENGTH} Zeichen).`,
+                        'error'
+                    );
                     return;
                 }
             }
@@ -587,13 +629,13 @@ async function initializeHostFeatures(reconnectInfo) {
             shuffleArray(quizState.shuffledQuestions);
 
             // Pre-compute per-question durations based on character count
-            const charCounts = quizState.shuffledQuestions.map(q =>
-                q.question.length + q.options.reduce((sum, o) => sum + o.length, 0)
+            const charCounts = quizState.shuffledQuestions.map(
+                (q) => q.question.length + q.options.reduce((sum, o) => sum + o.length, 0)
             );
             const minChars = Math.min(...charCounts);
             const maxChars = Math.max(...charCounts);
             const charRange = maxChars - minChars;
-            quizState.questionDurations = charCounts.map(count => {
+            quizState.questionDurations = charCounts.map((count) => {
                 if (charRange === 0) return Math.round((dMin + dMax) / 2);
                 const t = (count - minChars) / charRange;
                 return Math.round(dMin + t * (dMax - dMin));
@@ -605,7 +647,7 @@ async function initializeHostFeatures(reconnectInfo) {
         // Event listener for starting questions (after players join)
         startQuestionsBtn.addEventListener('click', async () => {
             if (getNonHostPlayerCount() === 0) {
-                showMessage("Es sind noch keine Spieler beigetreten!", 'info');
+                showMessage('Es sind noch keine Spieler beigetreten!', 'info');
                 return;
             }
             qrContainer.classList.add('hidden');
@@ -636,15 +678,21 @@ async function initializeHostFeatures(reconnectInfo) {
                     const savedRoomId = hostRoomId;
                     const savedSessionId = hostSessionId;
                     const tempWs = new WebSocket(WS_URL);
-                    tempWs.onopen = () => {
-                        tempWs.send(JSON.stringify({ type: 'reconnect_host', roomId: savedRoomId, sessionId: savedSessionId }));
+                    tempWs.addEventListener('open', () => {
+                        tempWs.send(
+                            JSON.stringify({
+                                type: 'reconnect_host',
+                                roomId: savedRoomId,
+                                sessionId: savedSessionId,
+                            })
+                        );
                         tempWs.onmessage = () => {
                             tempWs.send(JSON.stringify({ type: 'terminate' }));
                             tempWs.close();
                         };
-                    };
+                    });
                     tempWs.onerror = () => tempWs.close();
-                } catch (e) {
+                } catch {
                     // Server's 5-minute timeout will handle cleanup
                 }
             }
@@ -665,7 +713,7 @@ async function initializeHostFeatures(reconnectInfo) {
             hostQuestionDisplay.classList.add('hidden');
             qrContainer.classList.add('hidden');
             hostSetup.classList.remove('hidden');
-            document.getElementById('role-selection').classList.remove('hidden');
+            document.querySelector('#role-selection').classList.remove('hidden');
             if (hostViewHeading) hostViewHeading.classList.remove('hidden');
             initializeHostFeatures();
         });
@@ -688,9 +736,9 @@ async function initializeHostFeatures(reconnectInfo) {
                     text: joinLinkElement.href, // Use the full join link
                     width: 300, // Larger size for modal
                     height: 300,
-                    colorDark: "#000000",
-                    colorLight: "#ffffff",
-                    correctLevel: QRCode.CorrectLevel.H
+                    colorDark: '#000000',
+                    colorLight: '#ffffff',
+                    correctLevel: QRCode.CorrectLevel.H,
                 });
                 modalRoomIdSpan.textContent = quizState.roomId; // Display the 4-digit room code in modal
             }
@@ -703,8 +751,12 @@ async function initializeHostFeatures(reconnectInfo) {
     refreshPlayerDisplay();
 
     // Logic to determine which host section to display on initialization/re-entry
-    if (hostRoomId) { // Check if a room is already established
-        if (quizState.isQuestionActive || quizState.currentQuestionIndex < quizState.shuffledQuestions.length) {
+    if (hostRoomId) {
+        // Check if a room is already established
+        if (
+            quizState.isQuestionActive ||
+            quizState.currentQuestionIndex < quizState.shuffledQuestions.length
+        ) {
             hostSetup.classList.add('hidden');
             qrContainer.classList.add('hidden');
             hostResults.classList.add('hidden');
@@ -718,7 +770,8 @@ async function initializeHostFeatures(reconnectInfo) {
             questionCounterEl.textContent = `Frage ${quizState.currentQuestionIndex + 1} von ${quizState.shuffledQuestions.length}`;
             answersCount.textContent = quizState.answersReceived.toString();
             totalPlayers.textContent = getNonHostPlayerCount().toString();
-            if (quizState.currentQuestionIndex < quizState.shuffledQuestions.length - 1) showNextBtn.classList.remove('hidden');
+            if (quizState.currentQuestionIndex < quizState.shuffledQuestions.length - 1)
+                showNextBtn.classList.remove('hidden');
             else showResultsBtn.classList.remove('hidden');
         } else if (hostResults.classList.contains('active')) {
             hostSetup.classList.add('hidden');
@@ -727,7 +780,8 @@ async function initializeHostFeatures(reconnectInfo) {
             hostResults.classList.remove('hidden');
             if (hostViewHeading) hostViewHeading.classList.remove('hidden'); // Show "Quiz hosten" heading
             displayLeaderboard();
-        } else { // Room is open, but quiz not active, show QR container
+        } else {
+            // Room is open, but quiz not active, show QR container
             hostSetup.classList.add('hidden');
             qrContainer.classList.remove('hidden');
             if (hostViewHeading) hostViewHeading.classList.remove('hidden'); // Show "Quiz hosten" heading
@@ -735,7 +789,8 @@ async function initializeHostFeatures(reconnectInfo) {
             generateQRCode(currentJoinUrl); // Generate QR with the full URL
             roomIdElement.textContent = quizState.roomId || 'N/A';
         }
-    } else { // Default: show setup if no room instance
+    } else {
+        // Default: show setup if no room instance
         hostSetup.classList.remove('hidden');
         qrContainer.classList.add('hidden');
         hostQuestionDisplay.classList.add('hidden');
@@ -759,26 +814,26 @@ async function initializeHostFeatures(reconnectInfo) {
             return;
         }
 
-        quizState.questions.forEach((q, index) => {
+        for (const [index, q] of quizState.questions.entries()) {
             const item = document.createElement('div');
             item.className = 'question-item';
-            const correctIndices = q.correct.map(i => i + 1).join(', ');
+            const correctIndices = q.correct.map((i) => i + 1).join(', ');
             item.innerHTML = `
                         <p><strong>F${index + 1}:</strong> ${sanitizeHTML(q.question)}</p>
-                        <p><strong>Optionen:</strong> ${q.options.map(o => sanitizeHTML(o)).join('; ')}</p>
+                        <p><strong>Optionen:</strong> ${q.options.map((o) => sanitizeHTML(o)).join('; ')}</p>
                         <p><strong>Richtige Option(en):</strong> ${correctIndices}</p>
                         <button class="btn remove-question" data-index="${index}">Entfernen</button>
                     `;
-            questionsContainer.appendChild(item);
-        });
+            questionsContainer.append(item);
+        }
 
-        document.querySelectorAll('.remove-question').forEach(button => {
-            button.onclick = (e) => {
-                const index = parseInt(e.target.getAttribute('data-index'));
+        for (const button of document.querySelectorAll('.remove-question')) {
+            button.addEventListener('click', (e) => {
+                const index = Number.parseInt(e.target.dataset.index);
                 quizState.questions.splice(index, 1);
                 renderQuestionsList();
-            };
-        });
+            });
+        }
 
         startQuizBtn.classList.remove('hidden');
     }
@@ -786,13 +841,14 @@ async function initializeHostFeatures(reconnectInfo) {
     /**
      * Central handler for all host-side WebSocket messages.
      * Shared between initHostConnection, initHostReconnection, and reconnectHostWs.
+     * @param msg
      */
     function handleHostMessage(msg) {
         switch (msg.type) {
-            case 'room_created':
+            case 'room_created': {
                 hostRoomId = msg.roomId;
                 hostSessionId = msg.sessionId;
-                quizState.roomId = msg.roomId.substring(0, 2) + ' ' + msg.roomId.substring(2, 4);
+                quizState.roomId = msg.roomId.slice(0, 2) + ' ' + msg.roomId.slice(2, 4);
                 hostSetup.classList.add('hidden');
                 qrContainer.classList.remove('hidden');
                 roomIdElement.textContent = quizState.roomId;
@@ -801,11 +857,12 @@ async function initializeHostFeatures(reconnectInfo) {
                 if (hostViewHeading) hostViewHeading.classList.remove('hidden');
                 saveActiveSession('host', hostRoomId, hostSessionId);
                 break;
+            }
 
-            case 'host_reconnected':
+            case 'host_reconnected': {
                 console.log('Host reconnected, restoring player state');
                 if (msg.players) {
-                    msg.players.forEach(p => {
+                    for (const p of msg.players) {
                         if (quizState.players[p.sessionId]) {
                             quizState.players[p.sessionId].isConnected = p.isConnected;
                             quizState.players[p.sessionId].score = p.score;
@@ -816,10 +873,10 @@ async function initializeHostFeatures(reconnectInfo) {
                                 score: p.score,
                                 currentAnswer: [],
                                 answerTime: null,
-                                isConnected: p.isConnected
+                                isConnected: p.isConnected,
                             };
                         }
-                    });
+                    }
                 }
                 refreshPlayerDisplay();
                 // If a question was active when we disconnected, restart it
@@ -836,33 +893,40 @@ async function initializeHostFeatures(reconnectInfo) {
                     }
                 }
                 break;
+            }
 
             case 'player_joined': {
-                const joinedName = sanitizePlayerName(msg.name) || `Spieler ${msg.sessionId.substring(0, 4)}`;
+                const joinedName =
+                    sanitizePlayerName(msg.name) || `Spieler ${msg.sessionId.slice(0, 4)}`;
                 quizState.players[msg.sessionId] = {
                     id: msg.sessionId,
                     name: joinedName,
                     score: 0,
                     currentAnswer: [],
                     answerTime: null,
-                    isConnected: true
+                    isConnected: true,
                 };
                 refreshPlayerDisplay();
                 break;
             }
 
-            case 'player_left':
+            case 'player_left': {
                 if (quizState.players[msg.sessionId]) {
                     quizState.players[msg.sessionId].isConnected = false;
                     refreshPlayerDisplay();
-                    if (quizState.isQuestionActive && quizState.answersReceived >= getNonHostPlayerCount()) {
+                    if (
+                        quizState.isQuestionActive &&
+                        quizState.answersReceived >= getNonHostPlayerCount()
+                    ) {
                         endQuestion();
                     }
                 }
                 break;
+            }
 
             case 'player_reconnected': {
-                const reconnectedName = sanitizePlayerName(msg.name) || `Spieler ${msg.sessionId.substring(0, 4)}`;
+                const reconnectedName =
+                    sanitizePlayerName(msg.name) || `Spieler ${msg.sessionId.slice(0, 4)}`;
                 if (quizState.players[msg.sessionId]) {
                     quizState.players[msg.sessionId].isConnected = true;
                     quizState.players[msg.sessionId].score = msg.score;
@@ -874,20 +938,22 @@ async function initializeHostFeatures(reconnectInfo) {
                         score: msg.score,
                         currentAnswer: [],
                         answerTime: null,
-                        isConnected: true
+                        isConnected: true,
                     };
                 }
                 refreshPlayerDisplay();
                 break;
             }
 
-            case 'player_answered':
+            case 'player_answered': {
                 handlePlayerAnswer(msg);
                 break;
+            }
 
-            case 'error':
+            case 'error': {
                 showMessage(msg.message, 'error');
                 break;
+            }
         }
     }
 
@@ -899,7 +965,7 @@ async function initializeHostFeatures(reconnectInfo) {
 
         try {
             hostWs = await connectWithRetry(WS_URL);
-        } catch (e) {
+        } catch {
             showMessage('Server nicht erreichbar. Bitte versuche es später erneut.', 'error');
             return;
         }
@@ -909,20 +975,26 @@ async function initializeHostFeatures(reconnectInfo) {
 
         hostWs.onmessage = (event) => {
             let msg;
-            try { msg = JSON.parse(event.data); } catch { return; }
+            try {
+                msg = JSON.parse(event.data);
+            } catch {
+                return;
+            }
             handleHostMessage(msg);
         };
 
-        hostWs.onclose = () => {
+        hostWs.addEventListener('close', () => {
             console.log('Host WebSocket closed');
             if (hostRoomId && hostWsReconnectAttempts < HOST_MAX_RECONNECT_ATTEMPTS) {
                 hostWsReconnectAttempts++;
-                console.log(`Host reconnecting (${hostWsReconnectAttempts}/${HOST_MAX_RECONNECT_ATTEMPTS})...`);
+                console.log(
+                    `Host reconnecting (${hostWsReconnectAttempts}/${HOST_MAX_RECONNECT_ATTEMPTS})...`
+                );
                 setTimeout(reconnectHostWs, RECONNECT_DELAY_MS);
             } else if (hostWsReconnectAttempts >= HOST_MAX_RECONNECT_ATTEMPTS) {
                 showMessage('Verbindung zum Server verloren. Bitte lade die Seite neu.', 'error');
             }
-        };
+        });
 
         hostWs.onerror = (err) => {
             console.error('Host WebSocket error:', err);
@@ -932,31 +1004,37 @@ async function initializeHostFeatures(reconnectInfo) {
     /**
      * Reconnects the host to an existing room after a full page reload.
      * Uses saved session info to restore the connection without re-entering room code.
-     * @param {Object} info - { roomId, sessionId }
+     * @param {object} info - { roomId, sessionId }
      */
     async function initHostReconnection(info) {
         hostWsReconnectAttempts = 0;
         hostRoomId = info.roomId;
         hostSessionId = info.sessionId;
-        quizState.roomId = info.roomId.substring(0, 2) + ' ' + info.roomId.substring(2, 4);
+        quizState.roomId = info.roomId.slice(0, 2) + ' ' + info.roomId.slice(2, 4);
 
         try {
             hostWs = await connectWithRetry(WS_URL);
-        } catch (e) {
+        } catch {
             showMessage('Server nicht erreichbar. Bitte versuche es später erneut.', 'error');
             clearActiveSession();
             hostRoomId = null;
             hostSessionId = null;
-            document.getElementById('role-selection').classList.remove('hidden');
+            document.querySelector('#role-selection').classList.remove('hidden');
             showView('role-selection');
             return;
         }
 
-        hostWs.send(JSON.stringify({ type: 'reconnect_host', roomId: hostRoomId, sessionId: hostSessionId }));
+        hostWs.send(
+            JSON.stringify({ type: 'reconnect_host', roomId: hostRoomId, sessionId: hostSessionId })
+        );
 
         hostWs.onmessage = (event) => {
             let msg;
-            try { msg = JSON.parse(event.data); } catch { return; }
+            try {
+                msg = JSON.parse(event.data);
+            } catch {
+                return;
+            }
 
             if (msg.type === 'room_not_found_try_restore') {
                 // Room expired on server — no quiz state to restore after page reload
@@ -964,7 +1042,7 @@ async function initializeHostFeatures(reconnectInfo) {
                 clearActiveSession();
                 hostRoomId = null;
                 hostSessionId = null;
-                document.getElementById('role-selection').classList.remove('hidden');
+                document.querySelector('#role-selection').classList.remove('hidden');
                 showView('role-selection');
                 return;
             }
@@ -974,7 +1052,7 @@ async function initializeHostFeatures(reconnectInfo) {
                 clearActiveSession();
                 hostRoomId = null;
                 hostSessionId = null;
-                document.getElementById('role-selection').classList.remove('hidden');
+                document.querySelector('#role-selection').classList.remove('hidden');
                 showView('role-selection');
                 return;
             }
@@ -993,7 +1071,7 @@ async function initializeHostFeatures(reconnectInfo) {
             handleHostMessage(msg);
         };
 
-        hostWs.onclose = () => {
+        hostWs.addEventListener('close', () => {
             console.log('Host WebSocket closed');
             if (hostRoomId && hostWsReconnectAttempts < HOST_MAX_RECONNECT_ATTEMPTS) {
                 hostWsReconnectAttempts++;
@@ -1001,7 +1079,7 @@ async function initializeHostFeatures(reconnectInfo) {
             } else if (hostWsReconnectAttempts >= HOST_MAX_RECONNECT_ATTEMPTS) {
                 showMessage('Verbindung zum Server verloren. Bitte lade die Seite neu.', 'error');
             }
-        };
+        });
 
         hostWs.onerror = (err) => {
             console.error('Host WebSocket error:', err);
@@ -1014,42 +1092,54 @@ async function initializeHostFeatures(reconnectInfo) {
     function reconnectHostWs() {
         const ws = new WebSocket(WS_URL);
 
-        ws.onopen = () => {
+        ws.addEventListener('open', () => {
             console.log('Host WebSocket reconnected');
             hostWsReconnectAttempts = 0;
-            ws.send(JSON.stringify({ type: 'reconnect_host', roomId: hostRoomId, sessionId: hostSessionId }));
-        };
+            ws.send(
+                JSON.stringify({
+                    type: 'reconnect_host',
+                    roomId: hostRoomId,
+                    sessionId: hostSessionId,
+                })
+            );
+        });
 
         ws.onmessage = (event) => {
             let msg;
-            try { msg = JSON.parse(event.data); } catch { return; }
+            try {
+                msg = JSON.parse(event.data);
+            } catch {
+                return;
+            }
 
             if (msg.type === 'room_not_found_try_restore') {
-                console.log("Room needs restoration. Sending state...");
+                console.log('Room needs restoration. Sending state...');
                 const playersToRestore = [];
                 if (hostGlobalQuizState && hostGlobalQuizState.players) {
                     for (const p of Object.values(hostGlobalQuizState.players)) {
                         playersToRestore.push({
                             id: p.id,
                             name: p.name,
-                            score: p.score
+                            score: p.score,
                         });
                     }
                 }
 
-                ws.send(JSON.stringify({
-                    type: 'restore_room',
-                    roomId: hostRoomId,
-                    sessionId: hostSessionId,
-                    players: playersToRestore
-                }));
+                ws.send(
+                    JSON.stringify({
+                        type: 'restore_room',
+                        roomId: hostRoomId,
+                        sessionId: hostSessionId,
+                        players: playersToRestore,
+                    })
+                );
                 return;
             }
 
             handleHostMessage(msg);
         };
 
-        ws.onclose = () => {
+        ws.addEventListener('close', () => {
             console.log('Host WebSocket closed');
             if (hostRoomId && hostWsReconnectAttempts < HOST_MAX_RECONNECT_ATTEMPTS) {
                 hostWsReconnectAttempts++;
@@ -1057,7 +1147,7 @@ async function initializeHostFeatures(reconnectInfo) {
             } else if (hostWsReconnectAttempts >= HOST_MAX_RECONNECT_ATTEMPTS) {
                 showMessage('Verbindung zum Server verloren. Bitte lade die Seite neu.', 'error');
             }
-        };
+        });
 
         ws.onerror = (err) => {
             console.error('Host WebSocket error:', err);
@@ -1068,7 +1158,7 @@ async function initializeHostFeatures(reconnectInfo) {
 
     /**
      * Handles a player answer received via WebSocket.
-     * @param {Object} msg - The answer message from the server.
+     * @param {object} msg - The answer message from the server.
      */
     function handlePlayerAnswer(msg) {
         const playerId = msg.sessionId;
@@ -1080,7 +1170,10 @@ async function initializeHostFeatures(reconnectInfo) {
 
         quizState.answersReceived++;
         // Use server-measured elapsed time for fair scoring (immune to client clock manipulation)
-        const timeTaken = msg.elapsedMs != null ? msg.elapsedMs / 1000 : (Date.now() - hostQuestionStartTime) / 1000;
+        const timeTaken =
+            msg.elapsedMs == null
+                ? (Date.now() - hostQuestionStartTime) / 1000
+                : msg.elapsedMs / 1000;
         p.answerTime = timeTaken;
         p.currentAnswer = msg.answerData;
         answersCount.textContent = quizState.answersReceived.toString();
@@ -1101,13 +1194,13 @@ async function initializeHostFeatures(reconnectInfo) {
         totalPlayers.textContent = connectedCount.toString();
 
         playersList.innerHTML = '';
-        allPlayers.forEach(p => {
+        for (const p of allPlayers) {
             const i = document.createElement('div');
             i.className = 'player-item';
             if (p.isConnected === false) i.classList.add('disconnected');
             i.textContent = p.name + (p.isConnected === false ? ' (getrennt)' : '');
-            playersList.appendChild(i);
-        });
+            playersList.append(i);
+        }
 
         startQuestionsBtn.classList.toggle('hidden', connectedCount === 0);
     }
@@ -1119,7 +1212,7 @@ async function initializeHostFeatures(reconnectInfo) {
     function generateQRCode(url) {
         qrcodeElement.innerHTML = ''; // Clear previous QR code
         if (typeof QRCode === 'undefined') {
-            console.error("QR-Code-Bibliothek nicht geladen.");
+            console.error('QR-Code-Bibliothek nicht geladen.');
             qrcodeElement.innerHTML = `<p class="qr-error">QR-Code-Bibliothek nicht geladen. URL: ${sanitizeHTML(url)}</p>`;
             return;
         }
@@ -1128,12 +1221,12 @@ async function initializeHostFeatures(reconnectInfo) {
                 text: url, // Encode the full URL
                 width: 240, // Increased size for initial display
                 height: 240,
-                colorDark: "#000000",
-                colorLight: "#ffffff",
-                correctLevel: QRCode.CorrectLevel.H // High error correction for complex URLs
+                colorDark: '#000000',
+                colorLight: '#ffffff',
+                correctLevel: QRCode.CorrectLevel.H, // High error correction for complex URLs
             });
-        } catch (e) {
-            console.error("QR Code generation error:", e);
+        } catch (error) {
+            console.error('QR Code generation error:', error);
             qrcodeElement.innerHTML = `<p class="qr-error">Fehler beim Generieren des QR-Codes. URL: ${sanitizeHTML(url)}</p>`;
         }
     }
@@ -1145,7 +1238,7 @@ async function initializeHostFeatures(reconnectInfo) {
      */
     function updateJoinLink(roomId) {
         // Correctly construct the URL by taking the base path and appending the query parameter
-        const baseUrl = window.location.origin + window.location.pathname.split('?')[0];
+        const baseUrl = globalThis.location.origin + globalThis.location.pathname.split('?')[0];
         const joinUrl = `${baseUrl}?host=${roomId}`;
         joinLinkElement.href = joinUrl;
         // Display the short URL for easy typing
@@ -1157,7 +1250,6 @@ async function initializeHostFeatures(reconnectInfo) {
 
         return joinUrl; // Return the URL for QR code generation
     }
-
 
     /**
      * Starts a new question round on the host side.
@@ -1174,11 +1266,14 @@ async function initializeHostFeatures(reconnectInfo) {
         hostQuestionStartTime = Date.now();
 
         // Prepare shuffled options and correct indices for this question
-        const optionObjects = currentQuestion.options.map((text, index) => ({ text, originalIndex: index }));
+        const optionObjects = currentQuestion.options.map((text, index) => ({
+            text,
+            originalIndex: index,
+        }));
         shuffleArray(optionObjects); // Shuffle the options
-        const shuffledOptions = optionObjects.map(obj => obj.text);
-        const shuffledCorrectIndices = currentQuestion.correct.map(originalIdx =>
-            optionObjects.findIndex(obj => obj.originalIndex === originalIdx)
+        const shuffledOptions = optionObjects.map((obj) => obj.text);
+        const shuffledCorrectIndices = currentQuestion.correct.map((originalIdx) =>
+            optionObjects.findIndex((obj) => obj.originalIndex === originalIdx)
         );
 
         // Store shuffled options and correct indices in the current question object
@@ -1190,7 +1285,6 @@ async function initializeHostFeatures(reconnectInfo) {
             p.currentAnswer = [];
             p.answerTime = null;
         }
-
 
         currentQuestionTextEl.textContent = currentQuestion.question;
         // Display options on host side WITHOUT correct indicators initially
@@ -1212,13 +1306,13 @@ async function initializeHostFeatures(reconnectInfo) {
     /**
      * Displays the question options on the host side.
      * @param {string[]} options - An array of option strings (already shuffled if applicable).
-     * @param {number[]} [correctIndices=[]] - An optional array of indices for correct answers (already re-mapped if applicable).
-     * @param {number[]} [optionCounts=[]] - An optional array of counts for each option selected by players.
+     * @param {number[]} [correctIndices] - An optional array of indices for correct answers (already re-mapped if applicable).
+     * @param {number[]} [optionCounts] - An optional array of counts for each option selected by players.
      */
     function displayHostOptions(options, correctIndices = [], optionCounts = []) {
         hostCurrentOptionsEl.innerHTML = '';
         const correctSet = new Set(correctIndices);
-        options.forEach((option, index) => {
+        for (const [index, option] of options.entries()) {
             const li = document.createElement('li');
             let optionText = option;
             if (optionCounts && optionCounts[index] !== undefined) {
@@ -1228,14 +1322,13 @@ async function initializeHostFeatures(reconnectInfo) {
             if (correctSet.has(index)) {
                 li.classList.add('correct');
             }
-            hostCurrentOptionsEl.appendChild(li);
-        });
+            hostCurrentOptionsEl.append(li);
+        }
     }
-
 
     /**
      * Sends question data to all connected players via WebSocket server.
-     * @param {Object} question - The question object to send (contains shuffled options and correct indices).
+     * @param {object} question - The question object to send (contains shuffled options and correct indices).
      */
     async function sendQuestionToPlayers(question) {
         const questionPayload = {
@@ -1245,11 +1338,14 @@ async function initializeHostFeatures(reconnectInfo) {
             index: quizState.currentQuestionIndex,
             total: quizState.shuffledQuestions.length,
             startTime: hostQuestionStartTime,
-            duration: quizState.questionDurations[quizState.currentQuestionIndex]
+            duration: quizState.questionDurations[quizState.currentQuestionIndex],
         };
 
         if (!hostWs || hostWs.readyState !== WebSocket.OPEN) {
-            showMessage('Keine Verbindung zum Server. Frage wird nach Reconnect gesendet.', 'error');
+            showMessage(
+                'Keine Verbindung zum Server. Frage wird nach Reconnect gesendet.',
+                'error'
+            );
             hostPendingQuestion = questionPayload;
             return;
         }
@@ -1297,20 +1393,23 @@ async function initializeHostFeatures(reconnectInfo) {
 
         // Calculate option counts for display on host side
         const currentQuestion = quizState.shuffledQuestions[quizState.currentQuestionIndex];
-        const optionCounts = Array(currentQuestion.shuffledOptions.length).fill(0);
-        getNonHostPlayers().forEach(p => {
+        const optionCounts = Array.from({length: currentQuestion.shuffledOptions.length}).fill(0);
+        for (const p of getNonHostPlayers()) {
             if (p.currentAnswer && Array.isArray(p.currentAnswer)) {
-                p.currentAnswer.forEach(ansIndex => {
+                for (const ansIndex of p.currentAnswer) {
                     if (optionCounts[ansIndex] !== undefined) {
                         optionCounts[ansIndex]++;
                     }
-                });
+                }
             }
-        });
+        }
 
         // Display correct answers and counts on the host side
-        displayHostOptions(currentQuestion.shuffledOptions, currentQuestion.shuffledCorrect, optionCounts);
-
+        displayHostOptions(
+            currentQuestion.shuffledOptions,
+            currentQuestion.shuffledCorrect,
+            optionCounts
+        );
 
         calculateScores();
         await sendResultsToPlayers();
@@ -1342,34 +1441,37 @@ async function initializeHostFeatures(reconnectInfo) {
         let currentQuestionBasePoints = basePointsFirst;
 
         if (numQuestions > 1) {
-            const pointsIncreasePerQuestion = (basePointsLast - basePointsFirst) / (numQuestions - 1);
-            currentQuestionBasePoints = basePointsFirst + (quizState.currentQuestionIndex * pointsIncreasePerQuestion);
+            const pointsIncreasePerQuestion =
+                (basePointsLast - basePointsFirst) / (numQuestions - 1);
+            currentQuestionBasePoints =
+                basePointsFirst + quizState.currentQuestionIndex * pointsIncreasePerQuestion;
         }
 
-        getNonHostPlayers().forEach(p => {
+        for (const p of getNonHostPlayers()) {
             if (p.currentAnswer && p.currentAnswer.length > 0) {
                 const playerAnsSet = new Set(p.currentAnswer);
 
-                const correctHits = [...playerAnsSet].filter(item => correctSet.has(item)).length;
-                const wrongHits = [...playerAnsSet].filter(item => !correctSet.has(item)).length;
+                const correctHits = [...playerAnsSet].filter((item) => correctSet.has(item)).length;
+                const wrongHits = [...playerAnsSet].filter((item) => !correctSet.has(item)).length;
 
                 // Proportional penalty: subtract wrong ratio from correct ratio
                 const correctRatio = correctHits / correctSet.size;
-                const wrongPenalty = totalWrong > 0 ? (wrongHits / totalWrong) : 0;
+                const wrongPenalty = totalWrong > 0 ? wrongHits / totalWrong : 0;
                 const adjustedRatio = Math.max(0, correctRatio - wrongPenalty);
 
                 if (adjustedRatio > 0) {
-                    let timeTaken = p.answerTime !== null ? p.answerTime : totalQuestionTime;
+                    let timeTaken = p.answerTime === null ? totalQuestionTime : p.answerTime;
                     // Clamp timeTaken to avoid negative or excessive values
                     timeTaken = Math.max(0, Math.min(timeTaken, totalQuestionTime));
 
                     const timeRemaining = Math.max(0, totalQuestionTime - timeTaken);
-                    const timeBonus = (timeRemaining / totalQuestionTime) * (currentQuestionBasePoints * 0.5);
+                    const timeBonus =
+                        (timeRemaining / totalQuestionTime) * (currentQuestionBasePoints * 0.5);
 
                     p.score += adjustedRatio * (currentQuestionBasePoints + timeBonus);
                 }
             }
-        });
+        }
     }
 
     /**
@@ -1385,16 +1487,20 @@ async function initializeHostFeatures(reconnectInfo) {
 
         // Build playerScores map so server can store scores for reconnection
         const playerScores = {};
-        getNonHostPlayers().forEach(p => { playerScores[p.id] = p.score; });
+        for (const p of getNonHostPlayers()) {
+            playerScores[p.id] = p.score;
+        }
 
-        hostWs.send(JSON.stringify({
-            type: 'send_results',
-            correct: currentQ.shuffledCorrect,
-            isFinal: isFinalQ,
-            // options: currentQ.shuffledOptions, // Removed: Players use local copy
-            leaderboard: leaderboardData,
-            playerScores: playerScores
-        }));
+        hostWs.send(
+            JSON.stringify({
+                type: 'send_results',
+                correct: currentQ.shuffledCorrect,
+                isFinal: isFinalQ,
+                // options: currentQ.shuffledOptions, // Removed: Players use local copy
+                leaderboard: leaderboardData,
+                playerScores: playerScores,
+            })
+        );
         // console.log('Results sent via WebSocket');
     }
 
@@ -1413,17 +1519,29 @@ async function initializeHostFeatures(reconnectInfo) {
             return;
         }
 
-        topPlayers.forEach((p, idx) => {
+        for (const [idx, p] of topPlayers.entries()) {
             const li = document.createElement('li');
             li.className = 'scoreboard-item';
-            if (idx === 0) li.classList.add('rank-1');
-            else if (idx === 1) li.classList.add('rank-2');
-            else if (idx === 2) li.classList.add('rank-3');
+            switch (idx) {
+            case 0: {
+            li.classList.add('rank-1');
+            break;
+            }
+            case 1: {
+            li.classList.add('rank-2');
+            break;
+            }
+            case 2: { {
+            li.classList.add('rank-3');
+            // No default
+            }
+            break;
+            }
+            }
             li.innerHTML = `<span>${idx + 1}. ${sanitizeHTML(p.name)}</span><span>${Math.round(p.score)} Punkte</span>`;
-            scoreboardListEl.appendChild(li);
-        });
+            scoreboardListEl.append(li);
+        }
     }
-
 
     /**
      * Shows the final results leaderboard on the host side.
@@ -1441,11 +1559,11 @@ async function initializeHostFeatures(reconnectInfo) {
 
     /**
      * Retrieves and sorts player data for the leaderboard.
-     * @returns {Array<Object>} Sorted array of player objects with name and score.
+     * @returns {Array<object>} Sorted array of player objects with name and score.
      */
     function getLeaderboardData() {
         return getNonHostPlayers()
-            .map(p => ({ name: p.name, score: p.score }))
+            .map((p) => ({ name: p.name, score: p.score }))
             .sort((a, b) => b.score - a.score);
     }
 
@@ -1461,15 +1579,28 @@ async function initializeHostFeatures(reconnectInfo) {
             return;
         }
 
-        sortedPlayers.forEach((p, idx) => {
+        for (const [idx, p] of sortedPlayers.entries()) {
             const i = document.createElement('div');
             i.className = 'leaderboard-item';
-            if (idx === 0) i.classList.add('rank-1');
-            else if (idx === 1) i.classList.add('rank-2');
-            else if (idx === 2) i.classList.add('rank-3');
+            switch (idx) {
+            case 0: {
+            i.classList.add('rank-1');
+            break;
+            }
+            case 1: {
+            i.classList.add('rank-2');
+            break;
+            }
+            case 2: { {
+            i.classList.add('rank-3');
+            // No default
+            }
+            break;
+            }
+            }
             i.innerHTML = `<span>${idx + 1}. ${sanitizeHTML(p.name)}</span><span>${Math.round(p.score)} Punkte</span>`;
-            leaderboard.appendChild(i);
-        });
+            leaderboard.append(i);
+        }
     }
 
     /**
@@ -1497,7 +1628,7 @@ async function initializeHostFeatures(reconnectInfo) {
         hostQuestionDisplay.classList.add('hidden');
         qrContainer.classList.add('hidden');
         hostSetup.classList.remove('hidden');
-        document.getElementById('role-selection').classList.remove('hidden');
+        document.querySelector('#role-selection').classList.remove('hidden');
         if (hostViewHeading) hostViewHeading.classList.remove('hidden');
         initializeHostFeatures();
     }
@@ -1533,16 +1664,18 @@ function reconnectPlayerWs() {
     const session = getPlayerSession(playerRoomId);
     const name = session ? session.playerName : 'Spieler';
     const ws = new WebSocket(WS_URL);
-    ws.onopen = () => {
-        ws.send(JSON.stringify({
-            type: 'join',
-            roomCode: playerRoomId,
-            playerName: name,
-            sessionId: playerCurrentId
-        }));
-    };
+    ws.addEventListener('open', () => {
+        ws.send(
+            JSON.stringify({
+                type: 'join',
+                roomCode: playerRoomId,
+                playerName: name,
+                sessionId: playerCurrentId,
+            })
+        );
+    });
     ws.onmessage = originalOnMessage;
-    ws.onclose = originalOnClose;
+    ws.addEventListener('close', originalOnClose);
     ws.onerror = originalOnError;
     playerWs = ws;
 }
@@ -1567,7 +1700,7 @@ function savePlayerSession(roomId, playerId, playerName) {
     const sessionData = {
         playerId: playerId,
         playerName: playerName,
-        timestamp: Date.now()
+        timestamp: Date.now(),
     };
     localStorage.setItem(getPlayerStorageKey(roomId), JSON.stringify(sessionData));
 }
@@ -1575,7 +1708,7 @@ function savePlayerSession(roomId, playerId, playerName) {
 /**
  * Retrieves player session data from localStorage.
  * @param {string} roomId - The room ID.
- * @returns {Object|null} The session data or null if not found/expired.
+ * @returns {object | null} The session data or null if not found/expired.
  */
 function getPlayerSession(roomId) {
     const key = getPlayerStorageKey(roomId);
@@ -1590,7 +1723,7 @@ function getPlayerSession(roomId) {
             return null;
         }
         return sessionData;
-    } catch (e) {
+    } catch {
         localStorage.removeItem(key);
         return null;
     }
@@ -1615,14 +1748,21 @@ const ACTIVE_SESSION_KEY = 'quiz_active_session';
  * @param {string} [playerName] - Player name (only for player role)
  */
 function saveActiveSession(role, roomId, sessionId, playerName) {
-    localStorage.setItem(ACTIVE_SESSION_KEY, JSON.stringify({
-        role, roomId, sessionId, playerName: playerName || null, timestamp: Date.now()
-    }));
+    localStorage.setItem(
+        ACTIVE_SESSION_KEY,
+        JSON.stringify({
+            role,
+            roomId,
+            sessionId,
+            playerName: playerName || null,
+            timestamp: Date.now(),
+        })
+    );
 }
 
 /**
  * Retrieves the active session info from localStorage.
- * @returns {Object|null} Session data or null if not found/expired (2h expiry).
+ * @returns {object | null} Session data or null if not found/expired (2h expiry).
  */
 function getActiveSession() {
     const data = localStorage.getItem(ACTIVE_SESSION_KEY);
@@ -1646,8 +1786,8 @@ function getActiveSession() {
 function clearActiveSession() {
     localStorage.removeItem(ACTIVE_SESSION_KEY);
     // Hide reconnect buttons since session is no longer valid
-    const rHost = document.getElementById('reconnect-host-btn');
-    const rPlayer = document.getElementById('reconnect-player-btn');
+    const rHost = document.querySelector('#reconnect-host-btn');
+    const rPlayer = document.querySelector('#reconnect-player-btn');
     if (rHost) rHost.classList.add('hidden');
     if (rPlayer) rPlayer.classList.add('hidden');
 }
@@ -1656,13 +1796,30 @@ function clearActiveSession() {
  * Triggers confetti animation for correct answers.
  */
 function triggerConfetti() {
-    const confettiContainer = document.getElementById('confetti-container');
+    const confettiContainer = document.querySelector('#confetti-container');
     if (!confettiContainer) {
-        console.warn("Confetti-Container nicht gefunden.");
+        console.warn('Confetti-Container nicht gefunden.');
         return;
     }
 
-    const colors = ['#f44336', '#e91e63', '#9c27b0', '#673ab7', '#3f51b5', '#2196f3', '#03a9f4', '#00bcd4', '#009688', '#4CAF50', '#8bc34a', '#cddc39', '#ffeb3b', '#ffc107', '#ff9800', '#ff5722'];
+    const colors = [
+        '#f44336',
+        '#e91e63',
+        '#9c27b0',
+        '#673ab7',
+        '#3f51b5',
+        '#2196f3',
+        '#03a9f4',
+        '#00bcd4',
+        '#009688',
+        '#4CAF50',
+        '#8bc34a',
+        '#cddc39',
+        '#ffeb3b',
+        '#ffc107',
+        '#ff9800',
+        '#ff5722',
+    ];
     const numConfetti = 50;
 
     for (let i = 0; i < numConfetti; i++) {
@@ -1674,7 +1831,7 @@ function triggerConfetti() {
         piece.style.animationDelay = `${Math.random() * 0.5}s`;
         piece.style.animationDuration = `${2 + Math.random() * 2}s`;
 
-        confettiContainer.appendChild(piece);
+        confettiContainer.append(piece);
 
         piece.addEventListener('animationend', () => {
             piece.remove();
@@ -1684,37 +1841,38 @@ function triggerConfetti() {
 
 /**
  * Initializes all features and event listeners for the player role.
+ * @param reconnectInfo
  */
 function initializePlayerFeatures(reconnectInfo) {
     // console.log("Initializing Player Features. Initialized flag:", isPlayerInitialized);
 
     // Cache DOM elements for performance
-    const roomCodeInput = document.getElementById('room-code-input');
-    const playerNameInput = document.getElementById('player-name-input');
-    const joinBtn = document.getElementById('join-btn');
-    const joinForm = document.getElementById('join-form');
-    const waitingRoom = document.getElementById('waiting-room');
-    const waitingMessage = document.getElementById('waiting-message');
-    const playerQuestionView = document.getElementById('player-question');
-    const playerQuestionTextEl = document.getElementById('player-question-text');
-    const playerQuestionCounterEl = document.getElementById('player-question-counter');
-    const playerTimerBar = document.getElementById('player-timer-bar');
-    const optionsContainer = document.getElementById('options-container');
-    const submitAnswerBtn = document.getElementById('submit-answer-btn');
-    const playerResultView = document.getElementById('player-result');
-    const resultDisplay = document.getElementById('result-display');
-    const playerScoreEl = document.getElementById('player-score');
-    const waitingForNext = document.getElementById('waiting-for-next');
-    const playerFinalResultView = document.getElementById('player-final-result');
-    const finalScoreEl = document.getElementById('final-score');
-    const playAgainBtn = document.getElementById('play-again-btn');
-    const playerLeaderboardContainer = document.getElementById('player-leaderboard-container');
+    const roomCodeInput = document.querySelector('#room-code-input');
+    const playerNameInput = document.querySelector('#player-name-input');
+    const joinBtn = document.querySelector('#join-btn');
+    const joinForm = document.querySelector('#join-form');
+    const waitingRoom = document.querySelector('#waiting-room');
+    const waitingMessage = document.querySelector('#waiting-message');
+    const playerQuestionView = document.querySelector('#player-question');
+    const playerQuestionTextEl = document.querySelector('#player-question-text');
+    const playerQuestionCounterEl = document.querySelector('#player-question-counter');
+    const playerTimerBar = document.querySelector('#player-timer-bar');
+    const optionsContainer = document.querySelector('#options-container');
+    const submitAnswerBtn = document.querySelector('#submit-answer-btn');
+    const playerResultView = document.querySelector('#player-result');
+    const resultDisplay = document.querySelector('#result-display');
+    const playerScoreEl = document.querySelector('#player-score');
+    const waitingForNext = document.querySelector('#waiting-for-next');
+    const playerFinalResultView = document.querySelector('#player-final-result');
+    const finalScoreEl = document.querySelector('#final-score');
+    const playAgainBtn = document.querySelector('#play-again-btn');
+    const playerLeaderboardContainer = document.querySelector('#player-leaderboard-container');
 
     if (!isPlayerInitialized) {
         // console.log("Setting up player event listeners for the first time.");
 
         joinBtn.addEventListener('click', async () => {
-            const roomCode = roomCodeInput.value.trim().replace(/\s/g, ''); // Remove spaces
+            const roomCode = roomCodeInput.value.trim().replaceAll(/\s/g, ''); // Remove spaces
             const playerName = playerNameInput.value.trim();
             // Use a default name if player doesn't provide one
             const finalPlayerName = playerName || 'Spieler ' + generateAlphanumericId(4);
@@ -1735,7 +1893,8 @@ function initializePlayerFeatures(reconnectInfo) {
 
             playerHasSubmitted = true;
             submitAnswerBtn.disabled = true;
-            optionsContainer.querySelectorAll('button.option-btn').forEach(btn => btn.disabled = true);
+            for (const btn of optionsContainer
+                .querySelectorAll('button.option-btn')) (btn.disabled = true);
             // console.log("Player submitted answer:", selectedAnswers);
 
             if (playerTimerInterval) {
@@ -1745,13 +1904,18 @@ function initializePlayerFeatures(reconnectInfo) {
 
             // Send answer via WebSocket
             if (playerWs && playerWs.readyState === WebSocket.OPEN) {
-                playerWs.send(JSON.stringify({
-                    type: 'submit_answer',
-                    answerData: selectedAnswers,
-                    answerTime: new Date().toISOString()
-                }));
+                playerWs.send(
+                    JSON.stringify({
+                        type: 'submit_answer',
+                        answerData: selectedAnswers,
+                        answerTime: new Date().toISOString(),
+                    })
+                );
             } else {
-                showMessage('Verbindung unterbrochen. Antwort konnte nicht gesendet werden.', 'error');
+                showMessage(
+                    'Verbindung unterbrochen. Antwort konnte nicht gesendet werden.',
+                    'error'
+                );
             }
         });
 
@@ -1806,95 +1970,140 @@ function initializePlayerFeatures(reconnectInfo) {
         const existingSession = getPlayerSession(playerRoomId);
         const existingSessionId = existingSession ? existingSession.playerId : null;
 
+        /**
+         *
+         */
         function connectPlayerWs() {
             // Use retry helper for initial connection (handles Fly.io cold starts)
-            connectWithRetry(WS_URL).then(ws => {
-                playerWs = ws;
-                console.log('Player WebSocket connected');
-                playerWsReconnectAttempts = 0;
-                playerWs.send(JSON.stringify({
-                    type: 'join',
-                    roomCode: roomCode,
-                    playerName: pName,
-                    sessionId: existingSessionId || playerCurrentId
-                }));
+            connectWithRetry(WS_URL)
+                .then((ws) => {
+                    playerWs = ws;
+                    console.log('Player WebSocket connected');
+                    playerWsReconnectAttempts = 0;
+                    playerWs.send(
+                        JSON.stringify({
+                            type: 'join',
+                            roomCode: roomCode,
+                            playerName: pName,
+                            sessionId: existingSessionId || playerCurrentId,
+                        })
+                    );
 
-                playerWs.onmessage = (event) => {
-                    let msg;
-                    try { msg = JSON.parse(event.data); } catch { return; }
-
-                    switch (msg.type) {
-                        case 'joined':
-                            playerCurrentId = msg.sessionId;
-                            playerScore = msg.score || 0;
-                            savePlayerSession(roomCode, msg.sessionId, msg.playerName || pName);
-                            saveActiveSession('player', roomCode, msg.sessionId, msg.playerName || pName);
-                            waitingMessage.textContent = msg.isReconnect
-                                ? 'Wieder verbunden! Warte auf Host...'
-                                : 'Verbunden! Warte auf Host...';
-                            break;
-
-                        case 'question':
-                            playerCurrentQuestionOptions = msg.options;
-                            selectedAnswers = [];
-                            playerCurrentQuestionIndex = msg.index;
-                            // Use local clock for timer — immune to clock skew
-                            playerQuestionStartTime = Date.now();
-                            displayQuestion(msg);
-                            startPlayerTimer(msg.duration);
-                            break;
-
-                        case 'result': {
-                            // Ignore stale results from a previous question
-                            if (msg.questionIndex !== undefined && msg.questionIndex !== playerCurrentQuestionIndex) {
-                                console.log(`Ignoring stale result for question ${msg.questionIndex}, current is ${playerCurrentQuestionIndex}`);
-                                break;
-                            }
-                            const oldScore = playerScore;
-                            playerScore = msg.playerScore || playerScore;
-                            const gainedPoints = playerScore - oldScore;
-                            displayResult(msg, selectedAnswers, playerScore, gainedPoints, oldScore);
-                            waitingForNext.textContent = msg.isFinal ? 'Warten auf Endergebnisse...' : 'Warten auf nächste Frage...';
-                            if (msg.isFinal) displayFinalResult(msg);
-                            break;
+                    playerWs.onmessage = (event) => {
+                        let msg;
+                        try {
+                            msg = JSON.parse(event.data);
+                        } catch {
+                            return;
                         }
 
-                        case 'quiz_terminated':
-                            showMessage("Der Host hat das Quiz beendet.", 'info');
+                        switch (msg.type) {
+                            case 'joined': {
+                                playerCurrentId = msg.sessionId;
+                                playerScore = msg.score || 0;
+                                savePlayerSession(roomCode, msg.sessionId, msg.playerName || pName);
+                                saveActiveSession(
+                                    'player',
+                                    roomCode,
+                                    msg.sessionId,
+                                    msg.playerName || pName
+                                );
+                                waitingMessage.textContent = msg.isReconnect
+                                    ? 'Wieder verbunden! Warte auf Host...'
+                                    : 'Verbunden! Warte auf Host...';
+                                break;
+                            }
+
+                            case 'question': {
+                                playerCurrentQuestionOptions = msg.options;
+                                selectedAnswers = [];
+                                playerCurrentQuestionIndex = msg.index;
+                                // Use local clock for timer — immune to clock skew
+                                playerQuestionStartTime = Date.now();
+                                displayQuestion(msg);
+                                startPlayerTimer(msg.duration);
+                                break;
+                            }
+
+                            case 'result': {
+                                // Ignore stale results from a previous question
+                                if (
+                                    msg.questionIndex !== undefined &&
+                                    msg.questionIndex !== playerCurrentQuestionIndex
+                                ) {
+                                    console.log(
+                                        `Ignoring stale result for question ${msg.questionIndex}, current is ${playerCurrentQuestionIndex}`
+                                    );
+                                    break;
+                                }
+                                const oldScore = playerScore;
+                                playerScore = msg.playerScore || playerScore;
+                                const gainedPoints = playerScore - oldScore;
+                                displayResult(
+                                    msg,
+                                    selectedAnswers,
+                                    playerScore,
+                                    gainedPoints,
+                                    oldScore
+                                );
+                                waitingForNext.textContent = msg.isFinal
+                                    ? 'Warten auf Endergebnisse...'
+                                    : 'Warten auf nächste Frage...';
+                                if (msg.isFinal) displayFinalResult(msg);
+                                break;
+                            }
+
+                            case 'quiz_terminated': {
+                                showMessage('Der Host hat das Quiz beendet.', 'info');
+                                resetPlayerStateAndUI();
+                                showView('role-selection');
+                                break;
+                            }
+
+                            case 'error': {
+                                showMessage(msg.message, 'error');
+                                resetPlayerStateAndUI();
+                                document
+                                    .querySelector('#role-selection')
+                                    .classList.remove('hidden');
+                                showView('role-selection');
+                                break;
+                            }
+                        }
+                    };
+
+                    playerWs.addEventListener('close', () => {
+                        console.log('Player WebSocket closed');
+                        if (
+                            playerRoomId &&
+                            playerCurrentId &&
+                            playerWsReconnectAttempts < MAX_RECONNECT_ATTEMPTS
+                        ) {
+                            playerWsReconnectAttempts++;
+                            waitingMessage.textContent = `Verbindung unterbrochen. Reconnect ${playerWsReconnectAttempts}/${MAX_RECONNECT_ATTEMPTS}...`;
+                            setTimeout(connectPlayerWs, RECONNECT_DELAY_MS);
+                        } else if (playerWsReconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
+                            showMessage(
+                                'Verbindung zum Quiz-Raum verloren. Bitte lade die Seite neu.',
+                                'error'
+                            );
                             resetPlayerStateAndUI();
-                            showView('role-selection');
-                            break;
+                        }
+                    });
 
-                        case 'error':
-                            showMessage(msg.message, 'error');
-                            resetPlayerStateAndUI();
-                            document.getElementById('role-selection').classList.remove('hidden');
-                            showView('role-selection');
-                            break;
-                    }
-                };
-
-                playerWs.onclose = () => {
-                    console.log('Player WebSocket closed');
-                    if (playerRoomId && playerCurrentId && playerWsReconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
-                        playerWsReconnectAttempts++;
-                        waitingMessage.textContent = `Verbindung unterbrochen. Reconnect ${playerWsReconnectAttempts}/${MAX_RECONNECT_ATTEMPTS}...`;
-                        setTimeout(connectPlayerWs, RECONNECT_DELAY_MS);
-                    } else if (playerWsReconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
-                        showMessage('Verbindung zum Quiz-Raum verloren. Bitte lade die Seite neu.', 'error');
-                        resetPlayerStateAndUI();
-                    }
-                };
-
-                playerWs.onerror = (err) => {
-                    console.error('Player WebSocket error:', err);
-                };
-            }).catch(() => {
-                showMessage('Server nicht erreichbar. Bitte versuche es später erneut.', 'error');
-                resetPlayerStateAndUI();
-                document.getElementById('role-selection').classList.remove('hidden');
-                showView('role-selection');
-            });
+                    playerWs.onerror = (err) => {
+                        console.error('Player WebSocket error:', err);
+                    };
+                })
+                .catch(() => {
+                    showMessage(
+                        'Server nicht erreichbar. Bitte versuche es später erneut.',
+                        'error'
+                    );
+                    resetPlayerStateAndUI();
+                    document.querySelector('#role-selection').classList.remove('hidden');
+                    showView('role-selection');
+                });
         }
 
         connectPlayerWs();
@@ -1924,24 +2133,30 @@ function initializePlayerFeatures(reconnectInfo) {
                     playerHasSubmitted = true;
                     submitAnswerBtn.disabled = true;
                     if (playerWs && playerWs.readyState === WebSocket.OPEN) {
-                        playerWs.send(JSON.stringify({
-                            type: 'submit_answer',
-                            answerData: selectedAnswers,
-                            answerTime: new Date().toISOString()
-                        }));
+                        playerWs.send(
+                            JSON.stringify({
+                                type: 'submit_answer',
+                                answerData: selectedAnswers,
+                                answerTime: new Date().toISOString(),
+                            })
+                        );
                     } else {
-                        showMessage('Verbindung unterbrochen. Antwort konnte nicht gesendet werden.', 'error');
+                        showMessage(
+                            'Verbindung unterbrochen. Antwort konnte nicht gesendet werden.',
+                            'error'
+                        );
                     }
                 }
                 submitAnswerBtn.classList.add('hidden');
-                optionsContainer.querySelectorAll('button.option-btn').forEach(btn => btn.disabled = true);
+                for (const btn of optionsContainer
+                    .querySelectorAll('button.option-btn')) (btn.disabled = true);
             }
         }, 100); // Update every 100ms
     }
 
     /**
      * Displays the question and options for the player.
-     * @param {Object} qData - The question data received from the host.
+     * @param {object} qData - The question data received from the host.
      */
     function displayQuestion(qData) {
         waitingRoom.classList.add('hidden');
@@ -1955,42 +2170,42 @@ function initializePlayerFeatures(reconnectInfo) {
         selectedAnswers = []; // Ensure selectedAnswers is reset for a new question
 
         // qData.options are already shuffled from the host
-        qData.options.forEach((option, index) => {
+        for (const [index, option] of qData.options.entries()) {
             const btn = document.createElement('button');
             btn.className = 'option-btn';
             btn.textContent = option;
             btn.dataset.index = index;
 
             btn.addEventListener('click', () => {
-                const optIdx = parseInt(btn.dataset.index);
+                const optIdx = Number.parseInt(btn.dataset.index);
                 const pos = selectedAnswers.indexOf(optIdx);
 
-                if (pos > -1) {
-                    selectedAnswers.splice(pos, 1);
-                    btn.classList.remove('selected');
-                } else {
+                if (pos === -1) {
                     selectedAnswers.push(optIdx);
                     btn.classList.add('selected');
+                } else {
+                    selectedAnswers.splice(pos, 1);
+                    btn.classList.remove('selected');
                 }
 
                 submitAnswerBtn.classList.toggle('hidden', selectedAnswers.length === 0);
             });
 
-            optionsContainer.appendChild(btn);
-        });
+            optionsContainer.append(btn);
+        }
 
         submitAnswerBtn.classList.add('hidden');
         submitAnswerBtn.disabled = false;
         playerHasSubmitted = false;
-        optionsContainer.querySelectorAll('button.option-btn').forEach(btn => {
+        for (const btn of optionsContainer.querySelectorAll('button.option-btn')) {
             btn.disabled = false;
             btn.classList.remove('correct-answer', 'incorrect-answer', 'selected'); // Clean up previous result styles
-        });
+        }
     }
 
     /**
      * Displays the result of the just-answered question for the player.
-     * @param {Object} rData - The result data received from the host.
+     * @param {object} rData - The result data received from the host.
      * @param {Array<number>} playerAnswer - The player's actual answer for this question.
      * @param {number} currentScore - The player's current score (total).
      * @param {number} gainedPoints - Points gained in this round.
@@ -2007,12 +2222,12 @@ function initializePlayerFeatures(reconnectInfo) {
         // Use local options if not in payload
         const options = playerCurrentQuestionOptions; // Use locally stored options instead of network payload
 
-        const correctHits = [...playerAnsSet].filter(item => correctSet.has(item)).length;
-        const isCompletelyCorrect = correctHits === correctSet.size &&
-            playerAnsSet.size === correctSet.size;
+        const correctHits = [...playerAnsSet].filter((item) => correctSet.has(item)).length;
+        const isCompletelyCorrect =
+            correctHits === correctSet.size && playerAnsSet.size === correctSet.size;
 
         if (!playerAnswer || playerAnswer.length === 0) {
-            resultHtml = "Du hast nicht geantwortet. ";
+            resultHtml = 'Du hast nicht geantwortet. ';
         } else if (isCompletelyCorrect) {
             resultHtml += '<strong class="correct">RICHTIG!</strong> ';
             triggerConfetti();
@@ -2024,7 +2239,7 @@ function initializePlayerFeatures(reconnectInfo) {
 
         resultHtml += '<br>Richtige Antwort(en): ';
 
-        options.forEach((option, index) => {
+        for (const [index, option] of options.entries()) {
             // Always show correct answers
             if (correctSet.has(index)) {
                 if (playerAnsSet.has(index)) {
@@ -2037,8 +2252,7 @@ function initializePlayerFeatures(reconnectInfo) {
                 // This means we don't add special classes or text for them.
                 // The original text for the option will still be there, but no specific highlight.
             }
-        });
-
+        }
 
         resultDisplay.innerHTML = resultHtml;
 
@@ -2050,8 +2264,8 @@ function initializePlayerFeatures(reconnectInfo) {
         }
 
         // Update player option buttons to show correct/incorrect after result
-        optionsContainer.querySelectorAll('button.option-btn').forEach(btn => {
-            const index = parseInt(btn.dataset.index);
+        for (const btn of optionsContainer.querySelectorAll('button.option-btn')) {
+            const index = Number.parseInt(btn.dataset.index);
             btn.disabled = true; // Ensure buttons are disabled
             btn.classList.remove('selected'); // Remove selected class from active state
 
@@ -2062,12 +2276,12 @@ function initializePlayerFeatures(reconnectInfo) {
             if (playerAnsSet.has(index) && correctSet.has(index)) {
                 btn.classList.add('selected'); // Re-apply selected style if it was correct and selected
             }
-        });
+        }
     }
 
     /**
      * Displays the final results and leaderboard for the player.
-     * @param {Object} frData - The final results data received from the host.
+     * @param {object} frData - The final results data received from the host.
      */
     function displayFinalResult(frData) {
         // console.log("Displaying final results for player:", frData); // Debug log
@@ -2087,17 +2301,31 @@ function initializePlayerFeatures(reconnectInfo) {
             if (frData.leaderboard.length === 0) {
                 ol.innerHTML = '<li>Keine Spieler in der Rangliste.</li>';
             } else {
-                frData.leaderboard.forEach((p, idx) => { // Added idx for rank highlighting
+                for (const [idx, p] of frData.leaderboard.entries()) {
+                    // Added idx for rank highlighting
                     const li = document.createElement('li');
-                    if (idx === 0) li.classList.add('rank-1');
-                    else if (idx === 1) li.classList.add('rank-2');
-                    else if (idx === 2) li.classList.add('rank-3');
+                    switch (idx) {
+                    case 0: {
+                    li.classList.add('rank-1');
+                    break;
+                    }
+                    case 1: {
+                    li.classList.add('rank-2');
+                    break;
+                    }
+                    case 2: { {
+                    li.classList.add('rank-3');
+                    // No default
+                    }
+                    break;
+                    }
+                    }
                     li.textContent = `${idx + 1}. ${p.name}: ${Math.round(p.score)} Punkte`;
-                    ol.appendChild(li);
-                });
+                    ol.append(li);
+                }
             }
-            lbDiv.appendChild(ol);
-            playerLeaderboardContainer.appendChild(lbDiv);
+            lbDiv.append(ol);
+            playerLeaderboardContainer.append(lbDiv);
         } else {
             playerLeaderboardContainer.innerHTML = '<p>Keine Ranglistendaten verfügbar.</p>'; // Fallback
         }

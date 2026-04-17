@@ -10,35 +10,55 @@
  * artifact — no backend at runtime.
  */
 
-const fs = require('fs');
-const path = require('path');
-const crypto = require('crypto');
+const fs = require('node:fs');
+const path = require('node:path');
+const crypto = require('node:crypto');
 const JSZip = require('jszip');
 
 const REPO_ROOT = path.resolve(__dirname, '..');
 const DECKS_DIR = path.join(REPO_ROOT, 'decks');
 const MANIFEST_PATH = path.join(DECKS_DIR, 'library.json');
 
+/**
+ *
+ * @param str
+ */
 function slugify(str) {
     return str
         .toLowerCase()
-        .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
-        .replace(/ä/g, 'ae').replace(/ö/g, 'oe').replace(/ü/g, 'ue').replace(/ß/g, 'ss')
-        .replace(/[^a-z0-9]+/g, '-')
-        .replace(/^-+|-+$/g, '');
+        .normalize('NFD')
+        .replaceAll(/[\u0300-\u036F]/g, '')
+        .replaceAll('ä', 'ae')
+        .replaceAll('ö', 'oe')
+        .replaceAll('ü', 'ue')
+        .replaceAll('ß', 'ss')
+        .replaceAll(/[^a-z0-9]+/g, '-')
+        .replaceAll(/^-+|-+$/g, '');
 }
 
+/**
+ *
+ * @param card
+ */
 function isValidCard(card) {
     if (!card || typeof card !== 'object') return false;
     if (typeof card.question !== 'string' || card.question.trim() === '') return false;
     if (typeof card.answer === 'string' && card.answer.trim() !== '') return true;
-    if (Array.isArray(card.options) && card.options.length > 0 &&
-        Array.isArray(card.correct) && card.correct.length > 0) {
-        return card.correct.every(i => Number.isInteger(i) && i >= 0 && i < card.options.length);
+    if (
+        Array.isArray(card.options) &&
+        card.options.length > 0 &&
+        Array.isArray(card.correct) &&
+        card.correct.length > 0
+    ) {
+        return card.correct.every((i) => Number.isInteger(i) && i >= 0 && i < card.options.length);
     }
     return false;
 }
 
+/**
+ *
+ * @param card
+ */
 function cardType(card) {
     return Array.isArray(card.options) ? 'multiple-choice' : 'text';
 }
@@ -46,6 +66,7 @@ function cardType(card) {
 /**
  * Pull a deck-level meta block out of a parsed JSON, normalizing strings.
  * Returns null when no usable meta is present.
+ * @param data
  */
 function readMeta(data) {
     if (!data || typeof data.meta !== 'object' || data.meta === null) return null;
@@ -57,13 +78,17 @@ function readMeta(data) {
         gradeLevel: str(m.gradeLevel),
         learningUnit: str(m.learningUnit),
         description: str(m.description),
-        author: str(m.author)
+        author: str(m.author),
     };
     // Drop undefined keys so JSON output stays clean.
     for (const k of Object.keys(out)) if (out[k] === undefined) delete out[k];
     return Object.keys(out).length > 0 ? out : null;
 }
 
+/**
+ *
+ * @param zipPath
+ */
 async function processZip(zipPath) {
     const buf = fs.readFileSync(zipPath);
     const hash = crypto.createHash('sha256').update(buf).digest('hex').slice(0, 12);
@@ -77,12 +102,16 @@ async function processZip(zipPath) {
     const sourceFiles = [];
     let meta = null;
 
-    const entries = Object.values(zip.files).filter(e => !e.dir && e.name.endsWith('.json'));
+    const entries = Object.values(zip.files).filter((e) => !e.dir && e.name.endsWith('.json'));
     for (const entry of entries) {
         sourceFiles.push(entry.name);
         const content = await entry.async('string');
         let data;
-        try { data = JSON.parse(content); } catch { continue; }
+        try {
+            data = JSON.parse(content);
+        } catch {
+            continue;
+        }
         if (!data || !Array.isArray(data.cards)) continue;
 
         // First JSON file with a meta block wins for the ZIP-level metadata.
@@ -97,7 +126,8 @@ async function processZip(zipPath) {
             totalCards++;
             if (!isValidCard(card)) continue;
             validCards++;
-            if (cardType(card) === 'text') textCards++; else mcCards++;
+            if (cardType(card) === 'text') textCards++;
+            else mcCards++;
             if (Array.isArray(card.categories)) {
                 for (const c of card.categories) {
                     if (typeof c !== 'string' || c.trim() === '') continue;
@@ -115,7 +145,7 @@ async function processZip(zipPath) {
     // Sort categories by count descending, then name ascending for stable output.
     const categories = [...categoryCounts.entries()]
         .map(([name, count]) => ({ name, count }))
-        .sort((a, b) => (b.count - a.count) || a.name.localeCompare(b.name, 'de'));
+        .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name, 'de'));
 
     return {
         id,
@@ -128,19 +158,23 @@ async function processZip(zipPath) {
         invalidCount: totalCards - validCards,
         types: { text: textCards, multipleChoice: mcCards },
         categories,
-        sourceFiles: sourceFiles.sort()
+        sourceFiles: sourceFiles.sort(),
     };
 }
 
+/**
+ *
+ */
 async function main() {
     if (!fs.existsSync(DECKS_DIR)) {
         console.error(`decks/ directory not found at ${DECKS_DIR}`);
         process.exit(1);
     }
 
-    const zips = fs.readdirSync(DECKS_DIR)
-        .filter(f => f.toLowerCase().endsWith('.zip'))
-        .map(f => path.join(DECKS_DIR, f))
+    const zips = fs
+        .readdirSync(DECKS_DIR)
+        .filter((f) => f.toLowerCase().endsWith('.zip'))
+        .map((f) => path.join(DECKS_DIR, f))
         .sort();
 
     const decks = [];
@@ -149,7 +183,9 @@ async function main() {
         try {
             const meta = await processZip(zip);
             if (seenIds.has(meta.id)) {
-                console.error(`Duplicate deck id "${meta.id}" from ${meta.filename} — rename to avoid collision.`);
+                console.error(
+                    `Duplicate deck id "${meta.id}" from ${meta.filename} — rename to avoid collision.`
+                );
                 process.exit(1);
             }
             seenIds.add(meta.id);
@@ -157,9 +193,11 @@ async function main() {
             const metaSummary = meta.meta
                 ? ` [${meta.meta.subject || '?'} ${meta.meta.gradeLevel || '?'} ${meta.meta.learningUnit || '?'}]`
                 : ' [no meta]';
-            console.log(`  ✓ ${meta.filename}${metaSummary} (${meta.questionCount} questions, ${meta.categories.length} categories, v${meta.version})`);
-        } catch (err) {
-            console.error(`  ✗ ${path.basename(zip)}: ${err.message}`);
+            console.log(
+                `  ✓ ${meta.filename}${metaSummary} (${meta.questionCount} questions, ${meta.categories.length} categories, v${meta.version})`
+            );
+        } catch (error) {
+            console.error(`  ✗ ${path.basename(zip)}: ${error.message}`);
             process.exit(1);
         }
     }
@@ -167,11 +205,14 @@ async function main() {
     const manifest = {
         generatedAt: new Date().toISOString(),
         deckCount: decks.length,
-        decks
+        decks,
     };
 
     fs.writeFileSync(MANIFEST_PATH, JSON.stringify(manifest, null, 2) + '\n');
     console.log(`Wrote ${MANIFEST_PATH} (${decks.length} deck${decks.length === 1 ? '' : 's'})`);
 }
 
-main().catch(err => { console.error(err); process.exit(1); });
+main().catch((error) => {
+    console.error(error);
+    process.exit(1);
+});
