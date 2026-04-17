@@ -1755,9 +1755,6 @@ function updateCardContent(card) {
         // Set answer text for back of card
         standardAnswerContainer.classList.add('hidden');
         mcCorrectAnswerContainer.classList.remove('hidden');
-
-        // Display all options with color coding (will be filled when answer is shown)
-        const correctIndices = card.correct;
         mcCorrectAnswerText.innerHTML = ''; // Will be populated in showAnswer()
     } else {
         // Handle standard question
@@ -3489,9 +3486,7 @@ function toggleBucketExpansion(interval) {
  */
 function toggleBucketSelection(interval) {
     const bucket = document.querySelector(`.sr-bucket[data-interval="${interval}"]`);
-    const checkbox = bucket.querySelector('.sr-bucket-checkbox');
     bucket.classList.toggle('selected');
-
     updateStartBucketButton();
 }
 

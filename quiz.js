@@ -247,6 +247,11 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 // --- Host State & Initialization Flag ---
+// reconnectHostWs is defined inside initializeHostFeatures (it closes over
+// the locally-scoped handleHostMessage), but the visibilitychange handler
+// in DOMContentLoaded needs to call it from the outer scope. We expose it
+// via this module-level binding, assigned when initializeHostFeatures runs.
+let reconnectHostWs = null;
 let hostGlobalQuizState = null;
 let hostWs = null;
 let hostSessionId = null;
@@ -1086,10 +1091,7 @@ async function initializeHostFeatures(reconnectInfo) {
         };
     }
 
-    /**
-     * Reconnects the host WebSocket after a disconnect.
-     */
-    function reconnectHostWs() {
+    reconnectHostWs = function reconnectHostWs() {
         const ws = new WebSocket(WS_URL);
 
         ws.addEventListener('open', () => {
@@ -1154,7 +1156,7 @@ async function initializeHostFeatures(reconnectInfo) {
         };
 
         hostWs = ws;
-    }
+    };
 
     /**
      * Handles a player answer received via WebSocket.
@@ -1171,7 +1173,7 @@ async function initializeHostFeatures(reconnectInfo) {
         quizState.answersReceived++;
         // Use server-measured elapsed time for fair scoring (immune to client clock manipulation)
         const timeTaken =
-            msg.elapsedMs == null
+            msg.elapsedMs === null || msg.elapsedMs === undefined
                 ? (Date.now() - hostQuestionStartTime) / 1000
                 : msg.elapsedMs / 1000;
         p.answerTime = timeTaken;
@@ -1603,35 +1605,6 @@ async function initializeHostFeatures(reconnectInfo) {
         }
     }
 
-    /**
-     * Resets the host's state and UI to the initial setup form.
-     */
-    async function resetHostStateAndUI() {
-        clearActiveSession();
-        // Close WebSocket connection
-        if (hostWs) {
-            hostWs.onclose = null; // Prevent reconnect
-            hostWs.close();
-            hostWs = null;
-        }
-
-        hostWsReconnectAttempts = 0;
-        hostGlobalQuizState = null;
-        isHostInitialized = false;
-        hostRoomId = null;
-        hostSessionId = null;
-        hostPendingQuestion = null;
-
-        fileStatus.textContent = '';
-        if (jsonFileInput) jsonFileInput.value = '';
-        hostResults.classList.add('hidden');
-        hostQuestionDisplay.classList.add('hidden');
-        qrContainer.classList.add('hidden');
-        hostSetup.classList.remove('hidden');
-        document.querySelector('#role-selection').classList.remove('hidden');
-        if (hostViewHeading) hostViewHeading.classList.remove('hidden');
-        initializeHostFeatures();
-    }
 }
 
 // --- Player State & Initialization Flag ---
