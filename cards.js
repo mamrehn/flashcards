@@ -143,7 +143,6 @@ let cleanupOrphansBtn;
 let bookView;
 let bookViewCards;
 let bookViewTitle;
-let bookViewBackBtn;
 let undoBtn;
 let exportBackupBtn;
 let srStatsDashboard;
@@ -215,7 +214,6 @@ function initializeApp() {
     bookView = document.querySelector('#book-view');
     bookViewCards = document.querySelector('#book-view-cards');
     bookViewTitle = document.querySelector('#book-view-title');
-    bookViewBackBtn = document.querySelector('#book-view-back');
     undoBtn = document.querySelector('#undo-btn');
     exportBackupBtn = document.querySelector('#export-backup-btn');
     srStatsDashboard = document.querySelector('#sr-stats-dashboard');
@@ -245,7 +243,6 @@ function initializeApp() {
     selectAllBucketsBtn.addEventListener('click', debounce(selectAllSRBuckets, 200));
     deselectAllBucketsBtn.addEventListener('click', debounce(deselectAllSRBuckets, 200));
     cleanupOrphansBtn.addEventListener('click', throttle(cleanupOrphanedSRData, 500));
-    bookViewBackBtn.addEventListener('click', throttle(closeBookView, 300));
     document.querySelector('#book-view-csv').addEventListener('click', throttle(exportToCsv, 300));
     document
         .querySelector('#book-view-anki')
@@ -2443,8 +2440,6 @@ function handleStudyModeChange(event) {
                 activeDecks.length === 1
                     ? `Lesemodus — ${activeDecks[0]}`
                     : `Lesemodus — ${activeDecks.length} Decks`;
-            bookViewReturnTo = 'decks';
-            bookViewFromQuiz = true;
             appContent.classList.add('hidden');
             openBookView(cards, title);
         }
@@ -2991,56 +2986,6 @@ function openBookView(cardsToShow, title) {
     bookView.classList.remove('hidden');
 }
 
-/** Track where book view was opened from so we can return there */
-let bookViewReturnTo = 'decks'; // 'decks' or 'sr-manager'
-
-/** Track whether book view was opened mid-quiz */
-let bookViewFromQuiz = false;
-
-/**
- * Close book view and return to the previous screen
- */
-function closeBookView() {
-    bookView.classList.add('hidden');
-
-    if (bookViewReturnTo === 'sr-manager') {
-        // Return to SR manager
-        document.querySelector('#file-input-container').style.display = 'block';
-        srManagerContainer.classList.remove('hidden');
-        document.querySelector('#saved-decks-container').classList.add('hidden');
-        const uploadSection = document.querySelector('.upload-section');
-        if (uploadSection) uploadSection.classList.add('hidden');
-        const subtitle = document.querySelector('#app-subtitle');
-        if (subtitle) subtitle.classList.add('hidden');
-        studyModeSelect.style.display = 'none';
-        openSrManagerBtn.textContent = '📚 Decks anzeigen';
-        openSrManagerBtn.classList.add('active');
-        openSrManagerBtn.style.display = 'inline-block';
-    } else if (bookViewFromQuiz) {
-        // Returning from mid-quiz Lesemodus switch — restore quiz
-        bookViewFromQuiz = false;
-        appContent.classList.remove('hidden');
-        studyMode = 'spaced-repetition';
-        studyModeSelect.value = 'spaced-repetition';
-        openSrManagerBtn.style.display = 'inline-block';
-    } else {
-        // Return to deck selection screen
-        const fileInputContainer = document.querySelector('#file-input-container');
-        const savedDecksEl = document.querySelector('#saved-decks-container');
-        const uploadSection = document.querySelector('.upload-section');
-        const subtitle = document.querySelector('#app-subtitle');
-
-        fileInputContainer.style.display = 'block';
-        savedDecksEl.classList.remove('hidden');
-        if (uploadSection) uploadSection.classList.remove('hidden');
-        if (subtitle) subtitle.style.display = 'block';
-        srManagerContainer.classList.add('hidden');
-        studyModeSelect.style.display = 'inline-block';
-        openSrManagerBtn.style.display =
-            studyMode === 'spaced-repetition' ? 'inline-block' : 'none';
-    }
-}
-
 /**
  * Export currently displayed book view cards as Anki-importable tab-separated text file
  */
@@ -3211,7 +3156,6 @@ function startBookViewFromDecks() {
             ? `Lesemodus — ${selectedDeckNames[0]}`
             : `Lesemodus — ${selectedDeckNames.length} Decks`;
 
-    bookViewReturnTo = 'decks';
     openBookView(allCards, title);
 }
 
@@ -3237,7 +3181,6 @@ function openBookViewForBucket(interval) {
     }
 
     const label = getIntervalLabel(interval);
-    bookViewReturnTo = 'sr-manager';
     srManagerContainer.classList.add('hidden');
     openBookView(cardsInBucket, `${label} — ${cardsInBucket.length} Karten`);
 }
