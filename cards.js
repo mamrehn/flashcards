@@ -763,22 +763,31 @@ async function handleLibraryImportDeepLink() {
             return;
         }
 
-        if (typeof JSZip === 'undefined') throw new Error('JSZip nicht geladen');
+        const fileUrl = `decks/${encodeURIComponent(deckMeta.filename)}?v=${encodeURIComponent(deckMeta.version)}`;
+        const fileRes = await fetch(fileUrl);
+        if (!fileRes.ok) throw new Error(`deck HTTP ${fileRes.status}`);
 
-        const zipUrl = `decks/${encodeURIComponent(deckMeta.filename)}?v=${encodeURIComponent(deckMeta.version)}`;
-        const zipRes = await fetch(zipUrl);
-        if (!zipRes.ok) throw new Error(`zip HTTP ${zipRes.status}`);
-        const buf = await zipRes.arrayBuffer();
-        const zip = await JSZip.loadAsync(buf);
+        const isJson = /\.json$/i.test(deckMeta.filename);
+        let entries;
+        if (isJson) {
+            entries = [{ name: deckMeta.filename, content: await fileRes.text() }];
+        } else {
+            if (typeof JSZip === 'undefined') throw new Error('JSZip nicht geladen');
+            const zip = await JSZip.loadAsync(await fileRes.arrayBuffer());
+            const zipEntries = Object.values(zip.files).filter(
+                (e) => !e.dir && e.name.endsWith('.json')
+            );
+            entries = await Promise.all(
+                zipEntries.map(async (e) => ({ name: e.name, content: await e.async('string') }))
+            );
+        }
 
         const importedDeckNames = [];
         const allCards = [];
-        const entries = Object.values(zip.files).filter((e) => !e.dir && e.name.endsWith('.json'));
         for (const entry of entries) {
-            const content = await entry.async('string');
             let data;
             try {
-                data = sanitizeParsedJSON(JSON.parse(content));
+                data = sanitizeParsedJSON(JSON.parse(entry.content));
             } catch {
                 continue;
             }

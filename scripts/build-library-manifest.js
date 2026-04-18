@@ -1,10 +1,11 @@
 #!/usr/bin/env node
 /**
- * Build decks/library.json from every ZIP in decks/.
+ * Build decks/library.json from every ZIP or standalone JSON in decks/.
  *
- * For each ZIP we extract: a stable id (slug of filename), human title (filename),
- * total/valid question counts, type breakdown (text vs multiple choice), category
- * union, per-deck content hash (drives cache-busting + "update available" badge).
+ * For each deck file we extract: a stable id (slug of filename), human title
+ * (filename), total/valid question counts, type breakdown (text vs multiple
+ * choice), category union, per-deck content hash (drives cache-busting +
+ * "update available" badge).
  *
  * The manifest powers library.html (browse + detail page) and is a pure static
  * artifact — no backend at runtime.
@@ -86,13 +87,31 @@ function readMeta(data) {
 }
 
 /**
- *
- * @param zipPath
+ * Read a deck file (ZIP or standalone JSON) and return a list of
+ * { name, content } entries containing the JSON payloads inside.
+ * @param filePath
+ * @param buf
  */
-async function processZip(zipPath) {
-    const buf = fs.readFileSync(zipPath);
+async function readDeckEntries(filePath, buf) {
+    if (filePath.toLowerCase().endsWith('.zip')) {
+        const zip = await JSZip.loadAsync(buf);
+        const entries = Object.values(zip.files).filter((e) => !e.dir && e.name.endsWith('.json'));
+        const out = [];
+        for (const entry of entries) {
+            out.push({ name: entry.name, content: await entry.async('string') });
+        }
+        return out;
+    }
+    return [{ name: path.basename(filePath), content: buf.toString('utf8') }];
+}
+
+/**
+ *
+ * @param filePath
+ */
+async function processDeckFile(filePath) {
+    const buf = fs.readFileSync(filePath);
     const hash = crypto.createHash('sha256').update(buf).digest('hex').slice(0, 12);
-    const zip = await JSZip.loadAsync(buf);
 
     let totalCards = 0;
     let validCards = 0;
@@ -102,21 +121,20 @@ async function processZip(zipPath) {
     const sourceFiles = [];
     let meta = null;
 
-    const entries = Object.values(zip.files).filter((e) => !e.dir && e.name.endsWith('.json'));
+    const entries = await readDeckEntries(filePath, buf);
     for (const entry of entries) {
         sourceFiles.push(entry.name);
-        const content = await entry.async('string');
         let data;
         try {
-            data = JSON.parse(content);
+            data = JSON.parse(entry.content);
         } catch {
             continue;
         }
         if (!data || !Array.isArray(data.cards)) continue;
 
-        // First JSON file with a meta block wins for the ZIP-level metadata.
+        // First JSON file with a meta block wins for the deck-level metadata.
         // Multi-JSON ZIPs typically share subject/grade/unit; per-card detail
-        // lives in the cards themselves.
+        // lives in the cards themselves. Standalone JSON decks have a single entry.
         if (!meta) {
             const m = readMeta(data);
             if (m) meta = m;
@@ -138,8 +156,8 @@ async function processZip(zipPath) {
         }
     }
 
-    const filename = path.basename(zipPath);
-    const baseName = filename.replace(/\.zip$/i, '');
+    const filename = path.basename(filePath);
+    const baseName = filename.replace(/\.(zip|json)$/i, '');
     const id = slugify(baseName);
 
     // Sort categories by count descending, then name ascending for stable output.
@@ -171,17 +189,17 @@ async function main() {
         process.exit(1);
     }
 
-    const zips = fs
+    const deckFiles = fs
         .readdirSync(DECKS_DIR)
-        .filter((f) => f.toLowerCase().endsWith('.zip'))
+        .filter((f) => /\.(zip|json)$/i.test(f) && f.toLowerCase() !== 'library.json')
         .map((f) => path.join(DECKS_DIR, f))
         .sort();
 
     const decks = [];
     const seenIds = new Set();
-    for (const zip of zips) {
+    for (const deckFile of deckFiles) {
         try {
-            const meta = await processZip(zip);
+            const meta = await processDeckFile(deckFile);
             if (seenIds.has(meta.id)) {
                 console.error(
                     `Duplicate deck id "${meta.id}" from ${meta.filename} — rename to avoid collision.`
@@ -197,7 +215,7 @@ async function main() {
                 `  ✓ ${meta.filename}${metaSummary} (${meta.questionCount} questions, ${meta.categories.length} categories, v${meta.version})`
             );
         } catch (error) {
-            console.error(`  ✗ ${path.basename(zip)}: ${error.message}`);
+            console.error(`  ✗ ${path.basename(deckFile)}: ${error.message}`);
             process.exit(1);
         }
     }

@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-04-17T17:10:48.042Z",
+  "generatedAt": "2026-04-18T14:48:20.339Z",
   "deckCount": 5,
   "decks": [
     {
@@ -191,18 +191,18 @@
     },
     {
       "id": "beispiel-allgemeinwissen",
-      "filename": "beispiel-allgemeinwissen.zip",
+      "filename": "beispiel-allgemeinwissen.json",
       "title": "Allgemeinwissen Mini-Quiz",
       "meta": {
         "name": "Allgemeinwissen Mini-Quiz",
-        "subject": "AEuP",
-        "gradeLevel": "IF10",
-        "learningUnit": "LS0",
+        "subject": "Allgemeinwissen",
+        "gradeLevel": "Alle Klassen",
+        "learningUnit": "Kein Fach",
         "description": "Beispiel-Deck zur Demonstration des Bibliotheks-Formats. Vermischt Geografie, Mathematik und Naturwissenschaft.",
         "author": "Flashcards Demo"
       },
-      "version": "abf5e07ca8e6",
-      "size": 833,
+      "version": "064682645c4f",
+      "size": 1532,
       "questionCount": 5,
       "invalidCount": 0,
       "types": {

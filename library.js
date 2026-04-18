@@ -519,12 +519,23 @@ async function importDeckFromLibrary(deckMeta) {
     const url = `decks/${encodeURIComponent(deckMeta.filename)}?v=${encodeURIComponent(deckMeta.version)}`;
     const res = await fetch(url);
     if (!res.ok) throw new Error(`Fetch failed: HTTP ${res.status}`);
-    const buf = await res.arrayBuffer();
 
-    if (typeof JSZip === 'undefined') {
-        throw new TypeError('JSZip nicht geladen.');
+    const isJson = /\.json$/i.test(deckMeta.filename);
+    let entries;
+    if (isJson) {
+        entries = [{ name: deckMeta.filename, content: await res.text() }];
+    } else {
+        if (typeof JSZip === 'undefined') {
+            throw new TypeError('JSZip nicht geladen.');
+        }
+        const zip = await JSZip.loadAsync(await res.arrayBuffer());
+        const zipEntries = Object.values(zip.files).filter(
+            (e) => !e.dir && e.name.endsWith('.json')
+        );
+        entries = await Promise.all(
+            zipEntries.map(async (e) => ({ name: e.name, content: await e.async('string') }))
+        );
     }
-    const zip = await JSZip.loadAsync(buf);
 
     let savedDecks;
     try {
@@ -535,12 +546,10 @@ async function importDeckFromLibrary(deckMeta) {
     savedDecks = sanitizeParsedJSON(savedDecks) || {};
 
     let importedAny = false;
-    const entries = Object.values(zip.files).filter((e) => !e.dir && e.name.endsWith('.json'));
     for (const entry of entries) {
-        const content = await entry.async('string');
         let data;
         try {
-            data = sanitizeParsedJSON(JSON.parse(content));
+            data = sanitizeParsedJSON(JSON.parse(entry.content));
         } catch {
             continue;
         }
