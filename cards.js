@@ -1967,6 +1967,8 @@ function toggleTextExplanation() {
  */
 function showAnswer() {
     flipCard.classList.add('flipped');
+    // Enable "Zurück" so the user can flip back to the question even before grading.
+    undoBtn.disabled = false;
 
     const card = cards[currentCardIndex];
     const isMultipleChoice = Array.isArray(card.options) && Array.isArray(card.correct);
@@ -2664,7 +2666,15 @@ function captureUndoSnapshot(card, score) {
  * Undo the last answer and go back one card
  */
 function undoLastAnswer() {
-    if (undoStack.length === 0) return;
+    // Pre-grading case: answer is shown but Richtig/Falsch not yet pressed →
+    // flip back to the question side so the user can re-attempt before grading.
+    if (undoStack.length === 0) {
+        if (flipCard.classList.contains('flipped')) {
+            flipCard.classList.remove('flipped');
+            undoBtn.disabled = true;
+        }
+        return;
+    }
 
     const snapshot = undoStack.pop();
 
