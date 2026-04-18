@@ -1474,6 +1474,18 @@ function initializeQuiz(loadedCards) {
 
         // Prioritize incorrectly answered cards if available
         prioritizeIncorrectCards();
+
+        // Apply "Nur falsche wiederholen" filter at quiz start — the dropdown
+        // is hidden during active quizzes, so this can only take effect here.
+        if (studyMode === 'incorrect-only') {
+            const incorrectCards = cards.filter(isCardIncorrectFromPreviousSession);
+            if (incorrectCards.length === 0) {
+                showError('Keine falsch beantworteten Karten gefunden.');
+                return;
+            }
+            cards = incorrectCards;
+            answeredCards = Array.from({ length: cards.length }).fill(null);
+        }
     }
 
     // Clear undo stack for new quiz
@@ -1484,7 +1496,8 @@ function initializeQuiz(loadedCards) {
     document.querySelector('#file-input-container').style.display = 'none';
     appContent.classList.remove('hidden');
 
-    // Hide SR button during active quiz
+    // Hide mode switcher + SR button during active quiz (cannot change mode mid-quiz)
+    studyModeSelect.style.display = 'none';
     openSrManagerBtn.style.display = 'none';
 
     // Auto-show keyboard hints on first ever quiz
@@ -2423,7 +2436,9 @@ function showError(message) {
 // ============================================================================
 
 /**
- * Handle study mode change
+ * Handle study mode change. The dropdown is only reachable on the deck-selection
+ * screen (it's hidden once a quiz starts), so this just records the choice —
+ * filtering / sorting happens at quiz start inside initializeQuiz.
  * @param {Event} event - Change event from select element
  */
 function handleStudyModeChange(event) {
@@ -2431,76 +2446,6 @@ function handleStudyModeChange(event) {
 
     // Show/hide SR button based on mode
     openSrManagerBtn.style.display = studyMode === 'spaced-repetition' ? 'inline-block' : 'none';
-
-    // Lesemodus: if mid-quiz, switch to book view for current cards
-    // If on deck selection screen (no active quiz), just set the mode — "Start" will handle it
-    if (studyMode === 'read-through') {
-        if (cards.length > 0 && !appContent.classList.contains('hidden')) {
-            const title =
-                activeDecks.length === 1
-                    ? `Lesemodus — ${activeDecks[0]}`
-                    : `Lesemodus — ${activeDecks.length} Decks`;
-            appContent.classList.add('hidden');
-            openBookView(cards, title);
-        }
-        return;
-    }
-
-    // Reorganize cards based on study mode
-    reorganizeCardsByStudyMode();
-
-    // Reset to first card
-    currentCardIndex = 0;
-    showCurrentCard();
-}
-
-/**
- * Reorganize cards based on selected study mode
- */
-function reorganizeCardsByStudyMode() {
-    // Build card-to-answer map BEFORE shuffling to preserve answer associations
-    const cardAnswerMap = new Map();
-    for (const [index, card] of cards.entries()) cardAnswerMap.set(card, answeredCards[index]);
-
-    // Randomize the card order
-    shuffleArray(cards);
-
-    switch (studyMode) {
-        case 'incorrect-only': {
-            // Filter to show only incorrect cards (current session + previous sessions)
-            const incorrectCards = [];
-            for (const card of cards) {
-                const cardScore = cardAnswerMap.get(card);
-                const incorrectNow = cardScore !== null && cardScore < 1;
-                const incorrectBefore = isCardIncorrectFromPreviousSession(card);
-
-                if (incorrectNow || incorrectBefore) {
-                    incorrectCards.push(card);
-                }
-            }
-            if (incorrectCards.length > 0) {
-                cards = incorrectCards;
-            } else {
-                showError('Keine falsch beantworteten Karten gefunden.');
-            }
-            break;
-        }
-
-        case 'spaced-repetition': {
-            // Sort by next review date
-            cards.sort((a, b) => {
-                const aKey = getCardKey(a);
-                const bKey = getCardKey(b);
-                const aData = spacedRepetitionData[aKey] || { nextReview: new Date() };
-                const bData = spacedRepetitionData[bKey] || { nextReview: new Date() };
-                return new Date(aData.nextReview) - new Date(bData.nextReview);
-            });
-            break;
-        }
-    }
-
-    // Rebuild answeredCards to match the new card order
-    answeredCards = cards.map((card) => cardAnswerMap.get(card) ?? null);
 }
 
 /**
