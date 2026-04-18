@@ -91,11 +91,31 @@ header {
     border-radius: 8px;
     margin-bottom: 0.75rem;
     box-shadow: 0 2px 4px var(--shadow-color);
+    display: flex;
+    align-items: center;
+    gap: 1rem;
 }
 
 header h1 {
     color: var(--primary-color);
     margin: 0;
+    flex: 1;
+}
+
+.back-link {
+    color: var(--primary-color);
+    text-decoration: none;
+    font-size: 1.5rem;
+    font-weight: 500;
+    line-height: 1;
+    padding: 0.25rem 0.5rem;
+    border-radius: 4px;
+    transition: background-color 0.2s;
+    flex-shrink: 0;
+}
+
+.back-link:hover {
+    background-color: rgba(128, 128, 128, 0.15);
 }
 
 .view {

@@ -799,12 +799,34 @@ body {
 
 /* Undo Button */
 #undo-btn {
-    margin-left: auto;
+    margin-right: auto;
 }
 
 #undo-btn:disabled {
     opacity: 0.4;
     cursor: not-allowed;
+}
+
+.btn.btn-sm {
+    padding: 0.25rem 0.55rem;
+    font-size: 0.85rem;
+}
+
+/* Back link in page header */
+.back-link {
+    color: var(--primary);
+    text-decoration: none;
+    font-size: 1.5rem;
+    font-weight: 500;
+    line-height: 1;
+    padding: 0.25rem 0.5rem;
+    border-radius: 4px;
+    transition: background-color 0.2s;
+    flex-shrink: 0;
+}
+
+.back-link:hover {
+    background-color: var(--light);
 }
 
 /* Deck Search */

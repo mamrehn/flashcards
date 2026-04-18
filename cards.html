@@ -24,6 +24,7 @@
     <body>
         <div class="container">
             <div class="header">
+                <a href="index.html" class="back-link" title="Zur Startseite">←</a>
                 <div class="header-content">
                     <h1 id="app-title">Lernkarten App</h1>
                     <p id="app-subtitle">
@@ -281,17 +282,17 @@
                                 </div>
                             </div>
                             <div class="controls">
-                                <button class="btn btn-success" id="mark-correct">Richtig</button>
-                                <button class="btn btn-danger" id="mark-incorrect">Falsch</button>
-                                <button class="btn btn-secondary" id="next-card">Nächste</button>
                                 <button
-                                    class="btn btn-secondary"
+                                    class="btn btn-secondary btn-sm"
                                     id="undo-btn"
                                     disabled
                                     title="Letzte Antwort rückgängig (Backspace)"
                                 >
                                     ↩ Zurück
                                 </button>
+                                <button class="btn btn-success" id="mark-correct">Richtig</button>
+                                <button class="btn btn-danger" id="mark-incorrect">Falsch</button>
+                                <button class="btn btn-secondary" id="next-card">Nächste</button>
                             </div>
                         </div>
                     </div>
