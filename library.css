@@ -338,6 +338,11 @@ body {
     color: var(--text-muted, #6c7570);
 }
 
+.detail-meta dd a {
+    color: var(--lib-primary);
+    text-decoration: underline;
+}
+
 .update-banner,
 .imported-banner {
     padding: 0.75rem 0.9rem;

@@ -242,15 +242,24 @@ function buildMetaChips(meta) {
  */
 function buildMetaTable(deck) {
     const m = deck.meta || {};
+    const fileLink = document.createElement('a');
+    fileLink.href = `https://github.com/mamrehn/flashcards/blob/main/decks/${encodeURIComponent(deck.filename)}`;
+    fileLink.target = '_blank';
+    fileLink.rel = 'noopener noreferrer';
+    fileLink.textContent = deck.filename;
+
     const rows = [
         ['Klassenstufe', m.gradeLevel],
         ['Fach', m.subject],
         ['Lerneinheit', m.learningUnit],
         ['Autor:in', m.author],
-        ['Datei', deck.filename],
+        ['Datei', fileLink],
         ['Version', deck.version],
         ['Größe', formatBytes(deck.size)],
-    ].filter(([, value]) => typeof value === 'string' && value !== '');
+    ].filter(([, value]) => {
+        if (value instanceof Node) return true;
+        return typeof value === 'string' && value !== '';
+    });
 
     const dl = document.createElement('dl');
     dl.className = 'detail-meta';
@@ -260,7 +269,8 @@ function buildMetaTable(deck) {
         const dt = document.createElement('dt');
         dt.textContent = label;
         const dd = document.createElement('dd');
-        dd.textContent = value;
+        if (value instanceof Node) dd.append(value);
+        else dd.textContent = value;
         row.append(dt);
         row.append(dd);
         dl.append(row);
