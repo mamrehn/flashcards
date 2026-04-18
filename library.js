@@ -221,7 +221,7 @@ function buildDeckCard(deck, importedMeta) {
  */
 function buildMetaChips(meta) {
     if (!meta) return null;
-    const codes = [meta.subject, meta.gradeLevel, meta.learningUnit].filter(Boolean);
+    const codes = [meta.gradeLevel, meta.subject, meta.learningUnit].filter(Boolean);
     if (codes.length === 0) return null;
     const wrap = document.createElement('div');
     wrap.className = 'meta-chips';
@@ -232,6 +232,40 @@ function buildMetaChips(meta) {
         wrap.append(chip);
     }
     return wrap;
+}
+
+/**
+ * Labeled metadata section for the detail page. Shows every meta field
+ * that exists plus the zip filename, version hash, and byte size so the
+ * user can match the displayed title (meta.name) back to the source file.
+ * @param deck
+ */
+function buildMetaTable(deck) {
+    const m = deck.meta || {};
+    const rows = [
+        ['Klassenstufe', m.gradeLevel],
+        ['Fach', m.subject],
+        ['Lerneinheit', m.learningUnit],
+        ['Autor:in', m.author],
+        ['Datei', deck.filename],
+        ['Version', deck.version],
+        ['Größe', formatBytes(deck.size)],
+    ].filter(([, value]) => typeof value === 'string' && value !== '');
+
+    const dl = document.createElement('dl');
+    dl.className = 'detail-meta';
+    for (const [label, value] of rows) {
+        const row = document.createElement('div');
+        row.className = 'detail-meta-row';
+        const dt = document.createElement('dt');
+        dt.textContent = label;
+        const dd = document.createElement('dd');
+        dd.textContent = value;
+        row.append(dt);
+        row.append(dd);
+        dl.append(row);
+    }
+    return dl;
 }
 
 /**
@@ -316,9 +350,6 @@ function renderDetail(deck, importedMeta) {
     const card = document.createElement('div');
     card.className = 'detail-card';
 
-    const chips = buildMetaChips(deck.meta);
-    if (chips) card.append(chips);
-
     const title = document.createElement('h2');
     title.className = 'detail-title';
     title.textContent = deck.title;
@@ -331,10 +362,7 @@ function renderDetail(deck, importedMeta) {
         card.append(desc);
     }
 
-    const metaLine = document.createElement('div');
-    metaLine.className = 'detail-meta-line';
-    metaLine.textContent = `Version ${deck.version} · ${formatBytes(deck.size)}`;
-    card.append(metaLine);
+    card.append(buildMetaTable(deck));
 
     if (importedMeta) {
         if (importedMeta.libraryVersion === deck.version) {
@@ -379,13 +407,6 @@ function renderDetail(deck, importedMeta) {
         heading.textContent = `Kategorien (${deck.categories.length})`;
         card.append(heading);
         card.append(buildCategoryList(deck.categories, deck.categories.length));
-    }
-
-    if (deck.meta && deck.meta.author) {
-        const author = document.createElement('div');
-        author.className = 'detail-author';
-        author.textContent = `Autor:in: ${deck.meta.author}`;
-        card.append(author);
     }
 
     const actions = document.createElement('div');
