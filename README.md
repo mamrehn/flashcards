@@ -4,26 +4,26 @@
 
 Repository statistics:
 
-| Type | Lines of Code |
-| ---- | ------------- |
-| 📜 JavaScript | ![JavaScript LOC](https://img.shields.io/endpoint?url=https://ghloc.vercel.app/api/mamrehn/flashcards/badge?filter=.js$&format=human) |
-| 🎨 HTML + CSS | ![HTML/CSS LOC](https://img.shields.io/endpoint?url=https://ghloc.vercel.app/api/mamrehn/flashcards/badge?filter=.html$,.css$&format=human) |
-| 🃏 Deck JSON | ![Deck JSON LOC](https://img.shields.io/endpoint?url=https://ghloc.vercel.app/api/mamrehn/flashcards/badge?filter=decks/.*\.json$&format=human) |
+| Type          | Lines of Code                                                                                                                                  |
+| ------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| 📜 JavaScript | ![JavaScript LOC](https://img.shields.io/endpoint?url=https://ghloc.vercel.app/api/mamrehn/flashcards/badge?filter=.js$&format=human)          |
+| 🎨 HTML + CSS | ![HTML/CSS LOC](https://img.shields.io/endpoint?url=https://ghloc.vercel.app/api/mamrehn/flashcards/badge?filter=.html$,.css$&format=human)    |
+| 🃏 Deck JSON  | ![Deck JSON LOC](https://img.shields.io/endpoint?url=https://ghloc.vercel.app/api/mamrehn/flashcards/badge?filter=decks/.*.json$&format=human) |
 
 **FlashCards** is a German-language flashcard Progressive Web App with two modes — a solo spaced-repetition study mode and a multiplayer quiz mode with host/player rooms over WebSocket. Built with vanilla JavaScript, HTML, and CSS — no frameworks, no build-time bundler on the client.
 
 **Key Features:**
 
-| | |
-|---|---|
-| 📚 **Two Modes** | Study alone with spaced repetition, or host a live multiplayer quiz |
-| 🗂️ **Bring Your Own Deck** | Upload `.json` or `.zip` deck files — or pick from the built-in library |
-| 🎯 **Study Modes** | Spaced repetition, incorrect-only, or read-through |
-| 📝 **Card Types** | Free-text and single/multiple choice, each with optional explanations |
-| 🌗 **Light / Dark Theme** | System-aware with manual override |
-| 📴 **Offline-first PWA** | Service worker with stale-while-revalidate and installable app shell |
-| 🛡️ **XSS-safe Rendering** | Central `sanitize.js` guards all user-supplied deck content |
-| ☁️ **Deployed via GitHub Pages** | CI minifies, inlines CSS/JS into HTML, and pushes to `gh-pages` |
+|                                  |                                                                         |
+| -------------------------------- | ----------------------------------------------------------------------- |
+| 📚 **Two Modes**                 | Study alone with spaced repetition, or host a live multiplayer quiz     |
+| 🗂️ **Bring Your Own Deck**       | Upload `.json` or `.zip` deck files — or pick from the built-in library |
+| 🎯 **Study Modes**               | Spaced repetition, incorrect-only, or read-through                      |
+| 📝 **Card Types**                | Free-text and single/multiple choice, each with optional explanations   |
+| 🌗 **Light / Dark Theme**        | System-aware with manual override                                       |
+| 📴 **Offline-first PWA**         | Service worker with stale-while-revalidate and installable app shell    |
+| 🛡️ **XSS-safe Rendering**        | Central `sanitize.js` guards all user-supplied deck content             |
+| ☁️ **Deployed via GitHub Pages** | CI minifies, inlines CSS/JS into HTML, and pushes to `gh-pages`         |
 
 ## Quick Start
 
@@ -50,32 +50,32 @@ A deck is JSON with a `meta` block and a `cards` array. Free-text and multiple-c
 
 ```jsonc
 {
-  "meta": {
-    "name": "Allgemeinwissen Mini-Quiz",
-    "subject": "Allgemeinwissen",
-    "gradeLevel": "Alle Klassen",
-    "learningUnit": "Kein Fach",
-    "description": "Beispiel-Deck.",
-    "author": "Flashcards Demo"
-  },
-  "cards": [
-    {
-      "categories": ["Geografie"],
-      "question": "Was ist die Hauptstadt von Deutschland?",
-      "answer": "Berlin",
-      "explanation": "Berlin ist seit 1990 die Hauptstadt."
+    "meta": {
+        "name": "Allgemeinwissen Mini-Quiz",
+        "subject": "Allgemeinwissen",
+        "gradeLevel": "Alle Klassen",
+        "learningUnit": "Kein Fach",
+        "description": "Beispiel-Deck.",
+        "author": "Flashcards Demo",
     },
-    {
-      "categories": ["Mathematik"],
-      "question": "Welche sind Primzahlen?",
-      "options": ["2", "4", "7", "9", "11"],
-      "correct": [0, 2, 4],
-      "explanations": {
-        "0": "2 ist die einzige gerade Primzahl.",
-        "1": "4 = 2×2, also nicht prim."
-      }
-    }
-  ]
+    "cards": [
+        {
+            "categories": ["Geografie"],
+            "question": "Was ist die Hauptstadt von Deutschland?",
+            "answer": "Berlin",
+            "explanation": "Berlin ist seit 1990 die Hauptstadt.",
+        },
+        {
+            "categories": ["Mathematik"],
+            "question": "Welche sind Primzahlen?",
+            "options": ["2", "4", "7", "9", "11"],
+            "correct": [0, 2, 4],
+            "explanations": {
+                "0": "2 ist die einzige gerade Primzahl.",
+                "1": "4 = 2×2, also nicht prim.",
+            },
+        },
+    ],
 }
 ```
 
@@ -99,20 +99,20 @@ The quiz mode uses a tiny WebSocket relay hosted on Fly.io. All quiz logic — s
 
 ## Repository Layout
 
-| Path | Purpose |
-| --- | --- |
-| [index.html](index.html) / [index.js](index.js) | Landing page — mode chooser |
-| [cards.html](cards.html) / [cards.js](cards.js) / [cards.css](cards.css) | Solo study mode |
-| [quiz.html](quiz.html) / [quiz.js](quiz.js) / [quiz.css](quiz.css) | Multiplayer quiz (host + player) |
-| [library.html](library.html) / [library.js](library.js) / [library.css](library.css) | Pre-made deck library |
-| [sanitize.js](sanitize.js) | Shared XSS-safe HTML rendering |
-| [theme.js](theme.js) / [theme.css](theme.css) | Light/dark theme handling |
-| [sw.js](sw.js) | Service worker (stale-while-revalidate) |
-| [manifest.json](manifest.json) | PWA manifest |
-| [decks/](decks/) | Sample decks and generated `library.json` manifest |
-| [server/](server/) | WebSocket relay (Node.js, deployed to Fly.io) |
-| [scripts/](scripts/) | Build-time helpers (library manifest generator) |
-| [.github/workflows/](.github/workflows/) | CI: minify + inline + deploy, server deploy |
+| Path                                                                                 | Purpose                                            |
+| ------------------------------------------------------------------------------------ | -------------------------------------------------- |
+| [index.html](index.html) / [index.js](index.js)                                      | Landing page — mode chooser                        |
+| [cards.html](cards.html) / [cards.js](cards.js) / [cards.css](cards.css)             | Solo study mode                                    |
+| [quiz.html](quiz.html) / [quiz.js](quiz.js) / [quiz.css](quiz.css)                   | Multiplayer quiz (host + player)                   |
+| [library.html](library.html) / [library.js](library.js) / [library.css](library.css) | Pre-made deck library                              |
+| [sanitize.js](sanitize.js)                                                           | Shared XSS-safe HTML rendering                     |
+| [theme.js](theme.js) / [theme.css](theme.css)                                        | Light/dark theme handling                          |
+| [sw.js](sw.js)                                                                       | Service worker (stale-while-revalidate)            |
+| [manifest.json](manifest.json)                                                       | PWA manifest                                       |
+| [decks/](decks/)                                                                     | Sample decks and generated `library.json` manifest |
+| [server/](server/)                                                                   | WebSocket relay (Node.js, deployed to Fly.io)      |
+| [scripts/](scripts/)                                                                 | Build-time helpers (library manifest generator)    |
+| [.github/workflows/](.github/workflows/)                                             | CI: minify + inline + deploy, server deploy        |
 
 ## Development
 

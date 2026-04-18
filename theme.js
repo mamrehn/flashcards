@@ -13,7 +13,10 @@
         if (stored === DARK || stored === LIGHT) {
             return stored;
         }
-        if (globalThis.matchMedia && globalThis.matchMedia('(prefers-color-scheme: dark)').matches) {
+        if (
+            globalThis.matchMedia &&
+            globalThis.matchMedia('(prefers-color-scheme: dark)').matches
+        ) {
             return DARK;
         }
         return LIGHT;
@@ -80,11 +83,13 @@
 
     // Listen for system preference changes
     if (globalThis.matchMedia) {
-        globalThis.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', function (e) {
-            if (!localStorage.getItem(STORAGE_KEY)) {
-                applyTheme(e.matches ? DARK : LIGHT);
-            }
-        });
+        globalThis
+            .matchMedia('(prefers-color-scheme: dark)')
+            .addEventListener('change', function (e) {
+                if (!localStorage.getItem(STORAGE_KEY)) {
+                    applyTheme(e.matches ? DARK : LIGHT);
+                }
+            });
     }
 
     // Create button once DOM is ready

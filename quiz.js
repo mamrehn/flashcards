@@ -492,7 +492,7 @@ async function initializeHostFeatures(reconnectInfo) {
 
         // File input change
         jsonFileInput.addEventListener('change', (event) => {
-            importFiles([...event.target.files || []]);
+            importFiles([...(event.target.files || [])]);
             event.target.value = '';
         });
 
@@ -1398,7 +1398,7 @@ async function initializeHostFeatures(reconnectInfo) {
 
         // Calculate option counts for display on host side
         const currentQuestion = quizState.shuffledQuestions[quizState.currentQuestionIndex];
-        const optionCounts = Array.from({length: currentQuestion.shuffledOptions.length}).fill(0);
+        const optionCounts = Array.from({ length: currentQuestion.shuffledOptions.length }).fill(0);
         for (const p of getNonHostPlayers()) {
             if (p.currentAnswer && Array.isArray(p.currentAnswer)) {
                 for (const ansIndex of p.currentAnswer) {
@@ -1528,20 +1528,18 @@ async function initializeHostFeatures(reconnectInfo) {
             const li = document.createElement('li');
             li.className = 'scoreboard-item';
             switch (idx) {
-            case 0: {
-            li.classList.add('rank-1');
-            break;
-            }
-            case 1: {
-            li.classList.add('rank-2');
-            break;
-            }
-            case 2: { {
-            li.classList.add('rank-3');
-            // No default
-            }
-            break;
-            }
+                case 0: {
+                    li.classList.add('rank-1');
+                    break;
+                }
+                case 1: {
+                    li.classList.add('rank-2');
+                    break;
+                }
+                case 2: {
+                    li.classList.add('rank-3');
+                    break;
+                }
             }
             li.innerHTML = `<span>${idx + 1}. ${sanitizeHTML(p.name)}</span><span>${Math.round(p.score)} Punkte</span>`;
             scoreboardListEl.append(li);
@@ -1594,7 +1592,6 @@ async function initializeHostFeatures(reconnectInfo) {
             leaderboard.append(i);
         }
     }
-
 }
 
 // --- Player State & Initialization Flag ---

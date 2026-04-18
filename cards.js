@@ -958,7 +958,10 @@ function validateCards(cards) {
  * @param {Array<string>} deckNames - Names of active decks
  */
 function updateAppTitle(deckNames) {
-    appTitle.textContent = deckNames.length === 1 ? `Lernkarten - ${deckNames[0]}` : `Lernkarten - ${deckNames.length} Decks kombiniert`;
+    appTitle.textContent =
+        deckNames.length === 1
+            ? `Lernkarten - ${deckNames[0]}`
+            : `Lernkarten - ${deckNames.length} Decks kombiniert`;
     // Hide the subtitle when a deck is active
     appSubtitle.style.display = 'none';
 }
@@ -1338,7 +1341,11 @@ function getSelectedCategoriesPerDeck() {
 function filterCardsByCategories(cards, selectedCategories) {
     if (selectedCategories === null) return cards; // null = all cards
     return cards.filter((card) => {
-        if (selectedCategories.has('__uncategorized__') && (!card.categories || card.categories.length === 0)) return true;
+        if (
+            selectedCategories.has('__uncategorized__') &&
+            (!card.categories || card.categories.length === 0)
+        )
+            return true;
         if (card.categories && card.categories.length > 0) {
             return card.categories.some((cat) => selectedCategories.has(cat));
         }
@@ -1471,7 +1478,7 @@ function initializeQuiz(loadedCards) {
     currentCardIndex = 0;
     correctCount = 0;
     incorrectCount = 0;
-    answeredCards = Array.from({length: cards.length}).fill(null);
+    answeredCards = Array.from({ length: cards.length }).fill(null);
 
     // Check if this is from SR buckets
     const isFromSRBuckets = activeDecks.length === 1 && activeDecks[0] === 'SR Buckets';
@@ -1738,33 +1745,33 @@ function updateCardContent(card) {
             // Keyboard handler for option items: Space/Enter toggle, Arrow navigation
             optionItem.addEventListener('keydown', (e) => {
                 switch (e.key) {
-                case ' ': 
-                case 'Enter': {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    toggleOption();
-                
-                break;
-                }
-                case 'ArrowDown': 
-                case 'ArrowRight': {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    const next = optionItem.nextElementSibling;
-                    if (next) next.focus();
-                
-                break;
-                }
-                case 'ArrowUp': 
-                case 'ArrowLeft': {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    const prev = optionItem.previousElementSibling;
-                    if (prev) prev.focus();
-                
-                break;
-                }
-                // No default
+                    case ' ':
+                    case 'Enter': {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        toggleOption();
+
+                        break;
+                    }
+                    case 'ArrowDown':
+                    case 'ArrowRight': {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        const next = optionItem.nextElementSibling;
+                        if (next) next.focus();
+
+                        break;
+                    }
+                    case 'ArrowUp':
+                    case 'ArrowLeft': {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        const prev = optionItem.previousElementSibling;
+                        if (prev) prev.focus();
+
+                        break;
+                    }
+                    // No default
                 }
             });
 
@@ -2166,27 +2173,30 @@ function markAnswer(scoreOrBool) {
         triggerConfetti();
     }
 
-    if (!isFullyCorrect && // Store the incorrect/partial card in the source deck's incorrect indices
-        deckName && savedDecks[deckName]) {
-            const originalDeckCards = savedDecks[deckName].cards;
-            const originalIndex = originalDeckCards.findIndex(
-                (c) =>
-                    c.question === card.question &&
-                    (c.answer === card.answer ||
-                        (Array.isArray(c.options) &&
-                            Array.isArray(card.options) &&
-                            JSON.stringify(c.options) === JSON.stringify(card.options)))
-            );
+    if (
+        !isFullyCorrect && // Store the incorrect/partial card in the source deck's incorrect indices
+        deckName &&
+        savedDecks[deckName]
+    ) {
+        const originalDeckCards = savedDecks[deckName].cards;
+        const originalIndex = originalDeckCards.findIndex(
+            (c) =>
+                c.question === card.question &&
+                (c.answer === card.answer ||
+                    (Array.isArray(c.options) &&
+                        Array.isArray(card.options) &&
+                        JSON.stringify(c.options) === JSON.stringify(card.options)))
+        );
 
-            if (originalIndex !== -1) {
-                if (!previousIncorrectIndices[deckName]) {
-                    previousIncorrectIndices[deckName] = [];
-                }
-                if (!previousIncorrectIndices[deckName].includes(originalIndex)) {
-                    previousIncorrectIndices[deckName].push(originalIndex);
-                }
+        if (originalIndex !== -1) {
+            if (!previousIncorrectIndices[deckName]) {
+                previousIncorrectIndices[deckName] = [];
+            }
+            if (!previousIncorrectIndices[deckName].includes(originalIndex)) {
+                previousIncorrectIndices[deckName].push(originalIndex);
             }
         }
+    }
 
     // Update incorrect indices in local storage
     updateIncorrectIndices();
@@ -2341,7 +2351,7 @@ function restartQuiz() {
     resetDeckStats(activeDecks);
 
     // Reset answered cards
-    answeredCards = Array.from({length: cards.length}).fill(null);
+    answeredCards = Array.from({ length: cards.length }).fill(null);
 
     // Prioritize incorrect cards again and reshuffle
     shuffleCards();
@@ -2519,7 +2529,7 @@ function updateSpacedRepetition(card, wasCorrect, score) {
     if (!data.history) data.history = [];
 
     // Record attempt (score: 0.0-1.0, or 1/0 for text cards)
-    data.history.push(score === undefined ? wasCorrect ? 1 : 0 : score);
+    data.history.push(score === undefined ? (wasCorrect ? 1 : 0) : score);
 
     if (wasCorrect) {
         if (data.repetitions === 0) {
