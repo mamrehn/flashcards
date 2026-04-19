@@ -17,10 +17,9 @@ primary_region = 'fra'
 
   [http_service.concurrency]
     type = 'connections'
-    hard_limit = 250
-    soft_limit = 200
+    hard_limit = 600
+    soft_limit = 575
 
 [[vm]]
-  memory = '256mb'
-  cpus = 1
-  memory_mb = 256
+  memory = '512mb'
+  cpus = 2
