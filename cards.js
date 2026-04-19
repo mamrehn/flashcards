@@ -682,7 +682,7 @@ function handleZipUpload(event) {
 
             // Process each file in the ZIP
             const promises = [];
-            for (const [zipEntry, relativePath] of zipContent.entries()) {
+            for (const [relativePath, zipEntry] of Object.entries(zipContent.files)) {
                 if (!zipEntry.dir && relativePath.endsWith('.json')) {
                     const promise = zipEntry.async('string').then((content) => {
                         try {
