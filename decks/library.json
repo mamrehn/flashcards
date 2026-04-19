@@ -1,231 +1,220 @@
 {
-  "generatedAt": "2026-04-18T14:48:20.339Z",
-  "deckCount": 5,
-  "decks": [
-    {
-      "id": "fu-it10-ls1-mac-ip-subnetting-lernkarten",
-      "filename": "FU-IT10_LS1_MAC_IP_Subnetting_Lernkarten.zip",
-      "title": "Subnetting und IP-Adressen",
-      "meta": {
-        "name": "Subnetting und IP-Adressen",
-        "subject": "FU-IT",
-        "gradeLevel": "IF10",
-        "learningUnit": "LS1",
-        "description": "MAC- und IPv4-Adressen, Aufteilung in Netz- und Hostanteil sowie Subnetting mit Subnetzmasken und CIDR-Notation.",
-        "author": "Mario Amrehn"
-      },
-      "version": "cd5eca394d7c",
-      "size": 9018,
-      "questionCount": 60,
-      "invalidCount": 0,
-      "types": {
-        "text": 30,
-        "multipleChoice": 30
-      },
-      "categories": [],
-      "sourceFiles": [
-        "FU-IT10_LS1_MAC_IP_Subnetting_MC.json",
-        "FU-IT10_LS1_MAC_IP_Subnetting_text.json"
-      ]
-    },
-    {
-      "id": "fu-it10-ls2-nw-planung-lernkarten",
-      "filename": "FU-IT10_LS2_NW_Planung_Lernkarten.zip",
-      "title": "Netzwerkplanung",
-      "meta": {
-        "name": "Netzwerkplanung",
-        "subject": "FU-IT",
-        "gradeLevel": "IF10",
-        "learningUnit": "LS2",
-        "description": "Planung realer Netzwerke: Topologien, strukturierte Verkabelung, Verkabelungs- und Gebäudeplan, Netzwerkschrank, Kabelschirmung und Projektdokumentation.",
-        "author": "Mario Amrehn"
-      },
-      "version": "f128effc4466",
-      "size": 21047,
-      "questionCount": 70,
-      "invalidCount": 0,
-      "types": {
-        "text": 40,
-        "multipleChoice": 30
-      },
-      "categories": [
+    "generatedAt": "2026-04-18T14:48:20.339Z",
+    "deckCount": 5,
+    "decks": [
         {
-          "name": "Netzwerktopologien",
-          "count": 17
+            "id": "fu-it10-ls1-mac-ip-subnetting-lernkarten",
+            "filename": "FU-IT10_LS1_MAC_IP_Subnetting_Lernkarten.zip",
+            "title": "Subnetting und IP-Adressen",
+            "meta": {
+                "name": "Subnetting und IP-Adressen",
+                "subject": "FU-IT",
+                "gradeLevel": "IF10",
+                "learningUnit": "LS1",
+                "description": "MAC- und IPv4-Adressen, Aufteilung in Netz- und Hostanteil sowie Subnetting mit Subnetzmasken und CIDR-Notation.",
+                "author": "Mario Amrehn"
+            },
+            "version": "cd5eca394d7c",
+            "size": 9018,
+            "questionCount": 60,
+            "invalidCount": 0,
+            "types": {
+                "text": 30,
+                "multipleChoice": 30
+            },
+            "categories": [],
+            "sourceFiles": [
+                "FU-IT10_LS1_MAC_IP_Subnetting_MC.json",
+                "FU-IT10_LS1_MAC_IP_Subnetting_text.json"
+            ]
         },
         {
-          "name": "Verkabelungsplan und Gebäudeplan",
-          "count": 14
+            "id": "fu-it10-ls2-nw-planung-lernkarten",
+            "filename": "FU-IT10_LS2_NW_Planung_Lernkarten.zip",
+            "title": "Netzwerkplanung",
+            "meta": {
+                "name": "Netzwerkplanung",
+                "subject": "FU-IT",
+                "gradeLevel": "IF10",
+                "learningUnit": "LS2",
+                "description": "Planung realer Netzwerke: Topologien, strukturierte Verkabelung, Verkabelungs- und Gebäudeplan, Netzwerkschrank, Kabelschirmung und Projektdokumentation.",
+                "author": "Mario Amrehn"
+            },
+            "version": "f128effc4466",
+            "size": 21047,
+            "questionCount": 70,
+            "invalidCount": 0,
+            "types": {
+                "text": 40,
+                "multipleChoice": 30
+            },
+            "categories": [
+                {
+                    "name": "Netzwerktopologien",
+                    "count": 17
+                },
+                {
+                    "name": "Verkabelungsplan und Gebäudeplan",
+                    "count": 14
+                },
+                {
+                    "name": "Kabel und Schirmung",
+                    "count": 11
+                },
+                {
+                    "name": "Strukturierte Verkabelung",
+                    "count": 11
+                },
+                {
+                    "name": "Projektdokumentation",
+                    "count": 10
+                },
+                {
+                    "name": "Netzwerkschrank",
+                    "count": 9
+                },
+                {
+                    "name": "Logischer Netzwerkplan",
+                    "count": 8
+                }
+            ],
+            "sourceFiles": ["LS2_Netzwerkplanung_Freitext.json", "LS2_Netzwerkplanung_MC.json"]
         },
         {
-          "name": "Kabel und Schirmung",
-          "count": 11
+            "id": "fu-it10-ls3-switch-lernkarten",
+            "filename": "FU-IT10_LS3_Switch_Lernkarten.zip",
+            "title": "Switch Grundlagen",
+            "meta": {
+                "name": "Switch Grundlagen",
+                "subject": "FU-IT",
+                "gradeLevel": "IF10",
+                "learningUnit": "LS3",
+                "description": "Funktionsweise von Switches: Ethernet-Frame, MAC-Adresstabelle (SAT), ARP und Switching-Verfahren (Store-and-Forward, Cut-Through).",
+                "author": "Mario Amrehn"
+            },
+            "version": "abbde580c4e7",
+            "size": 14711,
+            "questionCount": 49,
+            "invalidCount": 0,
+            "types": {
+                "text": 23,
+                "multipleChoice": 26
+            },
+            "categories": [
+                {
+                    "name": "Switch Grundlagen",
+                    "count": 20
+                },
+                {
+                    "name": "Ethernet Frame",
+                    "count": 12
+                },
+                {
+                    "name": "SAT Forwarding",
+                    "count": 12
+                },
+                {
+                    "name": "ARP",
+                    "count": 11
+                },
+                {
+                    "name": "Switching Verfahren",
+                    "count": 6
+                }
+            ],
+            "sourceFiles": ["LS3_Switch_Freitext.json", "LS3_Switch_MC.json"]
         },
         {
-          "name": "Strukturierte Verkabelung",
-          "count": 11
+            "id": "itt11-ls1-cps-linux-python-lernkarten",
+            "filename": "ITT11_LS1_CPS_Linux_Python_Lernkarten.zip",
+            "title": "Cyber-physische Systeme mit Linux & Python",
+            "meta": {
+                "name": "Cyber-physische Systeme mit Linux & Python",
+                "subject": "ITT",
+                "gradeLevel": "IF11",
+                "learningUnit": "LS1",
+                "description": "Cyber-physische Systeme und IoT/Industrie 4.0 mit Grundlagen zu Linux-Kommandozeile und Python-Programmierung.",
+                "author": "Mario Amrehn"
+            },
+            "version": "8202d8365487",
+            "size": 21998,
+            "questionCount": 63,
+            "invalidCount": 0,
+            "types": {
+                "text": 21,
+                "multipleChoice": 42
+            },
+            "categories": [
+                {
+                    "name": "Cyber-physische Systeme",
+                    "count": 36
+                },
+                {
+                    "name": "Python Grundlagen",
+                    "count": 12
+                },
+                {
+                    "name": "CPS Grundlagen",
+                    "count": 11
+                },
+                {
+                    "name": "IoT und Industrie 4.0",
+                    "count": 11
+                },
+                {
+                    "name": "CPS Anwendungen",
+                    "count": 9
+                },
+                {
+                    "name": "CPS Herausforderungen",
+                    "count": 9
+                },
+                {
+                    "name": "Linux Grundlagen",
+                    "count": 8
+                },
+                {
+                    "name": "CPS Modellierung",
+                    "count": 6
+                }
+            ],
+            "sourceFiles": ["ITT11_LS1_CPS_Freitext.json", "ITT11_LS1_CPS_Linux_Python_MC.json"]
         },
         {
-          "name": "Projektdokumentation",
-          "count": 10
-        },
-        {
-          "name": "Netzwerkschrank",
-          "count": 9
-        },
-        {
-          "name": "Logischer Netzwerkplan",
-          "count": 8
+            "id": "beispiel-allgemeinwissen",
+            "filename": "beispiel-allgemeinwissen.json",
+            "title": "Allgemeinwissen Mini-Quiz",
+            "meta": {
+                "name": "Allgemeinwissen Mini-Quiz",
+                "subject": "Allgemeinwissen",
+                "gradeLevel": "Alle Klassen",
+                "learningUnit": "Kein Fach",
+                "description": "Beispiel-Deck zur Demonstration des Bibliotheks-Formats. Vermischt Geografie, Mathematik und Naturwissenschaft.",
+                "author": "Flashcards Demo"
+            },
+            "version": "064682645c4f",
+            "size": 1532,
+            "questionCount": 5,
+            "invalidCount": 0,
+            "types": {
+                "text": 3,
+                "multipleChoice": 2
+            },
+            "categories": [
+                {
+                    "name": "Geografie",
+                    "count": 2
+                },
+                {
+                    "name": "Naturwissenschaft",
+                    "count": 2
+                },
+                {
+                    "name": "Mathematik",
+                    "count": 1
+                }
+            ],
+            "sourceFiles": ["beispiel-allgemeinwissen.json"]
         }
-      ],
-      "sourceFiles": [
-        "LS2_Netzwerkplanung_Freitext.json",
-        "LS2_Netzwerkplanung_MC.json"
-      ]
-    },
-    {
-      "id": "fu-it10-ls3-switch-lernkarten",
-      "filename": "FU-IT10_LS3_Switch_Lernkarten.zip",
-      "title": "Switch Grundlagen",
-      "meta": {
-        "name": "Switch Grundlagen",
-        "subject": "FU-IT",
-        "gradeLevel": "IF10",
-        "learningUnit": "LS3",
-        "description": "Funktionsweise von Switches: Ethernet-Frame, MAC-Adresstabelle (SAT), ARP und Switching-Verfahren (Store-and-Forward, Cut-Through).",
-        "author": "Mario Amrehn"
-      },
-      "version": "abbde580c4e7",
-      "size": 14711,
-      "questionCount": 49,
-      "invalidCount": 0,
-      "types": {
-        "text": 23,
-        "multipleChoice": 26
-      },
-      "categories": [
-        {
-          "name": "Switch Grundlagen",
-          "count": 20
-        },
-        {
-          "name": "Ethernet Frame",
-          "count": 12
-        },
-        {
-          "name": "SAT Forwarding",
-          "count": 12
-        },
-        {
-          "name": "ARP",
-          "count": 11
-        },
-        {
-          "name": "Switching Verfahren",
-          "count": 6
-        }
-      ],
-      "sourceFiles": [
-        "LS3_Switch_Freitext.json",
-        "LS3_Switch_MC.json"
-      ]
-    },
-    {
-      "id": "itt11-ls1-cps-linux-python-lernkarten",
-      "filename": "ITT11_LS1_CPS_Linux_Python_Lernkarten.zip",
-      "title": "Cyber-physische Systeme mit Linux & Python",
-      "meta": {
-        "name": "Cyber-physische Systeme mit Linux & Python",
-        "subject": "ITT",
-        "gradeLevel": "IF11",
-        "learningUnit": "LS1",
-        "description": "Cyber-physische Systeme und IoT/Industrie 4.0 mit Grundlagen zu Linux-Kommandozeile und Python-Programmierung.",
-        "author": "Mario Amrehn"
-      },
-      "version": "8202d8365487",
-      "size": 21998,
-      "questionCount": 63,
-      "invalidCount": 0,
-      "types": {
-        "text": 21,
-        "multipleChoice": 42
-      },
-      "categories": [
-        {
-          "name": "Cyber-physische Systeme",
-          "count": 36
-        },
-        {
-          "name": "Python Grundlagen",
-          "count": 12
-        },
-        {
-          "name": "CPS Grundlagen",
-          "count": 11
-        },
-        {
-          "name": "IoT und Industrie 4.0",
-          "count": 11
-        },
-        {
-          "name": "CPS Anwendungen",
-          "count": 9
-        },
-        {
-          "name": "CPS Herausforderungen",
-          "count": 9
-        },
-        {
-          "name": "Linux Grundlagen",
-          "count": 8
-        },
-        {
-          "name": "CPS Modellierung",
-          "count": 6
-        }
-      ],
-      "sourceFiles": [
-        "ITT11_LS1_CPS_Freitext.json",
-        "ITT11_LS1_CPS_Linux_Python_MC.json"
-      ]
-    },
-    {
-      "id": "beispiel-allgemeinwissen",
-      "filename": "beispiel-allgemeinwissen.json",
-      "title": "Allgemeinwissen Mini-Quiz",
-      "meta": {
-        "name": "Allgemeinwissen Mini-Quiz",
-        "subject": "Allgemeinwissen",
-        "gradeLevel": "Alle Klassen",
-        "learningUnit": "Kein Fach",
-        "description": "Beispiel-Deck zur Demonstration des Bibliotheks-Formats. Vermischt Geografie, Mathematik und Naturwissenschaft.",
-        "author": "Flashcards Demo"
-      },
-      "version": "064682645c4f",
-      "size": 1532,
-      "questionCount": 5,
-      "invalidCount": 0,
-      "types": {
-        "text": 3,
-        "multipleChoice": 2
-      },
-      "categories": [
-        {
-          "name": "Geografie",
-          "count": 2
-        },
-        {
-          "name": "Naturwissenschaft",
-          "count": 2
-        },
-        {
-          "name": "Mathematik",
-          "count": 1
-        }
-      ],
-      "sourceFiles": [
-        "beispiel-allgemeinwissen.json"
-      ]
-    }
-  ]
+    ]
 }
