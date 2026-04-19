@@ -3262,6 +3262,16 @@ function displaySpacedRepetitionBuckets() {
     // Always render dashboard (even if empty — shows deck count)
     renderSRDashboard();
 
+    // Save current expanded and selected state before overwriting
+    const expandedIntervals = new Set(
+        Array.from(document.querySelectorAll('.sr-bucket-cards.expanded'))
+            .map((el) => Number.parseInt(el.id.replace('bucket-cards-', '')))
+    );
+    const selectedIntervals = new Set(
+        Array.from(document.querySelectorAll('.sr-bucket.selected'))
+            .map((el) => Number.parseInt(el.dataset.interval))
+    );
+
     // Check if there are any cards with SR data
     if (Object.keys(spacedRepetitionData).length === 0) {
         srBucketsDisplay.innerHTML =
@@ -3314,19 +3324,23 @@ function displaySpacedRepetitionBuckets() {
         const cards = buckets[interval];
         const intervalLabel = getIntervalLabel(interval);
         const overdueCount = cards.filter((c) => c.isOverdue).length;
+        
+        const isExpanded = expandedIntervals.has(interval) ? 'expanded' : '';
+        const isSelected = selectedIntervals.has(interval) ? 'selected' : '';
+        const isChecked = selectedIntervals.has(interval) ? 'checked' : '';
 
         html += `
-            <div class="sr-bucket" data-interval="${interval}">
+            <div class="sr-bucket ${isSelected}" data-interval="${interval}">
                 <div class="sr-bucket-header" onclick="toggleBucketExpansion(${interval})">
                     <div class="sr-bucket-info">
-                        <input type="checkbox" class="sr-bucket-checkbox" onclick="event.stopPropagation(); toggleBucketSelection(${interval})" data-interval="${interval}">
+                        <input type="checkbox" class="sr-bucket-checkbox" onclick="event.stopPropagation(); toggleBucketSelection(${interval})" data-interval="${interval}" ${isChecked}>
                         <span class="sr-bucket-title">${intervalLabel}</span>
                         <span class="sr-bucket-count">${cards.length} Karten${overdueCount > 0 ? ` (${overdueCount} fällig)` : ''}</span>
                     </div>
                     <button class="sr-bucket-book-btn" onclick="event.stopPropagation(); openBookViewForBucket(${interval})" title="Buchansicht">📖</button>
                     <span class="sr-bucket-interval">${interval} Tag${interval === 1 ? '' : 'e'}</span>
                 </div>
-                <div class="sr-bucket-cards" id="bucket-cards-${interval}">
+                <div class="sr-bucket-cards ${isExpanded}" id="bucket-cards-${interval}">
                     ${cards
                         .map(
                             ({ key, card, data, isOverdue }) => `
