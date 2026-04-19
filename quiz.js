@@ -428,7 +428,7 @@ async function initializeHostFeatures(reconnectInfo) {
                         const buffer = await readFileBuffer(file);
                         const zip = await JSZip.loadAsync(buffer);
                         const entries = [];
-                        for (const [entry, relPath] of zip.entries()) {
+                        for (const [relPath, entry] of Object.entries(zip.files)) {
                             if (!entry.dir && relPath.toLowerCase().endsWith('.json')) {
                                 entries.push(entry);
                             }
