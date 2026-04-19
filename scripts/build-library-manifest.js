@@ -163,7 +163,7 @@ async function processDeckFile(filePath) {
     // Sort categories by count descending, then name ascending for stable output.
     const categories = [...categoryCounts.entries()]
         .map(([name, count]) => ({ name, count }))
-        .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name, 'de'));
+        .toSorted((a, b) => b.count - a.count || a.name.localeCompare(b.name, 'de'));
 
     return {
         id,
@@ -176,7 +176,7 @@ async function processDeckFile(filePath) {
         invalidCount: totalCards - validCards,
         types: { text: textCards, multipleChoice: mcCards },
         categories,
-        sourceFiles: sourceFiles.sort(),
+        sourceFiles: sourceFiles.toSorted(),
     };
 }
 
@@ -193,7 +193,7 @@ async function main() {
         .readdirSync(DECKS_DIR)
         .filter((f) => /\.(zip|json)$/i.test(f) && f.toLowerCase() !== 'library.json')
         .map((f) => path.join(DECKS_DIR, f))
-        .sort();
+        .toSorted();
 
     const decks = [];
     const seenIds = new Set();

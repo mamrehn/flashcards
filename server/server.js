@@ -158,7 +158,7 @@ wss.on('connection', (ws) => {
 
         switch (msg.type) {
             case 'create_room': {
-                handleCreateRoom(ws, msg);
+                handleCreateRoom(ws);
                 break;
             }
             case 'reconnect_host': {
@@ -186,7 +186,7 @@ wss.on('connection', (ws) => {
                 break;
             }
             case 'terminate': {
-                handleTerminate(ws, msg);
+                handleTerminate(ws);
                 break;
             }
             default: {
@@ -370,7 +370,7 @@ function handleRestoreRoom(ws, msg) {
                 room.players.set(p.id, {
                     name: sanitizeName(p.name),
                     score:
-                        typeof p.score === 'number' && isFinite(p.score) && p.score >= 0
+                        typeof p.score === 'number' && Number.isFinite(p.score) && p.score >= 0
                             ? p.score
                             : 0,
                     ws: null,
@@ -578,7 +578,7 @@ function handleSendResults(ws, msg) {
     if (msg.playerScores) {
         for (const [sid, score] of Object.entries(msg.playerScores)) {
             const player = room.players.get(sid);
-            if (player && typeof score === 'number' && isFinite(score) && score >= 0) {
+            if (player && typeof score === 'number' && Number.isFinite(score) && score >= 0) {
                 player.score = score;
             }
         }
@@ -589,7 +589,7 @@ function handleSendResults(ws, msg) {
     if (Array.isArray(msg.leaderboard)) {
         leaderboard = msg.leaderboard.slice(0, MAX_PLAYERS_PER_ROOM).map((entry) => ({
             name: typeof entry.name === 'string' ? entry.name.slice(0, 50) : 'Spieler',
-            score: typeof entry.score === 'number' && isFinite(entry.score) ? entry.score : 0,
+            score: typeof entry.score === 'number' && Number.isFinite(entry.score) ? entry.score : 0,
         }));
     }
 

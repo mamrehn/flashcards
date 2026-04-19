@@ -49,7 +49,7 @@ function showMessage(message, type = 'info') {
  */
 function showView(viewToShowId) {
     for (const view of document.querySelectorAll('.view')) view.classList.remove('active');
-    const viewElement = document.getElementById(viewToShowId);
+    const viewElement = document.querySelector(`#${CSS.escape(viewToShowId)}`);
     if (viewElement) viewElement.classList.add('active');
     else console.error('View not found:', viewToShowId);
 
@@ -379,7 +379,7 @@ async function initializeHostFeatures(reconnectInfo) {
             } else if (data && Array.isArray(data.questions)) {
                 candidates = data.questions;
             }
-            return candidates.filter(isValidMCQuestion);
+            return candidates.filter((q) => isValidMCQuestion(q));
         };
 
         // Reads a single File as text
@@ -592,7 +592,7 @@ async function initializeHostFeatures(reconnectInfo) {
             }
             const dMin = Number.parseInt(durationMinInput.value, 10);
             const dMax = Number.parseInt(durationMaxInput.value, 10);
-            if (isNaN(dMin) || isNaN(dMax) || dMin < 5 || dMax > 80 || dMin > dMax) {
+            if (Number.isNaN(dMin) || Number.isNaN(dMax) || dMin < 5 || dMax > 80 || dMin > dMax) {
                 showMessage('Bitte gültige Fragedauer eingeben: Min 5-80, Max >= Min.', 'error');
                 return;
             }
@@ -1567,7 +1567,7 @@ async function initializeHostFeatures(reconnectInfo) {
     function getLeaderboardData() {
         return getNonHostPlayers()
             .map((p) => ({ name: p.name, score: p.score }))
-            .sort((a, b) => b.score - a.score);
+            .toSorted((a, b) => b.score - a.score);
     }
 
     /**
@@ -1604,7 +1604,6 @@ let playerCurrentQuestionOptions = [];
 let selectedAnswers = [];
 let playerHasSubmitted = false;
 let playerScore = 0;
-let playerQuestionStartTime = null;
 let playerCurrentQuestionIndex = -1;
 let playerBeforeUnloadHandler = null;
 
@@ -1687,14 +1686,6 @@ function getPlayerSession(roomId) {
         localStorage.removeItem(key);
         return null;
     }
-}
-
-/**
- * Clears player session data from localStorage.
- * @param {string} roomId - The room ID.
- */
-function clearPlayerSession(roomId) {
-    localStorage.removeItem(getPlayerStorageKey(roomId));
 }
 
 // --- Active Session Helpers (for auto-reconnect on page load) ---
@@ -1978,8 +1969,6 @@ function initializePlayerFeatures(reconnectInfo) {
                                 playerCurrentQuestionOptions = msg.options;
                                 selectedAnswers = [];
                                 playerCurrentQuestionIndex = msg.index;
-                                // Use local clock for timer — immune to clock skew
-                                playerQuestionStartTime = Date.now();
                                 displayQuestion(msg);
                                 startPlayerTimer(msg.duration);
                                 break;
@@ -2292,7 +2281,6 @@ function initializePlayerFeatures(reconnectInfo) {
         playerScore = 0;
         selectedAnswers = [];
         playerCurrentQuestionOptions = [];
-        playerQuestionStartTime = null;
         playerCurrentQuestionIndex = -1;
         playerRoomId = null;
         playerCurrentId = null;

@@ -66,7 +66,7 @@ function sanitizePlayerName(name) {
 
     // Only allow letters, numbers, spaces, and basic punctuation
     // This inherently strips any HTML tags or dangerous characters
-    sanitized = sanitized.replaceAll(/[^a-zA-Z0-9äöüÄÖÜß\s\-_\.]/g, '');
+    sanitized = sanitized.replaceAll(/[^a-zA-Z0-9äöüÄÖÜß\s\-_.]/g, '');
 
     return sanitized;
 }
@@ -184,7 +184,7 @@ function setSafeText(element, text) {
  */
 function sanitizeParsedJSON(obj) {
     if (obj === null || typeof obj !== 'object') return obj;
-    if (Array.isArray(obj)) return obj.map(sanitizeParsedJSON);
+    if (Array.isArray(obj)) return obj.map((item) => sanitizeParsedJSON(item));
 
     const clean = {};
     for (const key of Object.keys(obj)) {

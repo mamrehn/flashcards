@@ -10,7 +10,6 @@
 const MANIFEST_URL = 'decks/library.json';
 const SAVED_DECKS_KEY = 'flashcardDecks';
 const LIBRARY_META_KEY = 'flashcardLibraryMeta';
-const SR_KEY = 'spacedRepetitionData';
 
 let manifest = null;
 
@@ -554,7 +553,7 @@ async function importDeckFromLibrary(deckMeta) {
             continue;
         }
         if (!data || !Array.isArray(data.cards)) continue;
-        const validCards = data.cards.filter(isValidCard);
+        const validCards = data.cards.filter((c) => isValidCard(c));
         if (validCards.length === 0) continue;
 
         const deckName = entry.name

@@ -103,7 +103,6 @@ let userAnswerDisplay;
 let optionsContainer;
 let optionsContainerBack;
 let selectedOptionsContainer;
-let selectedOptionsDisplay;
 let mcCorrectAnswerContainer;
 let mcCorrectAnswerText;
 let standardAnswerContainer;
@@ -127,7 +126,6 @@ let returnToSrBtn;
 let errorMessageElement;
 let flipCard;
 let cardContainer;
-let savedDecksContainer;
 let startSelectedDecksBtn;
 let selectAllDecksBtn;
 let deselectAllDecksBtn;
@@ -174,7 +172,6 @@ function initializeApp() {
     optionsContainer = document.querySelector('#options-container');
     optionsContainerBack = document.querySelector('#options-container-back');
     selectedOptionsContainer = document.querySelector('#selected-options-container');
-    selectedOptionsDisplay = document.querySelector('#selected-options-display');
     mcCorrectAnswerContainer = document.querySelector('#mc-correct-answer-container');
     mcCorrectAnswerText = document.querySelector('#mc-correct-answer-text');
     standardAnswerContainer = document.querySelector('#standard-answer-container');
@@ -198,7 +195,6 @@ function initializeApp() {
     errorMessageElement = document.querySelector('#error-message');
     flipCard = document.querySelector('#flip-card');
     cardContainer = document.querySelector('#card-container');
-    savedDecksContainer = document.querySelector('#saved-decks');
     startSelectedDecksBtn = document.querySelector('#start-selected-decks');
     selectAllDecksBtn = document.querySelector('#select-all-decks');
     deselectAllDecksBtn = document.querySelector('#deselect-all-decks');
@@ -555,6 +551,10 @@ globalThis.toggleBucketExpansion = toggleBucketExpansion;
 globalThis.toggleBucketSelection = toggleBucketSelection;
 globalThis.moveSRCard = moveSRCard;
 globalThis.deleteSRCard = deleteSRCard;
+globalThis.toggleJsonSample = toggleJsonSample;
+globalThis.openBookViewForBucket = openBookViewForBucket;
+globalThis.handleMoveSRCard = handleMoveSRCard;
+globalThis.handleDeleteSRCard = handleDeleteSRCard;
 
 /**
  * Set up drop zone for drag-and-drop file import
@@ -1179,7 +1179,7 @@ function displaySavedDecks(searchTerm = '', preselectDeckNames = []) {
             const catContainer = document.createElement('div');
             catContainer.className = 'deck-categories';
 
-            const sortedCategories = [...categories.entries()].sort((a, b) => {
+            const sortedCategories = [...categories.entries()].toSorted((a, b) => {
                 if (a[0] === '__uncategorized__') return 1;
                 if (b[0] === '__uncategorized__') return -1;
                 return a[0].localeCompare(b[0], 'de');
@@ -1266,7 +1266,7 @@ function onCategoryCheckboxChange(deckName) {
     );
     if (catCheckboxes.length === 0) return;
 
-    const deckCheckbox = document.getElementById(`deck-checkbox-${deckName}`);
+    const deckCheckbox = document.querySelector(`#deck-checkbox-${CSS.escape(deckName)}`);
     if (!deckCheckbox) return;
 
     const checkedCount = [...catCheckboxes].filter((cb) => cb.checked).length;
@@ -1494,7 +1494,7 @@ function initializeQuiz(loadedCards) {
         // Apply "Nur falsche wiederholen" filter at quiz start — the dropdown
         // is hidden during active quizzes, so this can only take effect here.
         if (studyMode === 'incorrect-only') {
-            const incorrectCards = cards.filter(isCardIncorrectFromPreviousSession);
+            const incorrectCards = cards.filter((c) => isCardIncorrectFromPreviousSession(c));
             if (incorrectCards.length === 0) {
                 showError('Keine falsch beantworteten Karten gefunden.');
                 return;
@@ -2107,20 +2107,6 @@ function showAnswer() {
 }
 
 /**
- * Compare two arrays for equality
- * @param {Array} a - First array
- * @param {Array} b - Second array
- * @returns {boolean} True if arrays are equal
- */
-function arraysEqual(a, b) {
-    if (a.length !== b.length) return false;
-    for (const [i, element] of a.entries()) {
-        if (element !== b[i]) return false;
-    }
-    return true;
-}
-
-/**
  * Format a score for display: show as integer if whole, otherwise one decimal
  * @param {number} value - Score value
  * @returns {string} Formatted score
@@ -2670,7 +2656,7 @@ function captureUndoSnapshot(card, score) {
         deckStatsSnapshot: deckStats[deckName] ? { ...deckStats[deckName] } : null,
         deckName: deckName,
         srDataSnapshot: spacedRepetitionData[key]
-            ? JSON.parse(JSON.stringify(spacedRepetitionData[key]))
+            ? structuredClone(spacedRepetitionData[key])
             : null,
         srKey: key,
         previousIncorrectSnapshot: previousIncorrectIndices[deckName]
@@ -3042,13 +3028,13 @@ function exportToAnki() {
             front += '<br><br>';
             front += card.options
                 .map((opt, i) => {
-                    const letter = String.fromCharCode(65 + i); // A, B, C...
+                    const letter = String.fromCodePoint(65 + i); // A, B, C...
                     return `${letter}) ${escapeAnkiField(opt)}`;
                 })
                 .join('<br>');
 
             const correctLabels = (card.correct || []).map((i) => {
-                const letter = String.fromCharCode(65 + i);
+                const letter = String.fromCodePoint(65 + i);
                 return `${letter}) ${escapeAnkiField(card.options[i])}`;
             });
             back = correctLabels.join('<br>');
@@ -3057,7 +3043,7 @@ function exportToAnki() {
             if (card.explanations) {
                 const explanationParts = [];
                 for (const [idx, text] of Object.entries(card.explanations)) {
-                    const letter = String.fromCharCode(65 + Number.parseInt(idx));
+                    const letter = String.fromCodePoint(65 + Number.parseInt(idx));
                     explanationParts.push(`${letter}: ${escapeAnkiField(text)}`);
                 }
                 if (explanationParts.length > 0) {
@@ -3287,8 +3273,6 @@ function displaySpacedRepetitionBuckets() {
     // Group cards by interval
     const buckets = {};
     const now = new Date();
-    let cardsNotFound = 0;
-
     for (const [key, data] of Object.entries(spacedRepetitionData)) {
         const intervalKey = data.interval;
         if (!buckets[intervalKey]) {
@@ -3306,7 +3290,6 @@ function displaySpacedRepetitionBuckets() {
             });
         } else {
             console.warn('Card not found for key:', key);
-            cardsNotFound++;
             // Still add it with the key as the question
             buckets[intervalKey].push({
                 key,
@@ -3323,7 +3306,7 @@ function displaySpacedRepetitionBuckets() {
     // Sort buckets by interval
     const sortedIntervals = Object.keys(buckets)
         .map(Number)
-        .sort((a, b) => a - b);
+        .toSorted((a, b) => a - b);
 
     // Build HTML
     let html = '';
@@ -3393,7 +3376,7 @@ function getIntervalLabel(interval) {
  * @param interval
  */
 function toggleBucketExpansion(interval) {
-    const cardsContainer = document.getElementById(`bucket-cards-${interval}`);
+    const cardsContainer = document.querySelector(`#bucket-cards-${interval}`);
     cardsContainer.classList.toggle('expanded');
 }
 
@@ -3560,7 +3543,7 @@ function moveSRCard(cardKey, currentInterval) {
     }
 
     const interval = Number.parseInt(trimmed);
-    if (isNaN(interval) || interval < 1 || interval > 365) {
+    if (Number.isNaN(interval) || interval < 1 || interval > 365) {
         showError('Bitte gib eine gültige Anzahl von Tagen ein (1-365).');
         return;
     }
