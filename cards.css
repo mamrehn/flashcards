@@ -1205,6 +1205,7 @@ body {
 
 .sr-bucket-cards.expanded {
     max-height: 1000px;
+    overflow-y: auto;
 }
 
 .sr-card-item {
