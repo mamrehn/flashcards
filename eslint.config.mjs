@@ -8,13 +8,15 @@ import prettierPlugin from 'eslint-config-prettier';
 // Globals provided to browser bundles via <script> tags rather than imports:
 //   - JSZip / QRCode load from CDN
 //   - sanitize.js exposes sanitizeHTML/sanitizeParsedJSON/sanitizePlayerName
-//     to cards.js, quiz.js, library.js
+//   - logger.js exposes a no-op-in-prod debug logger
+//     to cards.js, quiz.js, library.js, index.js
 const browserScriptTagGlobals = {
     JSZip: 'readonly',
     QRCode: 'readonly',
     sanitizeHTML: 'readonly',
     sanitizeParsedJSON: 'readonly',
     sanitizePlayerName: 'readonly',
+    logger: 'readonly',
 };
 
 export default [
@@ -34,7 +36,10 @@ export default [
             },
         },
         rules: {
-            'no-console': 'warn',
+            // Errors and warnings should remain visible in production builds —
+            // diagnostic chatter (`log`/`debug`/`info`) goes through `logger.*`
+            // (see logger.js), which is gated by env / localStorage.
+            'no-console': ['warn', { allow: ['warn', 'error'] }],
             eqeqeq: 'error',
             complexity: ['warn', { max: 15 }],
             'unicorn/prevent-abbreviations': 'off',

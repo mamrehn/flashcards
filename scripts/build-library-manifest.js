@@ -34,7 +34,10 @@ function slugify(str) {
         .replaceAll('ü', 'ue')
         .replaceAll('ß', 'ss')
         .replaceAll(/[^a-z0-9]+/g, '-')
-        .replaceAll(/^-+|-+$/g, '');
+        // Trim leading/trailing dashes. Build-time input (deck filenames) is trusted.
+        .replace(/^-+/, '')
+        // eslint-disable-next-line sonarjs/slow-regex
+        .replace(/-+$/, '');
 }
 
 /**
@@ -65,6 +68,15 @@ function cardType(card) {
 }
 
 /**
+ * Trim a string field, returning undefined when empty/non-string.
+ * @param {unknown} v
+ * @returns {string | undefined}
+ */
+function trimMetaString(v) {
+    return typeof v === 'string' && v.trim() !== '' ? v.trim() : undefined;
+}
+
+/**
  * Pull a deck-level meta block out of a parsed JSON, normalizing strings.
  * Returns null when no usable meta is present.
  * @param data
@@ -72,7 +84,7 @@ function cardType(card) {
 function readMeta(data) {
     if (!data || typeof data.meta !== 'object' || data.meta === null) return null;
     const m = data.meta;
-    const str = (v) => (typeof v === 'string' && v.trim() !== '' ? v.trim() : undefined);
+    const str = trimMetaString;
     const out = {
         name: str(m.name),
         subject: str(m.subject),
@@ -230,6 +242,8 @@ async function main() {
     console.log(`Wrote ${MANIFEST_PATH} (${decks.length} deck${decks.length === 1 ? '' : 's'})`);
 }
 
+// CommonJS module — top-level await is not available, so chain off main().
+// eslint-disable-next-line unicorn/prefer-top-level-await
 main().catch((error) => {
     console.error(error);
     process.exit(1);

@@ -5,12 +5,10 @@
  */
 // During build, '__WS_URL__' is replaced. In dev, it remains.
 const RAW_URL = '__WS_URL__';
-const WS_URL =
-    globalThis.window !== undefined && globalThis.WS_URL && globalThis.WS_URL !== '__WS_URL__'
-        ? globalThis.WS_URL
-        : RAW_URL === '__WS_URL__'
-          ? 'wss://qlash-server.fly.dev'
-          : RAW_URL;
+const FALLBACK_WS_URL = RAW_URL === '__WS_URL__' ? 'wss://qlash-server.fly.dev' : RAW_URL;
+const HAS_RUNTIME_WS_URL =
+    globalThis.window !== undefined && globalThis.WS_URL && globalThis.WS_URL !== '__WS_URL__';
+const WS_URL = HAS_RUNTIME_WS_URL ? globalThis.WS_URL : FALLBACK_WS_URL;
 
 // --- Utility functions ---
 /**
@@ -19,7 +17,7 @@ const WS_URL =
  * @param {string} type - 'error' or 'info'.
  */
 function showMessage(message, type = 'info') {
-    // console.log(`Message (${type}): ${message}`);
+    // logger.log(`Message (${type}): ${message}`);
 
     // Remove existing toast if present
     const existing = document.querySelector('#toast-notification');
@@ -100,32 +98,36 @@ function connectWithRetry(url, maxRetries = 3) {
         function tryConnect() {
             attempt++;
             const ws = new WebSocket(url);
+            let settled = false;
             const timeout = setTimeout(() => {
-                ws.onopen = null;
-                ws.onerror = null;
+                if (settled) return;
+                settled = true;
                 ws.close();
                 if (attempt < maxRetries) {
-                    console.log(`WebSocket connection attempt ${attempt} timed out, retrying...`);
+                    logger.log(`WebSocket connection attempt ${attempt} timed out, retrying...`);
                     setTimeout(tryConnect, 2000 * attempt);
                 } else {
                     reject(new Error('WebSocket connection failed after retries'));
                 }
-            }, 10_000); // 10s timeout per attempt
+            }, 10_000);
 
             ws.addEventListener('open', () => {
+                if (settled) return;
+                settled = true;
                 clearTimeout(timeout);
                 resolve(ws);
             });
-            ws.onerror = () => {
+            ws.addEventListener('error', () => {
+                if (settled) return;
+                settled = true;
                 clearTimeout(timeout);
-                ws.onopen = null;
                 if (attempt < maxRetries) {
-                    console.log(`WebSocket connection attempt ${attempt} failed, retrying...`);
+                    logger.log(`WebSocket connection attempt ${attempt} failed, retrying...`);
                     setTimeout(tryConnect, 2000 * attempt);
                 } else {
                     reject(new Error('WebSocket connection failed after retries'));
                 }
-            };
+            });
         }
         tryConnect();
     });
@@ -235,7 +237,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // Reconnect WebSocket when tab becomes visible again
     document.addEventListener('visibilitychange', () => {
         if (document.visibilityState !== 'visible') return;
-        // console.log('Tab became visible, checking connections...');
+        // logger.log('Tab became visible, checking connections...');
 
         if (hostWs && hostWs.readyState !== WebSocket.OPEN && hostRoomId) {
             reconnectHostWs();
@@ -263,6 +265,7 @@ let hostViewHeading = null;
 let hostBeforeUnloadHandler = null;
 let hostWsReconnectAttempts = 0;
 let hostPendingQuestion = null;
+let suppressHostReconnect = false;
 const HOST_MAX_RECONNECT_ATTEMPTS = 30;
 const RECONNECT_DELAY_MS = 10_000;
 
@@ -284,6 +287,16 @@ function getConnectedNonHostPlayers() {
 }
 
 /**
+ * Retrieves and sorts player data for the leaderboard (descending by score).
+ * @returns {Array<object>} Sorted array of player objects with name and score.
+ */
+function getLeaderboardData() {
+    return getNonHostPlayers()
+        .map((p) => ({ name: p.name, score: p.score }))
+        .toSorted((a, b) => b.score - a.score);
+}
+
+/**
  * Returns the count of connected players.
  * @returns {number} Number of connected players.
  */
@@ -296,7 +309,7 @@ function getNonHostPlayerCount() {
  * @param reconnectInfo
  */
 async function initializeHostFeatures(reconnectInfo) {
-    // console.log("Initializing Host Features. Initialized flag:", isHostInitialized);
+    // logger.log("Initializing Host Features. Initialized flag:", isHostInitialized);
     // Initialize quiz state if not already set
     if (!hostGlobalQuizState) {
         hostGlobalQuizState = {
@@ -355,7 +368,7 @@ async function initializeHostFeatures(reconnectInfo) {
 
     // Only set up event listeners once
     if (!isHostInitialized) {
-        // console.log("Setting up host event listeners for the first time.");
+        // logger.log("Setting up host event listeners for the first time.");
 
         // Validates a single MC question; freetext (no options/correct) is filtered out
         const isValidMCQuestion = (q) =>
@@ -369,36 +382,23 @@ async function initializeHostFeatures(reconnectInfo) {
             q.correct.length > 0 &&
             q.correct.every((idx) => Number.isInteger(idx) && idx >= 0 && idx < q.options.length);
 
-        // Extracts MC questions from a parsed JSON blob (array or {cards:[...]})
-        const extractMCQuestions = (data) => {
-            let candidates = [];
-            if (Array.isArray(data)) {
-                candidates = data;
-            } else if (data && Array.isArray(data.cards)) {
-                candidates = data.cards;
-            } else if (data && Array.isArray(data.questions)) {
-                candidates = data.questions;
-            }
-            return candidates.filter((q) => isValidMCQuestion(q));
+        // Pulls the candidate-card array from a parsed deck blob, regardless of
+        // whether it's a bare array, `{cards:[...]}`, or `{questions:[...]}`.
+        const getCandidates = (data) => {
+            if (Array.isArray(data)) return data;
+            if (data && Array.isArray(data.cards)) return data.cards;
+            if (data && Array.isArray(data.questions)) return data.questions;
+            return [];
         };
 
+        // Extracts MC questions from a parsed JSON blob (array or {cards:[...]})
+        const extractMCQuestions = (data) => getCandidates(data).filter((q) => isValidMCQuestion(q));
+
         // Reads a single File as text
-        const readFileText = (file) =>
-            new Promise((resolve, reject) => {
-                const reader = new FileReader();
-                reader.addEventListener('load', (e) => resolve(e.target.result));
-                reader.onerror = () => reject(reader.error);
-                reader.readAsText(file);
-            });
+        const readFileText = (file) => file.text();
 
         // Reads a single File as ArrayBuffer
-        const readFileBuffer = (file) =>
-            new Promise((resolve, reject) => {
-                const reader = new FileReader();
-                reader.addEventListener('load', (e) => resolve(e.target.result));
-                reader.onerror = () => reject(reader.error);
-                reader.readAsArrayBuffer(file);
-            });
+        const readFileBuffer = (file) => file.arrayBuffer();
 
         // Processes a list of Files (JSON or ZIP), aggregates MC questions
         const importFiles = async (files) => {
@@ -438,13 +438,7 @@ async function initializeHostFeatures(reconnectInfo) {
                                 const content = await entry.async('string');
                                 const data = JSON.parse(content);
                                 const mc = extractMCQuestions(data);
-                                const total = Array.isArray(data)
-                                    ? data.length
-                                    : data && Array.isArray(data.cards)
-                                      ? data.cards.length
-                                      : data && Array.isArray(data.questions)
-                                        ? data.questions.length
-                                        : 0;
+                                const total = getCandidates(data).length;
                                 skippedFreetext += Math.max(0, total - mc.length);
                                 collected.push(...mc);
                                 processedFiles++;
@@ -456,13 +450,7 @@ async function initializeHostFeatures(reconnectInfo) {
                         const text = await readFileText(file);
                         const data = JSON.parse(text);
                         const mc = extractMCQuestions(data);
-                        const total = Array.isArray(data)
-                            ? data.length
-                            : data && Array.isArray(data.cards)
-                              ? data.cards.length
-                              : data && Array.isArray(data.questions)
-                                ? data.questions.length
-                                : 0;
+                        const total = getCandidates(data).length;
                         skippedFreetext += Math.max(0, total - mc.length);
                         collected.push(...mc);
                         processedFiles++;
@@ -691,18 +679,22 @@ async function initializeHostFeatures(reconnectInfo) {
                                 sessionId: savedSessionId,
                             })
                         );
-                        tempWs.onmessage = () => {
+                    });
+                    tempWs.addEventListener(
+                        'message',
+                        () => {
                             tempWs.send(JSON.stringify({ type: 'terminate' }));
                             tempWs.close();
-                        };
-                    });
-                    tempWs.onerror = () => tempWs.close();
+                        },
+                        { once: true }
+                    );
+                    tempWs.addEventListener('error', () => tempWs.close());
                 } catch {
                     // Server's 5-minute timeout will handle cleanup
                 }
             }
             if (hostWs) {
-                hostWs.onclose = null; // Prevent reconnect on intentional close
+                suppressHostReconnect = true;
                 hostWs.close();
                 hostWs = null;
             }
@@ -737,15 +729,17 @@ async function initializeHostFeatures(reconnectInfo) {
             if (qrModalOverlay && largeQrcodeContainer && hostRoomId) {
                 qrModalOverlay.classList.remove('hidden');
                 largeQrcodeContainer.innerHTML = ''; // Clear previous QR
+                // QRCode renders into the container as a side effect of construction.
+                // eslint-disable-next-line sonarjs/constructor-for-side-effects
                 new QRCode(largeQrcodeContainer, {
-                    text: joinLinkElement.href, // Use the full join link
-                    width: 300, // Larger size for modal
+                    text: joinLinkElement.href,
+                    width: 300,
                     height: 300,
                     colorDark: '#000000',
                     colorLight: '#ffffff',
                     correctLevel: QRCode.CorrectLevel.H,
                 });
-                modalRoomIdSpan.textContent = quizState.roomId; // Display the 4-digit room code in modal
+                modalRoomIdSpan.textContent = quizState.roomId;
             }
         });
 
@@ -865,7 +859,7 @@ async function initializeHostFeatures(reconnectInfo) {
             }
 
             case 'host_reconnected': {
-                console.log('Host reconnected, restoring player state');
+                logger.log('Host reconnected, restoring player state');
                 if (msg.players) {
                     for (const p of msg.players) {
                         if (quizState.players[p.sessionId]) {
@@ -887,11 +881,11 @@ async function initializeHostFeatures(reconnectInfo) {
                 // If a question was active when we disconnected, restart it
                 // so players get a fresh copy and answers reset
                 if (quizState.isQuestionActive) {
-                    console.log('Restarting active question after reconnect');
+                    logger.log('Restarting active question after reconnect');
                     startQuestion();
                 } else if (hostPendingQuestion) {
                     // Resend question that failed to send before disconnect
-                    console.log('Resending pending question after reconnect');
+                    logger.log('Resending pending question after reconnect');
                     if (hostWs && hostWs.readyState === WebSocket.OPEN) {
                         hostWs.send(JSON.stringify(hostPendingQuestion));
                         hostPendingQuestion = null;
@@ -967,6 +961,7 @@ async function initializeHostFeatures(reconnectInfo) {
      */
     async function initHostConnection() {
         hostWsReconnectAttempts = 0;
+        suppressHostReconnect = false;
 
         try {
             hostWs = await connectWithRetry(WS_URL);
@@ -975,10 +970,10 @@ async function initializeHostFeatures(reconnectInfo) {
             return;
         }
 
-        console.log('Host WebSocket connected');
+        logger.log('Host WebSocket connected');
         hostWs.send(JSON.stringify({ type: 'create_room' }));
 
-        hostWs.onmessage = (event) => {
+        hostWs.addEventListener('message', (event) => {
             let msg;
             try {
                 msg = JSON.parse(event.data);
@@ -986,13 +981,14 @@ async function initializeHostFeatures(reconnectInfo) {
                 return;
             }
             handleHostMessage(msg);
-        };
+        });
 
         hostWs.addEventListener('close', () => {
-            console.log('Host WebSocket closed');
+            logger.log('Host WebSocket closed');
+            if (suppressHostReconnect) return;
             if (hostRoomId && hostWsReconnectAttempts < HOST_MAX_RECONNECT_ATTEMPTS) {
                 hostWsReconnectAttempts++;
-                console.log(
+                logger.log(
                     `Host reconnecting (${hostWsReconnectAttempts}/${HOST_MAX_RECONNECT_ATTEMPTS})...`
                 );
                 setTimeout(reconnectHostWs, RECONNECT_DELAY_MS);
@@ -1001,9 +997,9 @@ async function initializeHostFeatures(reconnectInfo) {
             }
         });
 
-        hostWs.onerror = (err) => {
+        hostWs.addEventListener('error', (err) => {
             console.error('Host WebSocket error:', err);
-        };
+        });
     }
 
     /**
@@ -1013,6 +1009,7 @@ async function initializeHostFeatures(reconnectInfo) {
      */
     async function initHostReconnection(info) {
         hostWsReconnectAttempts = 0;
+        suppressHostReconnect = false;
         hostRoomId = info.roomId;
         hostSessionId = info.sessionId;
         quizState.roomId = info.roomId.slice(0, 2) + ' ' + info.roomId.slice(2, 4);
@@ -1033,7 +1030,7 @@ async function initializeHostFeatures(reconnectInfo) {
             JSON.stringify({ type: 'reconnect_host', roomId: hostRoomId, sessionId: hostSessionId })
         );
 
-        hostWs.onmessage = (event) => {
+        hostWs.addEventListener('message', (event) => {
             let msg;
             try {
                 msg = JSON.parse(event.data);
@@ -1074,10 +1071,11 @@ async function initializeHostFeatures(reconnectInfo) {
 
             // Delegate to the standard host message handler
             handleHostMessage(msg);
-        };
+        });
 
         hostWs.addEventListener('close', () => {
-            console.log('Host WebSocket closed');
+            logger.log('Host WebSocket closed');
+            if (suppressHostReconnect) return;
             if (hostRoomId && hostWsReconnectAttempts < HOST_MAX_RECONNECT_ATTEMPTS) {
                 hostWsReconnectAttempts++;
                 setTimeout(reconnectHostWs, RECONNECT_DELAY_MS);
@@ -1086,16 +1084,17 @@ async function initializeHostFeatures(reconnectInfo) {
             }
         });
 
-        hostWs.onerror = (err) => {
+        hostWs.addEventListener('error', (err) => {
             console.error('Host WebSocket error:', err);
-        };
+        });
     }
 
     reconnectHostWs = function reconnectHostWs() {
+        suppressHostReconnect = false;
         const ws = new WebSocket(WS_URL);
 
         ws.addEventListener('open', () => {
-            console.log('Host WebSocket reconnected');
+            logger.log('Host WebSocket reconnected');
             hostWsReconnectAttempts = 0;
             ws.send(
                 JSON.stringify({
@@ -1106,7 +1105,7 @@ async function initializeHostFeatures(reconnectInfo) {
             );
         });
 
-        ws.onmessage = (event) => {
+        ws.addEventListener('message', (event) => {
             let msg;
             try {
                 msg = JSON.parse(event.data);
@@ -1115,7 +1114,7 @@ async function initializeHostFeatures(reconnectInfo) {
             }
 
             if (msg.type === 'room_not_found_try_restore') {
-                console.log('Room needs restoration. Sending state...');
+                logger.log('Room needs restoration. Sending state...');
                 const playersToRestore = [];
                 if (hostGlobalQuizState && hostGlobalQuizState.players) {
                     for (const p of Object.values(hostGlobalQuizState.players)) {
@@ -1139,10 +1138,11 @@ async function initializeHostFeatures(reconnectInfo) {
             }
 
             handleHostMessage(msg);
-        };
+        });
 
         ws.addEventListener('close', () => {
-            console.log('Host WebSocket closed');
+            logger.log('Host WebSocket closed');
+            if (suppressHostReconnect) return;
             if (hostRoomId && hostWsReconnectAttempts < HOST_MAX_RECONNECT_ATTEMPTS) {
                 hostWsReconnectAttempts++;
                 setTimeout(reconnectHostWs, RECONNECT_DELAY_MS);
@@ -1151,9 +1151,9 @@ async function initializeHostFeatures(reconnectInfo) {
             }
         });
 
-        ws.onerror = (err) => {
+        ws.addEventListener('error', (err) => {
             console.error('Host WebSocket error:', err);
-        };
+        });
 
         hostWs = ws;
     };
@@ -1506,7 +1506,7 @@ async function initializeHostFeatures(reconnectInfo) {
                 playerScores: playerScores,
             })
         );
-        // console.log('Results sent via WebSocket');
+        // logger.log('Results sent via WebSocket');
     }
 
     /**
@@ -1561,16 +1561,6 @@ async function initializeHostFeatures(reconnectInfo) {
     }
 
     /**
-     * Retrieves and sorts player data for the leaderboard.
-     * @returns {Array<object>} Sorted array of player objects with name and score.
-     */
-    function getLeaderboardData() {
-        return getNonHostPlayers()
-            .map((p) => ({ name: p.name, score: p.score }))
-            .toSorted((a, b) => b.score - a.score);
-    }
-
-    /**
      * Displays the final leaderboard on the host side.
      */
     function displayLeaderboard() {
@@ -1585,9 +1575,11 @@ async function initializeHostFeatures(reconnectInfo) {
         for (const [idx, p] of sortedPlayers.entries()) {
             const i = document.createElement('div');
             i.className = 'leaderboard-item';
-            if (idx === 0) i.classList.add('rank-1');
-            else if (idx === 1) i.classList.add('rank-2');
-            else if (idx === 2) i.classList.add('rank-3');
+            switch (idx) {
+                case 0: { i.classList.add('rank-1'); break; }
+                case 1: { i.classList.add('rank-2'); break; }
+                case 2: { i.classList.add('rank-3'); break; }
+            }
             i.innerHTML = `<span>${idx + 1}. ${sanitizeHTML(p.name)}</span><span>${Math.round(p.score)} Punkte</span>`;
             leaderboard.append(i);
         }
@@ -1606,37 +1598,24 @@ let playerHasSubmitted = false;
 let playerScore = 0;
 let playerCurrentQuestionIndex = -1;
 let playerBeforeUnloadHandler = null;
+let suppressPlayerReconnect = false;
+// Assigned inside initPlayerConnection so the visibilitychange handler at the
+// module scope can re-trigger the same connection setup (handlers, retry logic).
+let playerConnectFn = null;
 
 /**
  * Reconnects the player WebSocket (called from visibilitychange).
  */
 function reconnectPlayerWs() {
-    // Capture handlers BEFORE nulling onclose, to avoid losing them
-    const originalOnMessage = playerWs ? playerWs.onmessage : null;
-    const originalOnClose = playerWs ? playerWs.onclose : null;
-    const originalOnError = playerWs ? playerWs.onerror : null;
-
     if (playerWs) {
-        playerWs.onclose = null; // Prevent reconnect loop from old socket closing
+        suppressPlayerReconnect = true;
         playerWs.close();
+        playerWs = null;
     }
-    const session = getPlayerSession(playerRoomId);
-    const name = session ? session.playerName : 'Spieler';
-    const ws = new WebSocket(WS_URL);
-    ws.addEventListener('open', () => {
-        ws.send(
-            JSON.stringify({
-                type: 'join',
-                roomCode: playerRoomId,
-                playerName: name,
-                sessionId: playerCurrentId,
-            })
-        );
-    });
-    ws.onmessage = originalOnMessage;
-    ws.addEventListener('close', originalOnClose);
-    ws.onerror = originalOnError;
-    playerWs = ws;
+    if (playerConnectFn) {
+        suppressPlayerReconnect = false;
+        playerConnectFn();
+    }
 }
 
 // --- Player Persistence Helpers ---
@@ -1647,6 +1626,15 @@ function reconnectPlayerWs() {
  */
 function getPlayerStorageKey(roomId) {
     return `quiz_player_${roomId}`;
+}
+
+/**
+ * Log player-side WebSocket errors. Module-scope so the inline `addEventListener`
+ * callback inside connectPlayerWs doesn't push nesting past 4 levels.
+ * @param {Event} err
+ */
+function onPlayerWsError(err) {
+    console.error('Player WebSocket error:', err);
 }
 
 /**
@@ -1795,7 +1783,7 @@ function triggerConfetti() {
  * @param reconnectInfo
  */
 function initializePlayerFeatures(reconnectInfo) {
-    // console.log("Initializing Player Features. Initialized flag:", isPlayerInitialized);
+    // logger.log("Initializing Player Features. Initialized flag:", isPlayerInitialized);
 
     // Cache DOM elements for performance
     const roomCodeInput = document.querySelector('#room-code-input');
@@ -1820,7 +1808,7 @@ function initializePlayerFeatures(reconnectInfo) {
     const playerLeaderboardContainer = document.querySelector('#player-leaderboard-container');
 
     if (!isPlayerInitialized) {
-        // console.log("Setting up player event listeners for the first time.");
+        // logger.log("Setting up player event listeners for the first time.");
 
         joinBtn.addEventListener('click', async () => {
             const roomCode = roomCodeInput.value.trim().replaceAll(/\s/g, ''); // Remove spaces
@@ -1910,6 +1898,7 @@ function initializePlayerFeatures(reconnectInfo) {
      */
     async function initPlayerConnection(roomCode, pName) {
         playerRoomId = roomCode;
+        suppressPlayerReconnect = false;
         let playerWsReconnectAttempts = 0;
         const MAX_RECONNECT_ATTEMPTS = 30;
 
@@ -1922,6 +1911,125 @@ function initializePlayerFeatures(reconnectInfo) {
         const existingSessionId = existingSession ? existingSession.playerId : null;
 
         /**
+         * Forward a WebSocket 'message' event to the parsing/dispatch helpers.
+         * Top-level (relative to initPlayerConnection) so the inline callback in
+         * `.then((ws) => ...)` doesn't push us past 4 levels of nesting.
+         * @param {MessageEvent} event
+         */
+        function onPlayerWsMessage(event) {
+            handlePlayerMessage(event.data);
+        }
+
+        /**
+         * Handle a single player-side message (defined here so it closes over
+         * `roomCode`, `pName`, etc. without bumping the inline-callback nesting
+         * past 4 levels — sonarjs/no-nested-functions).
+         * @param {string} data - Raw WebSocket message payload.
+         */
+        function handlePlayerMessage(data) {
+            let msg;
+            try {
+                msg = JSON.parse(data);
+            } catch {
+                return;
+            }
+            dispatchPlayerMessage(msg);
+        }
+
+        /**
+         * Dispatch a parsed player-side message to the appropriate handler.
+         * @param {object} msg
+         */
+        function dispatchPlayerMessage(msg) {
+            switch (msg.type) {
+                case 'joined': {
+                    playerCurrentId = msg.sessionId;
+                    playerScore = msg.score || 0;
+                    savePlayerSession(roomCode, msg.sessionId, msg.playerName || pName);
+                    saveActiveSession(
+                        'player',
+                        roomCode,
+                        msg.sessionId,
+                        msg.playerName || pName
+                    );
+                    waitingMessage.textContent = msg.isReconnect
+                        ? 'Wieder verbunden! Warte auf Host...'
+                        : 'Verbunden! Warte auf Host...';
+                    break;
+                }
+
+                case 'question': {
+                    playerCurrentQuestionOptions = msg.options;
+                    selectedAnswers = [];
+                    playerCurrentQuestionIndex = msg.index;
+                    displayQuestion(msg);
+                    startPlayerTimer(msg.duration);
+                    break;
+                }
+
+                case 'result': {
+                    if (
+                        msg.questionIndex !== undefined &&
+                        msg.questionIndex !== playerCurrentQuestionIndex
+                    ) {
+                        logger.log(
+                            `Ignoring stale result for question ${msg.questionIndex}, current is ${playerCurrentQuestionIndex}`
+                        );
+                        break;
+                    }
+                    const oldScore = playerScore;
+                    playerScore = msg.playerScore || playerScore;
+                    const gainedPoints = playerScore - oldScore;
+                    displayResult(msg, selectedAnswers, playerScore, gainedPoints, oldScore);
+                    waitingForNext.textContent = msg.isFinal
+                        ? 'Warten auf Endergebnisse...'
+                        : 'Warten auf nächste Frage...';
+                    if (msg.isFinal) displayFinalResult(msg);
+                    break;
+                }
+
+                case 'quiz_terminated': {
+                    showMessage('Der Host hat das Quiz beendet.', 'info');
+                    resetPlayerStateAndUI();
+                    showView('role-selection');
+                    break;
+                }
+
+                case 'error': {
+                    showMessage(msg.message, 'error');
+                    resetPlayerStateAndUI();
+                    document.querySelector('#role-selection').classList.remove('hidden');
+                    showView('role-selection');
+                    break;
+                }
+            }
+        }
+
+        /**
+         * Handle WebSocket close on the player side: schedule a reconnect or
+         * surface an error after enough failures.
+         */
+        function handlePlayerClose() {
+            logger.log('Player WebSocket closed');
+            if (suppressPlayerReconnect) return;
+            if (
+                playerRoomId &&
+                playerCurrentId &&
+                playerWsReconnectAttempts < MAX_RECONNECT_ATTEMPTS
+            ) {
+                playerWsReconnectAttempts++;
+                waitingMessage.textContent = `Verbindung unterbrochen. Reconnect ${playerWsReconnectAttempts}/${MAX_RECONNECT_ATTEMPTS}...`;
+                setTimeout(connectPlayerWs, RECONNECT_DELAY_MS);
+            } else if (playerWsReconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
+                showMessage(
+                    'Verbindung zum Quiz-Raum verloren. Bitte lade die Seite neu.',
+                    'error'
+                );
+                resetPlayerStateAndUI();
+            }
+        }
+
+        /**
          *
          */
         function connectPlayerWs() {
@@ -1929,7 +2037,7 @@ function initializePlayerFeatures(reconnectInfo) {
             connectWithRetry(WS_URL)
                 .then((ws) => {
                     playerWs = ws;
-                    console.log('Player WebSocket connected');
+                    logger.log('Player WebSocket connected');
                     playerWsReconnectAttempts = 0;
                     playerWs.send(
                         JSON.stringify({
@@ -1940,109 +2048,9 @@ function initializePlayerFeatures(reconnectInfo) {
                         })
                     );
 
-                    playerWs.onmessage = (event) => {
-                        let msg;
-                        try {
-                            msg = JSON.parse(event.data);
-                        } catch {
-                            return;
-                        }
-
-                        switch (msg.type) {
-                            case 'joined': {
-                                playerCurrentId = msg.sessionId;
-                                playerScore = msg.score || 0;
-                                savePlayerSession(roomCode, msg.sessionId, msg.playerName || pName);
-                                saveActiveSession(
-                                    'player',
-                                    roomCode,
-                                    msg.sessionId,
-                                    msg.playerName || pName
-                                );
-                                waitingMessage.textContent = msg.isReconnect
-                                    ? 'Wieder verbunden! Warte auf Host...'
-                                    : 'Verbunden! Warte auf Host...';
-                                break;
-                            }
-
-                            case 'question': {
-                                playerCurrentQuestionOptions = msg.options;
-                                selectedAnswers = [];
-                                playerCurrentQuestionIndex = msg.index;
-                                displayQuestion(msg);
-                                startPlayerTimer(msg.duration);
-                                break;
-                            }
-
-                            case 'result': {
-                                // Ignore stale results from a previous question
-                                if (
-                                    msg.questionIndex !== undefined &&
-                                    msg.questionIndex !== playerCurrentQuestionIndex
-                                ) {
-                                    console.log(
-                                        `Ignoring stale result for question ${msg.questionIndex}, current is ${playerCurrentQuestionIndex}`
-                                    );
-                                    break;
-                                }
-                                const oldScore = playerScore;
-                                playerScore = msg.playerScore || playerScore;
-                                const gainedPoints = playerScore - oldScore;
-                                displayResult(
-                                    msg,
-                                    selectedAnswers,
-                                    playerScore,
-                                    gainedPoints,
-                                    oldScore
-                                );
-                                waitingForNext.textContent = msg.isFinal
-                                    ? 'Warten auf Endergebnisse...'
-                                    : 'Warten auf nächste Frage...';
-                                if (msg.isFinal) displayFinalResult(msg);
-                                break;
-                            }
-
-                            case 'quiz_terminated': {
-                                showMessage('Der Host hat das Quiz beendet.', 'info');
-                                resetPlayerStateAndUI();
-                                showView('role-selection');
-                                break;
-                            }
-
-                            case 'error': {
-                                showMessage(msg.message, 'error');
-                                resetPlayerStateAndUI();
-                                document
-                                    .querySelector('#role-selection')
-                                    .classList.remove('hidden');
-                                showView('role-selection');
-                                break;
-                            }
-                        }
-                    };
-
-                    playerWs.addEventListener('close', () => {
-                        console.log('Player WebSocket closed');
-                        if (
-                            playerRoomId &&
-                            playerCurrentId &&
-                            playerWsReconnectAttempts < MAX_RECONNECT_ATTEMPTS
-                        ) {
-                            playerWsReconnectAttempts++;
-                            waitingMessage.textContent = `Verbindung unterbrochen. Reconnect ${playerWsReconnectAttempts}/${MAX_RECONNECT_ATTEMPTS}...`;
-                            setTimeout(connectPlayerWs, RECONNECT_DELAY_MS);
-                        } else if (playerWsReconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
-                            showMessage(
-                                'Verbindung zum Quiz-Raum verloren. Bitte lade die Seite neu.',
-                                'error'
-                            );
-                            resetPlayerStateAndUI();
-                        }
-                    });
-
-                    playerWs.onerror = (err) => {
-                        console.error('Player WebSocket error:', err);
-                    };
+                    playerWs.addEventListener('message', onPlayerWsMessage);
+                    playerWs.addEventListener('close', handlePlayerClose);
+                    playerWs.addEventListener('error', onPlayerWsError);
                 })
                 .catch(() => {
                     showMessage(
@@ -2055,6 +2063,7 @@ function initializePlayerFeatures(reconnectInfo) {
                 });
         }
 
+        playerConnectFn = connectPlayerWs;
         connectPlayerWs();
     }
 
@@ -2192,11 +2201,8 @@ function initializePlayerFeatures(reconnectInfo) {
         for (const [index, option] of options.entries()) {
             // Always show correct answers
             if (correctSet.has(index)) {
-                if (playerAnsSet.has(index)) {
-                    resultHtml += `<span class="correct player-selected">"${sanitizeHTML(option)}"</span> `; // Correct and selected by player
-                } else {
-                    resultHtml += `<span class="correct-not-selected">"${sanitizeHTML(option)}"</span> `; // Correct but not selected by player
-                }
+                const cls = playerAnsSet.has(index) ? 'correct player-selected' : 'correct-not-selected';
+                resultHtml += `<span class="${cls}">"${sanitizeHTML(option)}"</span> `;
             } else if (playerAnsSet.has(index)) {
                 // Per instruction: "Do not show the falsely selected answers of the player anymore."
                 // This means we don't add special classes or text for them.
@@ -2234,7 +2240,7 @@ function initializePlayerFeatures(reconnectInfo) {
      * @param {object} frData - The final results data received from the host.
      */
     function displayFinalResult(frData) {
-        // console.log("Displaying final results for player:", frData); // Debug log
+        // logger.log("Displaying final results for player:", frData); // Debug log
         playerQuestionView.classList.add('hidden');
         playerResultView.classList.add('hidden');
         waitingRoom.classList.add('hidden');
@@ -2253,9 +2259,11 @@ function initializePlayerFeatures(reconnectInfo) {
             } else {
                 for (const [idx, p] of frData.leaderboard.entries()) {
                     const li = document.createElement('li');
-                    if (idx === 0) li.classList.add('rank-1');
-                    else if (idx === 1) li.classList.add('rank-2');
-                    else if (idx === 2) li.classList.add('rank-3');
+                    switch (idx) {
+                        case 0: { li.classList.add('rank-1'); break; }
+                        case 1: { li.classList.add('rank-2'); break; }
+                        case 2: { li.classList.add('rank-3'); break; }
+                    }
                     li.textContent = `${idx + 1}. ${p.name}: ${Math.round(p.score)} Punkte`;
                     ol.append(li);
                 }
@@ -2273,10 +2281,11 @@ function initializePlayerFeatures(reconnectInfo) {
     function resetPlayerStateAndUI() {
         clearActiveSession();
         if (playerWs) {
-            playerWs.onclose = null; // Prevent reconnect
+            suppressPlayerReconnect = true;
             playerWs.close();
             playerWs = null;
         }
+        playerConnectFn = null;
 
         playerScore = 0;
         selectedAnswers = [];

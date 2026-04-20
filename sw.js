@@ -4,6 +4,15 @@
  * Strategy: Stale-While-Revalidate for app shell, Cache First for data
  */
 
+// Service worker has no DOM/window — debug chatter is gated by hostname only.
+// Errors always go through console.error.
+const SW_DEBUG =
+    self.location.hostname === 'localhost' ||
+    self.location.hostname === '127.0.0.1' ||
+    self.location.hostname.endsWith('.local');
+// eslint-disable-next-line no-console
+const swLog = SW_DEBUG ? console.log.bind(console) : () => {};
+
 const CACHE_NAME = 'flashcards-v2';
 const ASSETS_TO_CACHE = [
     './',
@@ -32,16 +41,16 @@ const ASSETS_TO_CACHE = [
 
 // Install event - cache assets
 self.addEventListener('install', (event) => {
-    console.log('[Service Worker] Installing...');
+    swLog('[Service Worker] Installing...');
     event.waitUntil(
         caches
             .open(CACHE_NAME)
             .then((cache) => {
-                console.log('[Service Worker] Caching assets');
+                swLog('[Service Worker] Caching assets');
                 return cache.addAll(ASSETS_TO_CACHE);
             })
             .then(() => {
-                console.log('[Service Worker] Installation complete');
+                swLog('[Service Worker] Installation complete');
                 // Skip waiting to activate immediately
                 return globalThis.skipWaiting();
             })
@@ -53,7 +62,7 @@ self.addEventListener('install', (event) => {
 
 // Activate event - clean up old caches and take control
 self.addEventListener('activate', (event) => {
-    console.log('[Service Worker] Activating...');
+    swLog('[Service Worker] Activating...');
     event.waitUntil(
         caches
             .keys()
@@ -61,14 +70,14 @@ self.addEventListener('activate', (event) => {
                 return Promise.all(
                     cacheNames.map((cacheName) => {
                         if (cacheName !== CACHE_NAME) {
-                            console.log('[Service Worker] Deleting old cache:', cacheName);
+                            swLog('[Service Worker] Deleting old cache:', cacheName);
                             return caches.delete(cacheName);
                         }
                     })
                 );
             })
             .then(() => {
-                console.log('[Service Worker] Activation complete');
+                swLog('[Service Worker] Activation complete');
                 // Take control of all clients immediately
                 return globalThis.clients.claim();
             })
@@ -124,7 +133,7 @@ self.addEventListener('fetch', (event) => {
                         return networkResponse;
                     })
                     .catch((error) => {
-                        console.log('[Service Worker] Network fetch failed, using cache:', error);
+                        swLog('[Service Worker] Network fetch failed, using cache:', error);
                         return cachedResponse;
                     });
 

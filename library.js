@@ -115,10 +115,11 @@ function showGrid() {
     els.detail.classList.add('hidden');
     els.gridContainer.classList.remove('hidden');
     els.title.textContent = '📚 Lernkarten-Bibliothek';
+    const deckSuffix = manifest.decks.length === 1 ? '' : 's';
     els.subtitle.textContent =
         manifest.decks.length === 0
             ? 'Noch keine Decks verfügbar.'
-            : `${manifest.decks.length} Deck${manifest.decks.length === 1 ? '' : 's'} verfügbar`;
+            : `${manifest.decks.length} Deck${deckSuffix} verfügbar`;
     renderGrid('');
 }
 

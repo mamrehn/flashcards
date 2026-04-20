@@ -9,9 +9,9 @@
 
 /**
  * Debounce function - delays execution until after wait time has elapsed
- * @param {Function} func - Function to debounce
+ * @param {(...args: unknown[]) => void} func - Function to debounce
  * @param {number} wait - Delay in milliseconds
- * @returns {Function} Debounced function
+ * @returns {(...args: unknown[]) => void} Debounced function
  */
 function debounce(func, wait) {
     let timeout;
@@ -27,9 +27,9 @@ function debounce(func, wait) {
 
 /**
  * Throttle function - ensures function is called at most once per interval
- * @param {Function} func - Function to throttle
+ * @param {(...args: unknown[]) => void} func - Function to throttle
  * @param {number} limit - Time limit in milliseconds
- * @returns {Function} Throttled function
+ * @returns {(...args: unknown[]) => void} Throttled function
  */
 function throttle(func, limit) {
     let inThrottle;
@@ -67,22 +67,22 @@ let isAnswered = false;
 /** @type {Array<string>} Names of currently active decks */
 let activeDecks = [];
 
-/** @type {Object<string, {cards: Array}>} Saved decks from localStorage */
+/** @type {{[deckName: string]: {cards: Array}}} Saved decks from localStorage */
 let savedDecks = {};
 
-/** @type {Object<string, Array<number>>} Indices of incorrect answers per deck */
+/** @type {{[deckName: string]: Array<number>}} Indices of incorrect answers per deck */
 let previousIncorrectIndices = {};
 
 /** @type {Array<number>} Selected option indices for multiple choice questions */
 let selectedOptionIndices = [];
 
-/** @type {Object<string, {correct: number, incorrect: number, total: number}>} Statistics per deck */
+/** @type {{[deckName: string]: {correct: number, incorrect: number, total: number}}} Statistics per deck */
 let deckStats = {};
 
 /** @type {string} Current study mode: 'spaced-repetition', 'incorrect-first', 'incorrect-only' */
 let studyMode = 'spaced-repetition';
 
-/** @type {Object<string, {interval: number, easeFactor: number, repetitions: number, nextReview: Date}>} Spaced repetition data per card */
+/** @type {{[cardKey: string]: {interval: number, easeFactor: number, repetitions: number, nextReview: Date}}} Spaced repetition data per card */
 let spacedRepetitionData = {};
 
 // ============================================================================
@@ -616,7 +616,7 @@ function handleDroppedFiles(files) {
  * Handle file upload - supports both JSON and ZIP files
  * @param {Event} event - File input change event
  */
-function handleFileUpload(event) {
+async function handleFileUpload(event) {
     const files = event.target.files;
     if (!files || files.length === 0) return;
 
@@ -635,25 +635,22 @@ function handleFileUpload(event) {
             continue;
         }
 
-        const reader = new FileReader();
-        reader.addEventListener('load', function (e) {
-            try {
-                const data = sanitizeParsedJSON(JSON.parse(e.target.result));
+        try {
+            const text = await file.text();
+            const data = sanitizeParsedJSON(JSON.parse(text));
 
-                // Detect backup file: has flashcardDecks key
-                if (data.flashcardDecks && typeof data.flashcardDecks === 'object' && !data.cards) {
-                    handleBackupImport(data);
-                    return;
-                }
-
-                // Otherwise treat as a card deck
-                processJsonData(data, file.name);
-            } catch (error) {
-                showError('Fehler beim Lesen der JSON-Datei.');
-                console.error(error);
+            // Detect backup file: has flashcardDecks key
+            if (data.flashcardDecks && typeof data.flashcardDecks === 'object' && !data.cards) {
+                handleBackupImport(data);
+                continue;
             }
-        });
-        reader.readAsText(file);
+
+            // Otherwise treat as a card deck
+            processJsonData(data, file.name);
+        } catch (error) {
+            showError('Fehler beim Lesen der JSON-Datei.');
+            console.error(error);
+        }
     }
 
     event.target.value = '';
@@ -663,7 +660,7 @@ function handleFileUpload(event) {
  * Handle ZIP file upload containing multiple JSON files
  * @param {Event} event - File input change event
  */
-function handleZipUpload(event) {
+async function handleZipUpload(event) {
     const file = event.target.files[0];
     if (!file) return;
 
@@ -672,70 +669,68 @@ function handleZipUpload(event) {
         return;
     }
 
-    const reader = new FileReader();
-    reader.addEventListener('load', async function (e) {
-        try {
-            const zip = new JSZip();
-            const zipContent = await zip.loadAsync(e.target.result);
-            let errorCount = 0;
-            const importedDeckNames = [];
+    try {
+        const buffer = await file.arrayBuffer();
+        const zip = new JSZip();
+        const zipContent = await zip.loadAsync(buffer);
+        let errorCount = 0;
+        const importedDeckNames = [];
 
-            // Process each file in the ZIP
-            const promises = [];
-            for (const [relativePath, zipEntry] of Object.entries(zipContent.files)) {
-                if (!zipEntry.dir && relativePath.endsWith('.json')) {
-                    const promise = zipEntry.async('string').then((content) => {
-                        try {
-                            const data = sanitizeParsedJSON(JSON.parse(content));
+        // Process each file in the ZIP
+        const promises = [];
+        for (const [relativePath, zipEntry] of Object.entries(zipContent.files)) {
+            if (!zipEntry.dir && relativePath.endsWith('.json')) {
+                const promise = zipEntry.async('string').then((content) => {
+                    try {
+                        const data = sanitizeParsedJSON(JSON.parse(content));
 
-                            if (
-                                !data.cards ||
-                                !Array.isArray(data.cards) ||
-                                data.cards.length === 0
-                            ) {
-                                errorCount++;
-                                return;
-                            }
-
-                            // Check card validity
-                            const validCards = validateCards(data.cards);
-
-                            if (validCards.length === 0) {
-                                errorCount++;
-                                return;
-                            }
-
-                            // Save the deck with filename as deck name
-                            const deckName = relativePath.split('/').pop().replace('.json', '');
-                            saveToLocalStorage(deckName, validCards, []);
-                            importedDeckNames.push(deckName);
-                        } catch {
+                        if (
+                            !data.cards ||
+                            !Array.isArray(data.cards) ||
+                            data.cards.length === 0
+                        ) {
                             errorCount++;
+                            return;
                         }
-                    });
-                    promises.push(promise);
-                }
+
+                        // Check card validity
+                        const validCards = validateCards(data.cards);
+
+                        if (validCards.length === 0) {
+                            errorCount++;
+                            return;
+                        }
+
+                        // Save the deck with filename as deck name
+                        const deckName = relativePath.split('/').pop().replace('.json', '');
+                        saveToLocalStorage(deckName, validCards, []);
+                        importedDeckNames.push(deckName);
+                    } catch {
+                        errorCount++;
+                    }
+                });
+                promises.push(promise);
             }
-
-            await Promise.all(promises);
-
-            if (importedDeckNames.length > 0) {
-                displaySavedDecks('', importedDeckNames);
-                showMessage(
-                    `${importedDeckNames.length} Decks erfolgreich importiert${errorCount > 0 ? `, ${errorCount} fehlgeschlagen` : ''}.`
-                );
-            } else {
-                showError('Keine gültigen JSON-Dateien in der ZIP-Datei gefunden.');
-            }
-
-            // Reset the file input
-            event.target.value = '';
-        } catch (error) {
-            showError('Fehler beim Entpacken der ZIP-Datei.');
-            console.error(error);
         }
-    });
-    reader.readAsArrayBuffer(file);
+
+        await Promise.all(promises);
+
+        if (importedDeckNames.length > 0) {
+            displaySavedDecks('', importedDeckNames);
+            const failureSuffix = errorCount > 0 ? `, ${errorCount} fehlgeschlagen` : '';
+            showMessage(
+                `${importedDeckNames.length} Decks erfolgreich importiert${failureSuffix}.`
+            );
+        } else {
+            showError('Keine gültigen JSON-Dateien in der ZIP-Datei gefunden.');
+        }
+
+        // Reset the file input
+        event.target.value = '';
+    } catch (error) {
+        showError('Fehler beim Entpacken der ZIP-Datei.');
+        console.error(error);
+    }
 }
 
 /**
@@ -1646,6 +1641,41 @@ function showCurrentCard() {
 }
 
 /**
+ * Toggle a multiple-choice option's checked state and keep selectedOptionIndices in sync.
+ * @param {HTMLInputElement} checkbox
+ * @param {HTMLElement} optionItem
+ * @param {number[]} selectedOptionIndices
+ * @param {number} originalIndex
+ */
+function toggleOption(checkbox, optionItem, selectedOptionIndices, originalIndex) {
+    checkbox.checked = !checkbox.checked;
+    syncOptionSelection(checkbox, optionItem, selectedOptionIndices, originalIndex);
+}
+
+/**
+ * Sync visual + selectedOptionIndices state to match checkbox.checked
+ * (used when the checkbox/label was toggled natively).
+ * @param {HTMLInputElement} checkbox
+ * @param {HTMLElement} optionItem
+ * @param {number[]} selectedOptionIndices
+ * @param {number} originalIndex
+ */
+function syncOptionSelection(checkbox, optionItem, selectedOptionIndices, originalIndex) {
+    optionItem.classList.toggle('selected', checkbox.checked);
+    optionItem.setAttribute('aria-checked', String(checkbox.checked));
+    if (checkbox.checked) {
+        if (!selectedOptionIndices.includes(originalIndex)) {
+            selectedOptionIndices.push(originalIndex);
+        }
+    } else {
+        const indexToRemove = selectedOptionIndices.indexOf(originalIndex);
+        if (indexToRemove !== -1) {
+            selectedOptionIndices.splice(indexToRemove, 1);
+        }
+    }
+}
+
+/**
  * Update the card content with new question data
  * @param {object} card - The card object to display
  */
@@ -1704,41 +1734,13 @@ function updateCardContent(card) {
             optionItem.append(checkbox);
             optionItem.append(label);
 
-            // Toggle helper to keep click and keyboard logic in sync
-            const toggleOption = () => {
-                checkbox.checked = !checkbox.checked;
-                optionItem.classList.toggle('selected', checkbox.checked);
-                optionItem.setAttribute('aria-checked', String(checkbox.checked));
-                if (checkbox.checked) {
-                    if (!selectedOptionIndices.includes(originalIndex)) {
-                        selectedOptionIndices.push(originalIndex);
-                    }
-                } else {
-                    const indexToRemove = selectedOptionIndices.indexOf(originalIndex);
-                    if (indexToRemove !== -1) {
-                        selectedOptionIndices.splice(indexToRemove, 1);
-                    }
-                }
-            };
-
             // Add click handler to toggle selection
             optionItem.addEventListener('click', (e) => {
                 if (e.target !== checkbox && e.target !== label) {
-                    toggleOption();
+                    toggleOption(checkbox, optionItem, selectedOptionIndices, originalIndex);
                 } else {
                     // Checkbox/label toggled natively, sync state
-                    optionItem.classList.toggle('selected', checkbox.checked);
-                    optionItem.setAttribute('aria-checked', String(checkbox.checked));
-                    if (checkbox.checked) {
-                        if (!selectedOptionIndices.includes(originalIndex)) {
-                            selectedOptionIndices.push(originalIndex);
-                        }
-                    } else {
-                        const indexToRemove = selectedOptionIndices.indexOf(originalIndex);
-                        if (indexToRemove !== -1) {
-                            selectedOptionIndices.splice(indexToRemove, 1);
-                        }
-                    }
+                    syncOptionSelection(checkbox, optionItem, selectedOptionIndices, originalIndex);
                 }
             });
 
@@ -1749,7 +1751,7 @@ function updateCardContent(card) {
                     case 'Enter': {
                         e.preventDefault();
                         e.stopPropagation();
-                        toggleOption();
+                        toggleOption(checkbox, optionItem, selectedOptionIndices, originalIndex);
 
                         break;
                     }
@@ -1968,13 +1970,7 @@ function toggleTextExplanation() {
 
     // Toggle label visibility based on explanation visibility
     if (label) {
-        if (isHidden) {
-            // Explanation is now shown, hide the label
-            label.style.display = 'none';
-        } else {
-            // Explanation is now hidden, show the label
-            label.style.display = 'inline';
-        }
+        label.style.display = isHidden ? 'none' : 'inline';
     }
 }
 
@@ -2125,7 +2121,8 @@ function markAnswer(scoreOrBool) {
     }
 
     // Normalize: boolean → number (true=1, false=0), number stays as-is
-    const score = typeof scoreOrBool === 'boolean' ? (scoreOrBool ? 1 : 0) : scoreOrBool;
+    let score = scoreOrBool;
+    if (typeof scoreOrBool === 'boolean') score = scoreOrBool ? 1 : 0;
     const isFullyCorrect = score === 1;
     const card = cards[currentCardIndex];
 
@@ -2515,7 +2512,9 @@ function updateSpacedRepetition(card, wasCorrect, score) {
     if (!data.history) data.history = [];
 
     // Record attempt (score: 0.0-1.0, or 1/0 for text cards)
-    data.history.push(score === undefined ? (wasCorrect ? 1 : 0) : score);
+    let recordedScore = score;
+    if (recordedScore === undefined) recordedScore = wasCorrect ? 1 : 0;
+    data.history.push(recordedScore);
 
     if (wasCorrect) {
         if (data.repetitions === 0) {
@@ -2833,6 +2832,15 @@ function triggerConfetti() {
 let bookViewCurrentCards = [];
 
 /**
+ * Whether an enriched book-view entry has any answer history attached.
+ * @param {{ srData?: { history?: number[] } }} e
+ * @returns {boolean}
+ */
+function hasAnswerHistory(e) {
+    return Boolean(e.srData && e.srData.history && e.srData.history.length > 0);
+}
+
+/**
  * Render cards in book view format
  * @param {Array<object>} cardsToShow - Cards to render
  * @param {string} title - Title for the book view
@@ -2863,7 +2871,6 @@ function openBookView(cardsToShow, title) {
     });
 
     // Find where unanswered section starts (no SR data OR SR data with empty history)
-    const hasAnswerHistory = (e) => e.srData && e.srData.history && e.srData.history.length > 0;
     const firstUnansweredIdx = enriched.findIndex((e) => !hasAnswerHistory(e));
     const answeredCount = firstUnansweredIdx === -1 ? enriched.length : firstUnansweredIdx;
 
@@ -2903,8 +2910,9 @@ function openBookView(cardsToShow, title) {
                     badgeText = `${correctAttempts} von ${history.length} Mal richtig beantwortet`;
                 }
                 const avgScore = history.reduce((a, b) => a + b, 0) / history.length;
-                const badgeClass =
-                    avgScore >= 0.8 ? 'book-sr-good' : avgScore >= 0.5 ? '' : 'book-sr-overdue';
+                let badgeClass = 'book-sr-overdue';
+                if (avgScore >= 0.8) badgeClass = 'book-sr-good';
+                else if (avgScore >= 0.5) badgeClass = '';
                 html += `<div class="book-card-sr-badge ${badgeClass}">${sanitizeHTML(badgeText)}</div>`;
             }
         }
@@ -3264,12 +3272,14 @@ function displaySpacedRepetitionBuckets() {
 
     // Save current expanded and selected state before overwriting
     const expandedIntervals = new Set(
-        Array.from(document.querySelectorAll('.sr-bucket-cards.expanded'))
-            .map((el) => Number.parseInt(el.id.replace('bucket-cards-', '')))
+        [...document.querySelectorAll('.sr-bucket-cards.expanded')].map((el) =>
+            Number.parseInt(el.id.replace('bucket-cards-', ''))
+        )
     );
     const selectedIntervals = new Set(
-        Array.from(document.querySelectorAll('.sr-bucket.selected'))
-            .map((el) => Number.parseInt(el.dataset.interval))
+        [...document.querySelectorAll('.sr-bucket.selected')].map((el) =>
+            Number.parseInt(el.dataset.interval)
+        )
     );
 
     // Check if there are any cards with SR data
@@ -3410,9 +3420,10 @@ function toggleBucketSelection(interval) {
 function updateStartBucketButton() {
     const selectedCount = document.querySelectorAll('.sr-bucket.selected').length;
     startSelectedBucketsBtn.disabled = selectedCount === 0;
+    const bucketSuffix = selectedCount === 1 ? '' : 's';
     startSelectedBucketsBtn.textContent =
         selectedCount > 0
-            ? `Mit ${selectedCount} Bucket${selectedCount === 1 ? '' : 's'} üben`
+            ? `Mit ${selectedCount} Bucket${bucketSuffix} üben`
             : 'Mit ausgewählten Buckets üben';
 }
 
