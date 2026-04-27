@@ -206,6 +206,7 @@ document.addEventListener('DOMContentLoaded', () => {
         reconnectHostBtn.classList.remove('hidden');
     } else if (savedSession && savedSession.role === 'player') {
         reconnectPlayerBtn.classList.remove('hidden');
+        reconnectPlayerBtn.classList.add('pulse-cta');
     }
 
     reconnectHostBtn.addEventListener('click', () => {
@@ -220,6 +221,7 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     reconnectPlayerBtn.addEventListener('click', () => {
+        reconnectPlayerBtn.classList.remove('pulse-cta');
         const session = getActiveSession();
         if (!session || session.role !== 'player') {
             showMessage('Keine aktive Spieler-Sitzung gefunden.', 'error');
