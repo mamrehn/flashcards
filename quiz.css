@@ -827,6 +827,10 @@ select:focus {
     color: #e0cdf5; /* brighter than primary — pops on hover */
 }
 
+[data-theme='dark'] .btn-reconnect {
+    color: white;
+}
+
 [data-theme='dark'] .question-item,
 [data-theme='dark'] .player-item,
 [data-theme='dark'] .host-options-list li {
