@@ -611,6 +611,30 @@ select:focus {
     }
 }
 
+.btn.pulse-cta {
+    animation: pulse-cta 0.6s ease-in-out infinite alternate;
+    background-color: var(--accent-color);
+}
+
+@keyframes pulse-cta {
+    0% {
+        transform: scale(1);
+        box-shadow: 0 0 0 0 rgba(255, 51, 102, 0.55);
+    }
+    100% {
+        transform: scale(1.05);
+        box-shadow: 0 0 0 10px rgba(255, 51, 102, 0);
+    }
+}
+
+.auto-submit-note {
+    display: inline-block;
+    margin-top: 0.25rem;
+    font-size: 0.9em;
+    font-style: italic;
+    color: var(--secondary-color);
+}
+
 /* Timer bar */
 .timer-bar-container {
     width: 100%;

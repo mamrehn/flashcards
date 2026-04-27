@@ -1595,6 +1595,7 @@ let playerTimerInterval = null;
 let playerCurrentQuestionOptions = [];
 let selectedAnswers = [];
 let playerHasSubmitted = false;
+let playerWasAutoSubmitted = false;
 let playerScore = 0;
 let playerCurrentQuestionIndex = -1;
 let playerBeforeUnloadHandler = null;
@@ -1832,6 +1833,7 @@ function initializePlayerFeatures(reconnectInfo) {
 
             playerHasSubmitted = true;
             submitAnswerBtn.disabled = true;
+            submitAnswerBtn.classList.remove('pulse-cta');
             for (const btn of optionsContainer.querySelectorAll('button.option-btn')) {
                 btn.disabled = true;
             }
@@ -2074,6 +2076,7 @@ function initializePlayerFeatures(reconnectInfo) {
     function startPlayerTimer(durationSeconds) {
         playerTimerBar.style.width = '100%';
         if (playerTimerInterval) clearInterval(playerTimerInterval);
+        submitAnswerBtn.classList.remove('pulse-cta');
 
         const totalDurationMs = durationSeconds * 1000;
         const timerStartTime = Date.now();
@@ -2083,12 +2086,17 @@ function initializePlayerFeatures(reconnectInfo) {
             const remaining = Math.max(0, totalDurationMs - elapsed);
             playerTimerBar.style.width = `${(remaining / totalDurationMs) * 100}%`;
 
+            if (!playerHasSubmitted && remaining > 0 && remaining <= 3000) {
+                submitAnswerBtn.classList.add('pulse-cta');
+            }
+
             if (remaining <= 0) {
                 clearInterval(playerTimerInterval);
                 playerTimerInterval = null;
                 // Auto-submit current selections if player hasn't already submitted
                 if (!playerHasSubmitted) {
                     playerHasSubmitted = true;
+                    playerWasAutoSubmitted = selectedAnswers.length > 0;
                     submitAnswerBtn.disabled = true;
                     if (playerWs && playerWs.readyState === WebSocket.OPEN) {
                         playerWs.send(
@@ -2106,6 +2114,7 @@ function initializePlayerFeatures(reconnectInfo) {
                     }
                 }
                 submitAnswerBtn.classList.add('hidden');
+                submitAnswerBtn.classList.remove('pulse-cta');
                 for (const btn of optionsContainer.querySelectorAll('button.option-btn')) {
                     btn.disabled = true;
                 }
@@ -2154,8 +2163,10 @@ function initializePlayerFeatures(reconnectInfo) {
         }
 
         submitAnswerBtn.classList.add('hidden');
+        submitAnswerBtn.classList.remove('pulse-cta');
         submitAnswerBtn.disabled = false;
         playerHasSubmitted = false;
+        playerWasAutoSubmitted = false;
         for (const btn of optionsContainer.querySelectorAll('button.option-btn')) {
             btn.disabled = false;
             btn.classList.remove('correct-answer', 'incorrect-answer', 'selected'); // Clean up previous result styles
@@ -2194,6 +2205,11 @@ function initializePlayerFeatures(reconnectInfo) {
             resultHtml += `<strong class="correct">TEILWEISE RICHTIG (${correctHits}/${correctSet.size})</strong> `;
         } else {
             resultHtml += '<strong class="incorrect">FALSCH.</strong> ';
+        }
+
+        if (playerWasAutoSubmitted && playerAnswer && playerAnswer.length > 0) {
+            resultHtml +=
+                '<br><span class="auto-submit-note">Automatisch bei Zeitablauf gesendet – kein Geschwindigkeitsbonus.</span>';
         }
 
         resultHtml += '<br>Richtige Antwort(en): ';
