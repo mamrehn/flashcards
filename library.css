@@ -420,6 +420,12 @@ body {
     margin-top: 1.5rem;
 }
 
+.detail-actions-top {
+    margin: 0.75rem 0 1.25rem 0;
+    padding-bottom: 1rem;
+    border-bottom: 1px solid var(--border-color, #e4e7e5);
+}
+
 .btn {
     padding: 0.55rem 1.05rem;
     border: none;

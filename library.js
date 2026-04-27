@@ -365,15 +365,6 @@ function renderDetail(deck, importedMeta) {
     title.textContent = deck.title;
     card.append(title);
 
-    if (deck.meta && deck.meta.description) {
-        const desc = document.createElement('p');
-        desc.className = 'detail-description';
-        desc.textContent = deck.meta.description;
-        card.append(desc);
-    }
-
-    card.append(buildMetaTable(deck));
-
     if (importedMeta) {
         if (importedMeta.libraryVersion === deck.version) {
             card.append(
@@ -393,6 +384,39 @@ function renderDetail(deck, importedMeta) {
             );
         }
     }
+
+    const actions = document.createElement('div');
+    actions.className = 'detail-actions detail-actions-top';
+
+    if (importedMeta && importedMeta.libraryVersion !== deck.version) {
+        const updateBtn = document.createElement('button');
+        updateBtn.className = 'btn btn-update';
+        updateBtn.textContent = '🔄 Aktualisieren (Fortschritt erhalten)';
+        updateBtn.addEventListener('click', () => updateDeck(deck, updateBtn));
+        actions.append(updateBtn);
+    }
+
+    const importBtn = document.createElement('button');
+    importBtn.className = 'btn btn-primary';
+    importBtn.textContent =
+        importedMeta && importedMeta.libraryVersion === deck.version
+            ? '▶ Lernen starten'
+            : '⬇ Importieren & lernen';
+    importBtn.addEventListener('click', () => {
+        location.href = `cards.html?import=${encodeURIComponent(deck.id)}`;
+    });
+    actions.append(importBtn);
+
+    card.append(actions);
+
+    if (deck.meta && deck.meta.description) {
+        const desc = document.createElement('p');
+        desc.className = 'detail-description';
+        desc.textContent = deck.meta.description;
+        card.append(desc);
+    }
+
+    card.append(buildMetaTable(deck));
 
     // One prominent total + a sub-line that makes the breakdown explicit
     // (avoids the "is it 49 + 23 + 26?" misread).
@@ -419,29 +443,6 @@ function renderDetail(deck, importedMeta) {
         card.append(buildCategoryList(deck.categories, deck.categories.length));
     }
 
-    const actions = document.createElement('div');
-    actions.className = 'detail-actions';
-
-    if (importedMeta && importedMeta.libraryVersion !== deck.version) {
-        const updateBtn = document.createElement('button');
-        updateBtn.className = 'btn btn-update';
-        updateBtn.textContent = '🔄 Aktualisieren (Fortschritt erhalten)';
-        updateBtn.addEventListener('click', () => updateDeck(deck, updateBtn));
-        actions.append(updateBtn);
-    }
-
-    const importBtn = document.createElement('button');
-    importBtn.className = 'btn btn-primary';
-    importBtn.textContent =
-        importedMeta && importedMeta.libraryVersion === deck.version
-            ? '▶ Lernen starten'
-            : '⬇ Importieren & lernen';
-    importBtn.addEventListener('click', () => {
-        location.href = `cards.html?import=${encodeURIComponent(deck.id)}`;
-    });
-    actions.append(importBtn);
-
-    card.append(actions);
     els.detailContent.append(card);
 }
 
