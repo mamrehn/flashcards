@@ -13,7 +13,8 @@ const rooms = new Map();
  *
  */
 function generateRoomId() {
-    const chars = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+    // Excludes 0/O and 1/I to avoid mis-keying the room code.
+    const chars = '23456789ABCDEFGHJKLMNPQRSTUVWXYZ';
     const MAX_ATTEMPTS = 100;
     for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
         let id = '';

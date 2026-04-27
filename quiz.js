@@ -63,7 +63,8 @@ function showView(viewToShowId) {
  * @returns {string} The generated alphanumeric ID.
  */
 function generateAlphanumericId(length) {
-    const chars = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+    // Excludes 0/O and 1/I to avoid confusion when read aloud or copied.
+    const chars = '23456789ABCDEFGHJKLMNPQRSTUVWXYZ';
     let result = '';
     for (let i = 0; i < length; i++) {
         result += chars.charAt(Math.floor(Math.random() * chars.length));
