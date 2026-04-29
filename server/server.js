@@ -35,6 +35,86 @@ function generateSessionId() {
  *
  * @param name
  */
+// Lobby cosmetic state — server stays a relay; clients enforce the curated set.
+const VALID_MUSIC_VOTES = new Set(['arcade', 'cinematic', 'lofi', 'none']);
+const VALID_LOBBY_MUSIC = new Set(['arcade', 'cinematic', 'lofi', 'none']);
+const LOBBY_MUSIC_DEFAULT = 'lofi';
+const AVATAR_MAX_BYTES = 32;
+
+/**
+ * Avatar values are an opaque token chosen client-side from a curated grid.
+ * @param avatar
+ */
+function sanitizeAvatar(avatar) {
+    if (typeof avatar !== 'string') return '';
+    const trimmed = avatar.trim();
+    if (!trimmed) return '';
+    return [...trimmed].slice(0, 8).join('').slice(0, AVATAR_MAX_BYTES);
+}
+
+/**
+ *
+ * @param categories
+ */
+function sanitizeCategories(categories) {
+    if (!Array.isArray(categories)) return [];
+    const seen = new Set();
+    const out = [];
+    for (const c of categories) {
+        if (typeof c !== 'string') continue;
+        const cleaned = c.trim().slice(0, 60);
+        if (!cleaned || seen.has(cleaned)) continue;
+        seen.add(cleaned);
+        out.push(cleaned);
+        if (out.length >= 30) break;
+    }
+    return out;
+}
+
+/**
+ *
+ * @param room
+ */
+function tallyMusicVotes(room) {
+    const tally = { arcade: 0, cinematic: 0, lofi: 0, none: 0 };
+    const votes = room.musicVotes;
+    if (votes) {
+        for (const choice of votes.values()) {
+            if (tally[choice] !== undefined) tally[choice]++;
+        }
+    }
+    return tally;
+}
+
+/**
+ *
+ * @param room
+ */
+function broadcastMusicTally(room) {
+    const tally = tallyMusicVotes(room);
+    const payload = { type: 'music_vote_update', tally, locked: !!room.musicLocked };
+    if (room.musicLocked && room.musicWinner) payload.winner = room.musicWinner;
+    broadcastToPlayers(room, payload);
+    if (room.hostWs && room.hostWs.readyState === 1) send(room.hostWs, payload);
+}
+
+/**
+ * Tie-breaker is 'none' (no music).
+ * @param room
+ */
+function decideMusicWinner(room) {
+    const tally = tallyMusicVotes(room);
+    let winner = 'none';
+    let best = tally.none;
+    for (const theme of ['arcade', 'cinematic', 'lofi']) {
+        if (tally[theme] > best) {
+            best = tally[theme];
+            winner = theme;
+        }
+    }
+    return winner;
+}
+
 function sanitizeName(name) {
     if (typeof name !== 'string') return 'Spieler';
     // Whitelist: letters, digits, German umlauts, spaces, hyphens, underscores, dots
@@ -190,6 +270,26 @@ wss.on('connection', (ws) => {
                 handleTerminate(ws);
                 break;
             }
+            case 'set_categories': {
+                handleSetCategories(ws, msg);
+                break;
+            }
+            case 'cast_music_vote': {
+                handleCastMusicVote(ws, msg);
+                break;
+            }
+            case 'lock_music_vote': {
+                handleLockMusicVote(ws);
+                break;
+            }
+            case 'update_avatar': {
+                handleUpdateAvatar(ws, msg);
+                break;
+            }
+            case 'set_lobby_music': {
+                handleSetLobbyMusic(ws, msg);
+                break;
+            }
             default: {
                 console.warn(`Unknown message type: ${msg.type}`);
                 break;
@@ -234,6 +334,11 @@ function handleCreateRoom(ws) {
         createdAt: Date.now(),
         hostDisconnectTimer: null,
         expiryTimer: null,
+        categories: [],
+        musicVotes: new Map(),
+        musicLocked: false,
+        musicWinner: null,
+        lobbyMusic: LOBBY_MUSIC_DEFAULT,
     };
     rooms.set(roomId, room);
 
@@ -300,12 +405,22 @@ function handleReconnectHost(ws, msg) {
         playerList.push({
             sessionId: sid,
             name: p.name,
+            avatar: p.avatar || '',
             score: p.score,
             isConnected: p.isConnected,
         });
     }
 
-    send(ws, { type: 'host_reconnected', roomId, players: playerList });
+    send(ws, {
+        type: 'host_reconnected',
+        roomId,
+        players: playerList,
+        categories: room.categories,
+        musicTally: tallyMusicVotes(room),
+        musicLocked: !!room.musicLocked,
+        musicWinner: room.musicWinner || null,
+        lobbyMusic: room.lobbyMusic || LOBBY_MUSIC_DEFAULT,
+    });
     console.log(`Host reconnected to room ${roomId}`);
 }
 
@@ -360,6 +475,11 @@ function handleRestoreRoom(ws, msg) {
         createdAt: Date.now(),
         hostDisconnectTimer: null,
         expiryTimer: null,
+        categories: [],
+        musicVotes: new Map(),
+        musicLocked: false,
+        musicWinner: null,
+        lobbyMusic: LOBBY_MUSIC_DEFAULT,
     };
 
     // Restore players if provided (limit to MAX_PLAYERS_PER_ROOM)
@@ -438,12 +558,22 @@ function handleJoin(ws, msg) {
         ws.roomId = roomCode;
         ws.role = 'player';
 
+        // Allow players to refresh their avatar on reconnect.
+        const incomingAvatar = sanitizeAvatar(msg.avatar);
+        if (incomingAvatar) player.avatar = incomingAvatar;
+
         send(ws, {
             type: 'joined',
             sessionId,
             score: player.score,
             playerName: player.name,
+            avatar: player.avatar || '',
             isReconnect: true,
+            categories: room.categories,
+            musicTally: tallyMusicVotes(room),
+            musicLocked: !!room.musicLocked,
+            musicWinner: room.musicWinner || null,
+            lobbyMusic: room.lobbyMusic || LOBBY_MUSIC_DEFAULT,
         });
 
         if (room.hostWs && room.hostWs.readyState === 1) {
@@ -451,6 +581,7 @@ function handleJoin(ws, msg) {
                 type: 'player_reconnected',
                 sessionId,
                 name: player.name,
+                avatar: player.avatar || '',
                 score: player.score,
                 playerCount: getConnectedPlayerCount(room),
             });
@@ -466,20 +597,34 @@ function handleJoin(ws, msg) {
         // New player
         sessionId = generateSessionId();
         const name = sanitizeName(msg.playerName);
-        player = { name, score: 0, ws, isConnected: true };
+        const avatar = sanitizeAvatar(msg.avatar);
+        player = { name, avatar, score: 0, ws, isConnected: true };
         room.players.set(sessionId, player);
 
         ws.sessionId = sessionId;
         ws.roomId = roomCode;
         ws.role = 'player';
 
-        send(ws, { type: 'joined', sessionId, score: 0, playerName: name, isReconnect: false });
+        send(ws, {
+            type: 'joined',
+            sessionId,
+            score: 0,
+            playerName: name,
+            avatar,
+            isReconnect: false,
+            categories: room.categories,
+            musicTally: tallyMusicVotes(room),
+            musicLocked: !!room.musicLocked,
+            musicWinner: room.musicWinner || null,
+            lobbyMusic: room.lobbyMusic || LOBBY_MUSIC_DEFAULT,
+        });
 
         if (room.hostWs && room.hostWs.readyState === 1) {
             send(room.hostWs, {
                 type: 'player_joined',
                 sessionId,
                 name,
+                avatar,
                 playerCount: getConnectedPlayerCount(room),
             });
         }
@@ -622,6 +767,87 @@ function handleTerminate(ws) {
     if (room.hostDisconnectTimer) clearTimeout(room.hostDisconnectTimer);
     rooms.delete(ws.roomId);
     console.log(`Room ${ws.roomId} terminated by host`);
+}
+
+/**
+ * Host pushes the deduplicated category list after importing MC questions.
+ * @param ws
+ * @param msg
+ */
+function handleSetCategories(ws, msg) {
+    const room = rooms.get(ws.roomId);
+    if (!room || ws.sessionId !== room.hostSessionId) return;
+
+    room.categories = sanitizeCategories(msg.categories);
+    broadcastToPlayers(room, { type: 'categories', categories: room.categories });
+}
+
+/**
+ * Player casts (or changes) their music vote. One vote per player.
+ * @param ws
+ * @param msg
+ */
+function handleCastMusicVote(ws, msg) {
+    const room = rooms.get(ws.roomId);
+    if (!room || ws.role !== 'player') return;
+    if (room.musicLocked) return;
+    if (typeof msg.choice !== 'string' || !VALID_MUSIC_VOTES.has(msg.choice)) return;
+
+    room.musicVotes.set(ws.sessionId, msg.choice);
+    broadcastMusicTally(room);
+}
+
+/**
+ * Host locks the vote at quiz start; tie goes to 'none'.
+ * @param ws
+ */
+function handleLockMusicVote(ws) {
+    const room = rooms.get(ws.roomId);
+    if (!room || ws.sessionId !== room.hostSessionId) return;
+    if (room.musicLocked) return;
+
+    room.musicLocked = true;
+    room.musicWinner = decideMusicWinner(room);
+    broadcastMusicTally(room);
+}
+
+/**
+ * Player changes their avatar from the lobby grid.
+ * @param ws
+ * @param msg
+ */
+function handleUpdateAvatar(ws, msg) {
+    const room = rooms.get(ws.roomId);
+    if (!room || ws.role !== 'player') return;
+    const player = room.players.get(ws.sessionId);
+    if (!player) return;
+
+    const avatar = sanitizeAvatar(msg.avatar);
+    player.avatar = avatar;
+
+    if (room.hostWs && room.hostWs.readyState === 1) {
+        send(room.hostWs, {
+            type: 'player_avatar',
+            sessionId: ws.sessionId,
+            avatar,
+        });
+    }
+}
+
+/**
+ * Host's lobby music preference. Players display a 🔊 pill on the matching
+ * vote card so they know which theme they're hearing right now.
+ * @param ws
+ * @param msg
+ */
+function handleSetLobbyMusic(ws, msg) {
+    const room = rooms.get(ws.roomId);
+    if (!room || ws.sessionId !== room.hostSessionId) return;
+    if (typeof msg.theme !== 'string' || !VALID_LOBBY_MUSIC.has(msg.theme)) return;
+    if (room.lobbyMusic === msg.theme) return;
+
+    room.lobbyMusic = msg.theme;
+    broadcastToPlayers(room, { type: 'lobby_music', theme: room.lobbyMusic });
 }
 
 /**
