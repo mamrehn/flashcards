@@ -150,6 +150,14 @@
                     </p>
                     <p>Verbundene Spieler: <span id="player-count">0</span></p>
                     <div class="players-list" id="players-list"></div>
+                    <section class="host-lobby-music">
+                        <h4>Lobby-Musik</h4>
+                        <div id="host-lobby-music-options" class="host-music-options"></div>
+                        <p class="host-lobby-music-hint">
+                            Spielmusik wird per Spieler-Abstimmung entschieden.
+                        </p>
+                    </section>
+                    <p id="host-music-status" class="host-music-status hidden"></p>
                     <button id="start-questions-btn" class="btn btn-accent hidden">
                         Fragen starten
                     </button>
@@ -197,10 +205,60 @@
                 </div>
 
                 <div id="waiting-room" class="hidden">
-                    <h2>Warten auf den Quizstart</h2>
-                    <p id="waiting-message">Du bist dem Raum erfolgreich beigetreten!</p>
-                    <div class="loader"></div>
-                    <p>Der Host wird das Quiz bald starten...</p>
+                    <div class="lobby-welcome">
+                        <div class="lobby-welcome-art" aria-hidden="true">🛋️ ☕ 🎧</div>
+                        <h2 class="lobby-welcome-title">Willkommen in der Lobby</h2>
+                        <p id="waiting-message" class="lobby-welcome-status">
+                            Du bist drin — wir warten auf den Host.
+                        </p>
+                        <p class="lobby-welcome-hint">
+                            Lust mitzumachen, während du wartest? Stimme über die Musik ab und
+                            gestalte deinen Avatar 👇
+                        </p>
+                    </div>
+
+                    <section id="lobby-categories" class="lobby-section hidden">
+                        <h3>Heutige Themen</h3>
+                        <div id="lobby-categories-list" class="lobby-chips"></div>
+                    </section>
+
+                    <section id="lobby-music" class="lobby-section lobby-music-poll">
+                        <h3>Wähle die Spielmusik</h3>
+                        <div id="lobby-music-options" class="music-poll-grid"></div>
+                        <p id="lobby-music-status" class="lobby-music-status"></p>
+                    </section>
+
+                    <section id="lobby-avatar" class="lobby-section">
+                        <h3>Dein Avatar</h3>
+                        <div id="lobby-avatar-builder" class="avatar-builder">
+                            <div class="avatar-radial">
+                                <div class="avatar-center-wrapper">
+                                    <button
+                                        id="lobby-avatar-base"
+                                        class="avatar-base-center"
+                                        type="button"
+                                        aria-haspopup="true"
+                                        aria-expanded="false"
+                                        aria-label="Figur ändern"
+                                    ></button>
+                                    <div
+                                        id="lobby-avatar-base-picker"
+                                        class="avatar-base-picker hidden"
+                                        role="menu"
+                                    ></div>
+                                </div>
+                                <div
+                                    id="lobby-avatar-accessories"
+                                    class="avatar-accessory-ring"
+                                    role="radiogroup"
+                                    aria-label="Accessoire"
+                                ></div>
+                            </div>
+                            <p class="avatar-builder-hint">
+                                Personalisiere deinen Avatar.
+                            </p>
+                        </div>
+                    </section>
                 </div>
 
                 <div id="player-question" class="hidden">

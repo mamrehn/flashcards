@@ -57,6 +57,124 @@ function showView(viewToShowId) {
     }
 }
 
+// --- Lobby cosmetics ---
+// Curated avatar set: RGI ZWJ professions on the gender-neutral 🧑 base, plus
+// single-codepoint fantasy/activity emojis. Player names stay separate; the
+// avatar prefixes the name. Old emoji fonts will fall back to side-by-side
+// glyphs for the ZWJ entries — accepted as a known limitation.
+const LOBBY_ZWJ = '‍';
+const LOBBY_AVATAR_BASES = [
+    { id: 'woman', emoji: '👩', label: 'Frau' },
+    { id: 'person', emoji: '🧑', label: 'Person' },
+    { id: 'man', emoji: '👨', label: 'Mann' },
+];
+const LOBBY_AVATAR_BASE_DEFAULT = 'person';
+// Every accessory below is an RGI ZWJ partner for all three bases above.
+const LOBBY_AVATAR_ACCESSORIES = [
+    { id: 'rocket',     emoji: '🚀',  label: 'Astronaut*in' },
+    { id: 'firetruck',  emoji: '🚒',  label: 'Feuerwehr' },
+    { id: 'plane',      emoji: '✈️',  label: 'Pilot*in' },
+    { id: 'microscope', emoji: '🔬',  label: 'Forscher*in' },
+    { id: 'palette',    emoji: '🎨',  label: 'Kunst' },
+    { id: 'mic',        emoji: '🎤',  label: 'Gesang' },
+    { id: 'cooking',    emoji: '🍳',  label: 'Kochen' },
+    { id: 'medical',    emoji: '⚕️',  label: 'Medizin' },
+    { id: 'justice',    emoji: '⚖️',  label: 'Justiz' },
+    { id: 'farm',       emoji: '🌾',  label: 'Landwirtschaft' },
+    { id: 'wrench',     emoji: '🔧',  label: 'Mechanik' },
+    { id: 'computer',   emoji: '💻',  label: 'Computer' },
+    { id: 'factory',    emoji: '🏭',  label: 'Fabrik' },
+    { id: 'office',     emoji: '💼',  label: 'Büro' },
+    { id: 'baby',       emoji: '🍼',  label: 'Pflege' },
+];
+const LOBBY_AVATAR_BASE_SET = new Set(LOBBY_AVATAR_BASES.map((b) => b.id));
+const LOBBY_AVATAR_ACCESSORY_SET = new Set(LOBBY_AVATAR_ACCESSORIES.map((a) => a.id));
+const LOBBY_AVATAR_STORAGE_KEY = 'quiz_lobby_avatar_v2';
+
+/**
+ * Composes the avatar string from a base id + optional accessory id. Returns
+ * the bare base emoji when no accessory is selected.
+ * @param {string} baseId
+ * @param {string|null} accessoryId
+ * @returns {string}
+ */
+function composeAvatar(baseId, accessoryId) {
+    const base = LOBBY_AVATAR_BASES.find((b) => b.id === baseId);
+    if (!base) return '';
+    if (!accessoryId) return base.emoji;
+    const acc = LOBBY_AVATAR_ACCESSORIES.find((a) => a.id === accessoryId);
+    if (!acc) return base.emoji;
+    return base.emoji + LOBBY_ZWJ + acc.emoji;
+}
+
+/**
+ * Parses an avatar string back into base/accessory ids so a server-sent
+ * avatar (e.g. on reconnect) can rehydrate the picker state.
+ * @param {string} str
+ * @returns {{base: string, accessory: (string|null)} | null}
+ */
+function parseAvatarString(str) {
+    if (typeof str !== 'string' || !str) return null;
+    const parts = str.split(LOBBY_ZWJ);
+    const base = LOBBY_AVATAR_BASES.find((b) => b.emoji === parts[0]);
+    if (!base) return null;
+    if (parts.length === 1) return { base: base.id, accessory: null };
+    if (parts.length === 2) {
+        const acc = LOBBY_AVATAR_ACCESSORIES.find((a) => a.emoji === parts[1]);
+        if (acc) return { base: base.id, accessory: acc.id };
+    }
+    return null;
+}
+
+/**
+ * Recomposes the avatar from the current base/accessory, persists it to
+ * localStorage, and notifies the server. Module-level so the picker
+ * functions can stay light.
+ */
+function commitAvatar() {
+    playerAvatar = composeAvatar(playerAvatarBase, playerAvatarAccessory);
+    try {
+        localStorage.setItem(
+            LOBBY_AVATAR_STORAGE_KEY,
+            JSON.stringify({ base: playerAvatarBase, accessory: playerAvatarAccessory })
+        );
+    } catch { /* private mode */ }
+    if (playerWs && playerWs.readyState === WebSocket.OPEN) {
+        playerWs.send(JSON.stringify({ type: 'update_avatar', avatar: playerAvatar }));
+    }
+}
+
+const LOBBY_MUSIC_THEMES = [
+    { id: 'arcade',    label: 'Arcade',    icon: '🕹️', tagline: 'Schnell & spielerisch' },
+    { id: 'cinematic', label: 'Cinematic', icon: '🎬', tagline: 'Episch & dramatisch' },
+    { id: 'lofi',      label: 'Lo-Fi',     icon: '🎧', tagline: 'Ruhig & fokussiert' },
+];
+const LOBBY_HOST_MUSIC_DEFAULT = 'lofi';
+const LOBBY_HOST_MUSIC_STORAGE_KEY = 'quiz_host_lobby_music';
+const LOBBY_MUSIC_THEME_LABELS = {
+    arcade: 'Arcade', cinematic: 'Cinematic', lofi: 'Lo-Fi', none: 'Keine Musik',
+};
+const LOBBY_MUSIC_VOTE_OPTIONS = [
+    ...LOBBY_MUSIC_THEMES,
+    { id: 'none', label: 'Keine Musik', icon: '🔇', tagline: 'Stille fürs Lernen' },
+];
+const LOBBY_MUSIC_VOTE_IDS = new Set(LOBBY_MUSIC_VOTE_OPTIONS.map((o) => o.id));
+
+// Host-side audio: tracks served from /audio/themes/<theme>/<track>.aac.
+const HOST_AUDIO_TRACKS = new Set([
+    'lobby', 'question', 'waiting_for_answer', 'reveal', 'scoreboard', 'final',
+]);
+
+/**
+ * Builds the audio file URL for a (theme, track) pair.
+ * @param {string} theme
+ * @param {string} track
+ * @returns {string}
+ */
+function audioFilePath(theme, track) {
+    return `audio/themes/${theme}/${track}.aac`;
+}
+
 /**
  * Generates a random alphanumeric ID of a specified length.
  * @param {number} length - The desired length of the ID.
@@ -273,6 +391,59 @@ const HOST_MAX_RECONNECT_ATTEMPTS = 30;
 const RECONNECT_DELAY_MS = 10_000;
 
 /**
+ * Minimal host-side audio engine. One looping `<audio>` element re-pointed at
+ * the chosen theme's track files. Empty/missing files fail silently — the
+ * placeholder `.aac` files in audio/themes are intentionally empty until the
+ * host records over them.
+ *
+ * @returns {{setTheme:Function, play:Function, stop:Function, getTheme:Function}}
+ */
+function createMusicEngine() {
+    const audio = new Audio();
+    audio.loop = true;
+    audio.preload = 'auto';
+    audio.volume = 0.7;
+    audio.addEventListener('error', () => { /* silent fallback for missing files */ });
+    let theme = 'none';
+    let currentTrack = null;
+    return {
+        getTheme() { return theme; },
+        getCurrentTrack() { return currentTrack; },
+        setTheme(newTheme) {
+            if (newTheme === theme) return;
+            theme = newTheme;
+            audio.pause();
+            // Track is preserved so callers can decide whether to resume it
+            // under the new theme (see the music_vote_update lock handler).
+        },
+        play(track) {
+            if (theme === 'none') return;
+            if (!HOST_AUDIO_TRACKS.has(track)) return;
+            if (currentTrack === track && !audio.paused) return;
+            currentTrack = track;
+            audio.src = audioFilePath(theme, track);
+            audio.currentTime = 0;
+            const playPromise = audio.play();
+            if (playPromise && typeof playPromise.catch === 'function') {
+                playPromise.catch(() => { /* autoplay blocked or empty file */ });
+            }
+        },
+        stop() {
+            currentTrack = null;
+            audio.pause();
+        },
+    };
+}
+
+let hostMusicEngine = null;
+let hostMusicVoteTally = { arcade: 0, cinematic: 0, lofi: 0, none: 0 };
+let hostMusicLocked = false;
+let hostMusicWinner = null;
+// Lobby music is host-controlled (separate from the in-game vote). The teacher
+// can switch themes in class to glimpse each, including "Keine".
+let hostLobbyMusicTheme = LOBBY_HOST_MUSIC_DEFAULT;
+
+/**
  * Returns an array of non-host players from quizState.
  * @returns {Array<object>} Array of player objects excluding the host.
  */
@@ -295,7 +466,7 @@ function getConnectedNonHostPlayers() {
  */
 function getLeaderboardData() {
     return getNonHostPlayers()
-        .map((p) => ({ name: p.name, score: p.score }))
+        .map((p) => ({ name: p.name, avatar: p.avatar || '', score: p.score }))
         .toSorted((a, b) => b.score - a.score);
 }
 
@@ -328,6 +499,7 @@ async function initializeHostFeatures(reconnectInfo) {
             questionDurations: [], // Per-question durations (computed at quiz start)
         };
     }
+    if (!hostMusicEngine) hostMusicEngine = createMusicEngine();
 
     const quizState = hostGlobalQuizState;
     // Cache DOM elements for performance
@@ -478,6 +650,7 @@ async function initializeHostFeatures(reconnectInfo) {
                 fileStatus.textContent =
                     'Keine gültigen MC-Fragen gefunden. Nur Multiple-Choice-Fragen werden importiert.';
             }
+            sendCategoriesToServer();
             renderQuestionsList();
         };
 
@@ -646,6 +819,11 @@ async function initializeHostFeatures(reconnectInfo) {
                 showMessage('Es sind noch keine Spieler beigetreten!', 'info');
                 return;
             }
+            // Lock the music vote at start. The server replies with the
+            // winning theme; the dispatch handler wires the engine accordingly.
+            if (hostWs && hostWs.readyState === WebSocket.OPEN) {
+                hostWs.send(JSON.stringify({ type: 'lock_music_vote' }));
+            }
             qrContainer.classList.add('hidden');
             hostQuestionDisplay.classList.remove('hidden');
             if (hostViewHeading) hostViewHeading.classList.add('hidden'); // Hide "Quiz hosten" heading
@@ -664,6 +842,7 @@ async function initializeHostFeatures(reconnectInfo) {
 
         // Event listener for starting a new quiz
         newQuizBtn.addEventListener('click', async () => {
+            if (hostMusicEngine) hostMusicEngine.stop();
             // Terminate room on server and close WebSocket
             clearActiveSession();
             if (hostWs && hostWs.readyState === WebSocket.OPEN) {
@@ -790,6 +969,7 @@ async function initializeHostFeatures(reconnectInfo) {
             const currentJoinUrl = updateJoinLink(hostRoomId); // Get the current join URL
             generateQRCode(currentJoinUrl); // Generate QR with the full URL
             roomIdElement.textContent = quizState.roomId || 'N/A';
+            startHostLobbyMusic();
         }
     } else {
         // Default: show setup if no room instance
@@ -858,6 +1038,7 @@ async function initializeHostFeatures(reconnectInfo) {
                 generateQRCode(currentJoinUrl);
                 if (hostViewHeading) hostViewHeading.classList.remove('hidden');
                 saveActiveSession('host', hostRoomId, hostSessionId);
+                startHostLobbyMusic();
                 break;
             }
 
@@ -868,10 +1049,12 @@ async function initializeHostFeatures(reconnectInfo) {
                         if (quizState.players[p.sessionId]) {
                             quizState.players[p.sessionId].isConnected = p.isConnected;
                             quizState.players[p.sessionId].score = p.score;
+                            if (p.avatar) quizState.players[p.sessionId].avatar = p.avatar;
                         } else {
                             quizState.players[p.sessionId] = {
                                 id: p.sessionId,
                                 name: p.name,
+                                avatar: p.avatar || '',
                                 score: p.score,
                                 currentAnswer: [],
                                 answerTime: null,
@@ -880,6 +1063,17 @@ async function initializeHostFeatures(reconnectInfo) {
                         }
                     }
                 }
+                if (msg.musicTally) hostMusicVoteTally = msg.musicTally;
+                hostMusicLocked = !!msg.musicLocked;
+                if (msg.musicWinner) {
+                    hostMusicWinner = msg.musicWinner;
+                    if (hostMusicLocked && hostMusicEngine) {
+                        hostMusicEngine.setTheme(hostMusicWinner);
+                    }
+                }
+                renderHostMusicStatus();
+                // Push categories again in case server lost them (e.g. restored room).
+                sendCategoriesToServer();
                 refreshPlayerDisplay();
                 // If a question was active when we disconnected, restart it
                 // so players get a fresh copy and answers reset
@@ -903,12 +1097,40 @@ async function initializeHostFeatures(reconnectInfo) {
                 quizState.players[msg.sessionId] = {
                     id: msg.sessionId,
                     name: joinedName,
+                    avatar: typeof msg.avatar === 'string' ? msg.avatar : '',
                     score: 0,
                     currentAnswer: [],
                     answerTime: null,
                     isConnected: true,
                 };
                 refreshPlayerDisplay();
+                // Late joiners need the current category list pushed to them
+                // via the server (which has it cached). Nothing to do here.
+                break;
+            }
+
+            case 'player_avatar': {
+                if (quizState.players[msg.sessionId]) {
+                    quizState.players[msg.sessionId].avatar =
+                        typeof msg.avatar === 'string' ? msg.avatar : '';
+                    refreshPlayerDisplay();
+                }
+                break;
+            }
+
+            case 'music_vote_update': {
+                if (msg.tally) hostMusicVoteTally = msg.tally;
+                hostMusicLocked = !!msg.locked;
+                if (msg.winner) hostMusicWinner = msg.winner;
+                renderHostMusicStatus();
+                if (hostMusicLocked && hostMusicEngine) {
+                    const prevTrack = hostMusicEngine.getCurrentTrack();
+                    hostMusicEngine.setTheme(hostMusicWinner || 'none');
+                    if (prevTrack && hostMusicWinner && hostMusicWinner !== 'none') {
+                        hostMusicEngine.play(prevTrack);
+                    }
+                }
+                if (hostMusicLocked) renderHostLobbyMusicOptions();
                 break;
             }
 
@@ -929,14 +1151,19 @@ async function initializeHostFeatures(reconnectInfo) {
             case 'player_reconnected': {
                 const reconnectedName =
                     sanitizePlayerName(msg.name) || `Spieler ${msg.sessionId.slice(0, 4)}`;
+                const reconnectedAvatar = typeof msg.avatar === 'string' ? msg.avatar : '';
                 if (quizState.players[msg.sessionId]) {
                     quizState.players[msg.sessionId].isConnected = true;
                     quizState.players[msg.sessionId].score = msg.score;
                     quizState.players[msg.sessionId].name = reconnectedName;
+                    if (reconnectedAvatar) {
+                        quizState.players[msg.sessionId].avatar = reconnectedAvatar;
+                    }
                 } else {
                     quizState.players[msg.sessionId] = {
                         id: msg.sessionId,
                         name: reconnectedName,
+                        avatar: reconnectedAvatar,
                         score: msg.score,
                         currentAnswer: [],
                         answerTime: null,
@@ -1070,6 +1297,7 @@ async function initializeHostFeatures(reconnectInfo) {
                 const currentJoinUrl = updateJoinLink(hostRoomId);
                 generateQRCode(currentJoinUrl);
                 if (hostViewHeading) hostViewHeading.classList.remove('hidden');
+                startHostLobbyMusic();
             }
 
             // Delegate to the standard host message handler
@@ -1191,6 +1419,128 @@ async function initializeHostFeatures(reconnectInfo) {
     }
 
     /**
+     * Renders the host's music-vote status line below the player list. Shows
+     * the live tally before the vote locks; once locked, shows the chosen
+     * theme so the host knows what's about to play.
+     */
+    /**
+     * Renders the host's lobby music selector buttons. Click switches theme +
+     * starts/stops playback. Independent from the player vote.
+     */
+    function renderHostLobbyMusicOptions() {
+        const section = document.querySelector('.host-lobby-music');
+        if (section) section.classList.toggle('hidden', hostMusicLocked);
+        const el = document.querySelector('#host-lobby-music-options');
+        if (!el) return;
+        el.innerHTML = '';
+        const options = [
+            { id: 'none', label: 'Keine' },
+            ...LOBBY_MUSIC_THEMES,
+        ];
+        for (const opt of options) {
+            const btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = 'host-music-option';
+            btn.dataset.theme = opt.id;
+            btn.textContent = opt.label;
+            if (opt.id === hostLobbyMusicTheme) btn.classList.add('selected');
+            btn.addEventListener('click', () => setHostLobbyMusic(opt.id));
+            el.append(btn);
+        }
+    }
+
+    /**
+     * Switches the lobby music theme (host-side only) and persists it. After
+     * the music vote locks, this no-ops because in-game music takes over.
+     * @param {string} themeId
+     */
+    function setHostLobbyMusic(themeId) {
+        if (hostMusicLocked) return;
+        if (themeId !== 'none' && !LOBBY_MUSIC_THEMES.some((t) => t.id === themeId)) return;
+        hostLobbyMusicTheme = themeId;
+        try { localStorage.setItem(LOBBY_HOST_MUSIC_STORAGE_KEY, themeId); } catch { /* private mode */ }
+        if (hostMusicEngine) {
+            hostMusicEngine.setTheme(themeId);
+            if (themeId === 'none') hostMusicEngine.stop();
+            else hostMusicEngine.play('lobby');
+        }
+        if (hostWs && hostWs.readyState === WebSocket.OPEN) {
+            hostWs.send(JSON.stringify({ type: 'set_lobby_music', theme: themeId }));
+        }
+        renderHostLobbyMusicOptions();
+    }
+
+    /**
+     * Called when the host enters the lobby/QR view. Restores the saved theme
+     * (or default Lofi) and starts the lobby loop.
+     */
+    function startHostLobbyMusic() {
+        if (hostMusicLocked) return;
+        let saved = null;
+        try { saved = localStorage.getItem(LOBBY_HOST_MUSIC_STORAGE_KEY); } catch { /* private mode */ }
+        if (saved && (saved === 'none' || LOBBY_MUSIC_THEMES.some((t) => t.id === saved))) {
+            hostLobbyMusicTheme = saved;
+        }
+        if (hostMusicEngine) {
+            hostMusicEngine.setTheme(hostLobbyMusicTheme);
+            if (hostLobbyMusicTheme !== 'none') hostMusicEngine.play('lobby');
+        }
+        if (hostWs && hostWs.readyState === WebSocket.OPEN) {
+            hostWs.send(JSON.stringify({ type: 'set_lobby_music', theme: hostLobbyMusicTheme }));
+        }
+        renderHostLobbyMusicOptions();
+    }
+
+    function renderHostMusicStatus() {
+        const el = document.querySelector('#host-music-status');
+        if (!el) return;
+        const total =
+            hostMusicVoteTally.arcade +
+            hostMusicVoteTally.cinematic +
+            hostMusicVoteTally.lofi +
+            hostMusicVoteTally.none;
+        if (hostMusicLocked) {
+            el.classList.remove('hidden');
+            const label = LOBBY_MUSIC_THEME_LABELS[hostMusicWinner] || 'Keine Musik';
+            el.textContent = `Musik-Theme: ${label}`;
+            return;
+        }
+        if (total === 0) {
+            el.classList.add('hidden');
+            el.textContent = '';
+            return;
+        }
+        el.classList.remove('hidden');
+        const parts = [];
+        for (const theme of LOBBY_MUSIC_VOTE_OPTIONS) {
+            parts.push(`${theme.label}: ${hostMusicVoteTally[theme.id] || 0}`);
+        }
+        el.textContent = `Musik-Stimmen — ${parts.join(' · ')}`;
+    }
+
+    /**
+     * Collects the unique category labels across all imported MC questions
+     * and pushes them to the server so joining players can see the topic
+     * preview. Sent every time the question pool changes.
+     */
+    function sendCategoriesToServer() {
+        if (!hostWs || hostWs.readyState !== WebSocket.OPEN) return;
+        const seen = new Set();
+        const ordered = [];
+        for (const q of quizState.questions || []) {
+            const cats = Array.isArray(q.categories) ? q.categories : [];
+            for (const c of cats) {
+                if (typeof c !== 'string') continue;
+                const cleaned = c.trim();
+                if (!cleaned || seen.has(cleaned)) continue;
+                seen.add(cleaned);
+                ordered.push(cleaned);
+            }
+        }
+        hostWs.send(JSON.stringify({ type: 'set_categories', categories: ordered }));
+    }
+
+    /**
      * Refreshes the displayed list of players from local state (no DB query needed).
      */
     function refreshPlayerDisplay() {
@@ -1205,7 +1555,8 @@ async function initializeHostFeatures(reconnectInfo) {
             const i = document.createElement('div');
             i.className = 'player-item';
             if (p.isConnected === false) i.classList.add('disconnected');
-            i.textContent = p.name + (p.isConnected === false ? ' (getrennt)' : '');
+            const avatarPrefix = p.avatar ? `${p.avatar} ` : '';
+            i.textContent = avatarPrefix + p.name + (p.isConnected === false ? ' (getrennt)' : '');
             playersList.append(i);
         }
 
@@ -1309,6 +1660,7 @@ async function initializeHostFeatures(reconnectInfo) {
         const currentDuration = quizState.questionDurations[quizState.currentQuestionIndex];
         startTimer(currentDuration);
         await sendQuestionToPlayers(currentQuestion); // Pass the question object which now contains shuffled data
+        if (hostMusicEngine) hostMusicEngine.play('question');
     }
 
     /**
@@ -1398,6 +1750,7 @@ async function initializeHostFeatures(reconnectInfo) {
         }
 
         quizState.isQuestionActive = false;
+        if (hostMusicEngine) hostMusicEngine.play('reveal');
 
         // Calculate option counts for display on host side
         const currentQuestion = quizState.shuffledQuestions[quizState.currentQuestionIndex];
@@ -1519,6 +1872,7 @@ async function initializeHostFeatures(reconnectInfo) {
         const sortedPlayers = getLeaderboardData(); // This function already filters out the host
         scoreboardListEl.innerHTML = '';
         hostScoreboardEl.classList.remove('hidden');
+        if (hostMusicEngine) hostMusicEngine.play('scoreboard');
 
         const topPlayers = sortedPlayers.slice(0, 10);
 
@@ -1544,7 +1898,8 @@ async function initializeHostFeatures(reconnectInfo) {
                     break;
                 }
             }
-            li.innerHTML = `<span>${idx + 1}. ${sanitizeHTML(p.name)}</span><span>${Math.round(p.score)} Punkte</span>`;
+            const avatarPrefix = p.avatar ? `${sanitizeHTML(p.avatar)} ` : '';
+            li.innerHTML = `<span>${idx + 1}. ${avatarPrefix}${sanitizeHTML(p.name)}</span><span>${Math.round(p.score)} Punkte</span>`;
             scoreboardListEl.append(li);
         }
     }
@@ -1558,6 +1913,7 @@ async function initializeHostFeatures(reconnectInfo) {
         if (hostViewHeading) hostViewHeading.classList.remove('hidden'); // Show "Quiz hosten" heading
 
         displayLeaderboard();
+        if (hostMusicEngine) hostMusicEngine.play('final');
 
         // No need to send 'final' broadcast here, it's already sent with the last 'result'
         // This function just handles the host UI transition
@@ -1583,7 +1939,8 @@ async function initializeHostFeatures(reconnectInfo) {
                 case 1: { i.classList.add('rank-2'); break; }
                 case 2: { i.classList.add('rank-3'); break; }
             }
-            i.innerHTML = `<span>${idx + 1}. ${sanitizeHTML(p.name)}</span><span>${Math.round(p.score)} Punkte</span>`;
+            const avatarPrefix = p.avatar ? `${sanitizeHTML(p.avatar)} ` : '';
+            i.innerHTML = `<span>${idx + 1}. ${avatarPrefix}${sanitizeHTML(p.name)}</span><span>${Math.round(p.score)} Punkte</span>`;
             leaderboard.append(i);
         }
     }
@@ -1600,6 +1957,17 @@ let selectedAnswers = [];
 let playerHasSubmitted = false;
 let playerWasAutoSubmitted = false;
 let playerScore = 0;
+// Lobby-only state (cosmetic; resets on a fresh join):
+let playerAvatarBase = LOBBY_AVATAR_BASE_DEFAULT;
+let playerAvatarAccessory = null; // null = bare base
+let playerAvatar = composeAvatar(playerAvatarBase, playerAvatarAccessory);
+let playerVote = null; // 'arcade' | 'cinematic' | 'lofi' | 'none' | null (no vote)
+let playerLobbyTally = { arcade: 0, cinematic: 0, lofi: 0, none: 0 };
+let playerLobbyMusicLocked = false;
+let playerLobbyMusicWinner = null;
+let playerLobbyHostMusic = 'lofi'; // host's currently-playing lobby theme
+let playerLobbyCategories = [];
+let playerLobbyAvatarRendered = false;
 let playerCurrentQuestionIndex = -1;
 let playerBeforeUnloadHandler = null;
 let suppressPlayerReconnect = false;
@@ -1796,6 +2164,13 @@ function initializePlayerFeatures(reconnectInfo) {
     const joinForm = document.querySelector('#join-form');
     const waitingRoom = document.querySelector('#waiting-room');
     const waitingMessage = document.querySelector('#waiting-message');
+    const lobbyCategoriesEl = document.querySelector('#lobby-categories');
+    const lobbyCategoriesListEl = document.querySelector('#lobby-categories-list');
+    const lobbyMusicOptionsEl = document.querySelector('#lobby-music-options');
+    const lobbyMusicStatusEl = document.querySelector('#lobby-music-status');
+    const lobbyAvatarBaseEl = document.querySelector('#lobby-avatar-base');
+    const lobbyAvatarBasePickerEl = document.querySelector('#lobby-avatar-base-picker');
+    const lobbyAvatarAccessoriesEl = document.querySelector('#lobby-avatar-accessories');
     const playerQuestionView = document.querySelector('#player-question');
     const playerQuestionTextEl = document.querySelector('#player-question-text');
     const playerQuestionCounterEl = document.querySelector('#player-question-counter');
@@ -1811,8 +2186,284 @@ function initializePlayerFeatures(reconnectInfo) {
     const playAgainBtn = document.querySelector('#play-again-btn');
     const playerLeaderboardContainer = document.querySelector('#player-leaderboard-container');
 
+    /**
+     * Renders the radial avatar picker:
+     *   - center: the chosen base (👩/🧑/👨), clickable to swap
+     *   - around: the raw accessory glyphs on a ring; clicking one composes
+     *     `base + ZWJ + accessory` and commits it
+     * The base picker bubble is rendered into a sibling node and toggled.
+     */
+    function renderAvatarBuilder() {
+        if (lobbyAvatarBaseEl) {
+            // Center shows the composed result: base alone if no accessory,
+            // or `base + ZWJ + accessory` (e.g. man + rocket = 👨‍🚀).
+            lobbyAvatarBaseEl.textContent =
+                composeAvatar(playerAvatarBase, playerAvatarAccessory);
+            lobbyAvatarBaseEl.dataset.baseId = playerAvatarBase;
+        }
+        if (lobbyAvatarBasePickerEl) {
+            lobbyAvatarBasePickerEl.innerHTML = '';
+            for (const b of LOBBY_AVATAR_BASES) {
+                const btn = document.createElement('button');
+                btn.type = 'button';
+                btn.className = 'avatar-base-option';
+                btn.dataset.baseId = b.id;
+                btn.textContent = b.emoji;
+                btn.setAttribute('role', 'menuitemradio');
+                btn.setAttribute('aria-checked', String(b.id === playerAvatarBase));
+                btn.setAttribute('aria-label', b.label);
+                btn.title = b.label;
+                if (b.id === playerAvatarBase) btn.classList.add('selected');
+                btn.addEventListener('click', () => {
+                    selectBase(b.id);
+                    closeBasePicker();
+                });
+                lobbyAvatarBasePickerEl.append(btn);
+            }
+        }
+        if (lobbyAvatarAccessoriesEl) {
+            lobbyAvatarAccessoriesEl.innerHTML = '';
+            // 15 accessories evenly distributed at 24° increments, starting at top.
+            const step = 360 / LOBBY_AVATAR_ACCESSORIES.length;
+            const startDeg = -90; // top of the circle
+            for (const [i, acc] of LOBBY_AVATAR_ACCESSORIES.entries()) {
+                const angle = startDeg + i * step;
+                const btn = document.createElement('button');
+                btn.type = 'button';
+                btn.className = 'avatar-accessory-tile';
+                btn.dataset.accessoryId = acc.id;
+                btn.textContent = acc.emoji; // raw glyph, not composed
+                btn.title = acc.label;
+                btn.setAttribute('role', 'radio');
+                btn.setAttribute('aria-checked', String(acc.id === playerAvatarAccessory));
+                btn.setAttribute('aria-label', acc.label);
+                btn.style.setProperty('--angle', `${angle}deg`);
+                if (acc.id === playerAvatarAccessory) btn.classList.add('selected');
+                btn.addEventListener('click', () => selectAccessory(acc.id));
+                lobbyAvatarAccessoriesEl.append(btn);
+            }
+        }
+        playerLobbyAvatarRendered = true;
+    }
+
+    /**
+     * @param {string} baseId
+     */
+    function selectBase(baseId) {
+        if (!LOBBY_AVATAR_BASE_SET.has(baseId)) return;
+        if (baseId === playerAvatarBase) return;
+        playerAvatarBase = baseId;
+        commitAvatar();
+        // Center shows the composed avatar, so a base swap also rebuilds the
+        // center glyph (e.g. switching man → woman with rocket selected
+        // recomposes 👩‍🚀 instead of leaving the center on a bare 👨).
+        if (lobbyAvatarBaseEl) {
+            lobbyAvatarBaseEl.textContent =
+                composeAvatar(playerAvatarBase, playerAvatarAccessory);
+            lobbyAvatarBaseEl.dataset.baseId = playerAvatarBase;
+        }
+        if (lobbyAvatarBasePickerEl) {
+            for (const el of lobbyAvatarBasePickerEl.querySelectorAll('.avatar-base-option')) {
+                const matches = el.dataset.baseId === baseId;
+                el.classList.toggle('selected', matches);
+                el.setAttribute('aria-checked', String(matches));
+            }
+        }
+    }
+
+    /**
+     * @param {string|null} accessoryId
+     */
+    function selectAccessory(accessoryId) {
+        // Click the same accessory again to clear it (familiar toggle UX).
+        if (accessoryId === playerAvatarAccessory) accessoryId = null;
+        if (accessoryId !== null && !LOBBY_AVATAR_ACCESSORY_SET.has(accessoryId)) return;
+        playerAvatarAccessory = accessoryId;
+        commitAvatar();
+        if (lobbyAvatarBaseEl) {
+            lobbyAvatarBaseEl.textContent =
+                composeAvatar(playerAvatarBase, playerAvatarAccessory);
+        }
+        if (lobbyAvatarAccessoriesEl) {
+            for (const el of lobbyAvatarAccessoriesEl.querySelectorAll('.avatar-accessory-tile')) {
+                const matches = el.dataset.accessoryId === accessoryId;
+                el.classList.toggle('selected', matches);
+                el.setAttribute('aria-checked', String(matches));
+            }
+        }
+    }
+
+    /**
+     * Toggles the base-swap popover that overlaps the center.
+     * @param {boolean} [forceState]
+     */
+    function toggleBasePicker(forceState) {
+        if (!lobbyAvatarBasePickerEl || !lobbyAvatarBaseEl) return;
+        const wantOpen =
+            typeof forceState === 'boolean'
+                ? forceState
+                : lobbyAvatarBasePickerEl.classList.contains('hidden');
+        lobbyAvatarBasePickerEl.classList.toggle('hidden', !wantOpen);
+        lobbyAvatarBaseEl.setAttribute('aria-expanded', String(wantOpen));
+    }
+
+    /**
+     */
+    function closeBasePicker() {
+        toggleBasePicker(false);
+    }
+
+    /**
+     * Rich music-vote poll: each theme is a card with an icon, name,
+     * tagline, animated tally bar, and live count. Cards inherit a per-theme
+     * accent color via the `data-theme` attribute (see CSS). On lock, the
+     * winner card glows; the rest fade into a quiet "decided" state.
+     */
+    function renderMusicVote() {
+        if (!lobbyMusicOptionsEl) return;
+        const total =
+            (playerLobbyTally.arcade || 0) +
+            (playerLobbyTally.cinematic || 0) +
+            (playerLobbyTally.lofi || 0) +
+            (playerLobbyTally.none || 0);
+        lobbyMusicOptionsEl.innerHTML = '';
+        for (const opt of LOBBY_MUSIC_VOTE_OPTIONS) {
+            const count = playerLobbyTally[opt.id] || 0;
+            const share = total > 0 ? Math.round((count / total) * 100) : 0;
+            const btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = 'music-poll-card';
+            btn.dataset.choice = opt.id;
+            btn.dataset.theme = opt.id;
+            btn.setAttribute('aria-pressed', String(opt.id === playerVote));
+            if (opt.id === playerVote) btn.classList.add('selected');
+            if (playerLobbyMusicLocked) {
+                btn.disabled = true;
+                btn.classList.add('locked');
+                if (opt.id === playerLobbyMusicWinner) btn.classList.add('winner');
+            }
+            // The "now playing" pill marks whichever card matches the host's
+            // current lobby theme — but only when that theme actually plays
+            // (i.e. not 'none', and not after the in-game vote is locked).
+            const isNowPlaying =
+                !playerLobbyMusicLocked &&
+                playerLobbyHostMusic &&
+                playerLobbyHostMusic !== 'none' &&
+                opt.id === playerLobbyHostMusic;
+            const nowBadge = isNowPlaying
+                ? '<span class="music-poll-now" aria-label="Spielt gerade in der Lobby" title="Spielt gerade">🔊</span>'
+                : '';
+            btn.innerHTML = `
+                ${nowBadge}
+                <div class="music-poll-card-head">
+                    <span class="music-poll-icon" aria-hidden="true">${sanitizeHTML(opt.icon)}</span>
+                    <div class="music-poll-titles">
+                        <span class="music-poll-name">${sanitizeHTML(opt.label)}</span>
+                        <span class="music-poll-tag">${sanitizeHTML(opt.tagline || '')}</span>
+                    </div>
+                    <span class="music-poll-check" aria-hidden="true">✓</span>
+                </div>
+                <div class="music-poll-bar" role="presentation">
+                    <div class="music-poll-bar-fill" style="width: ${share}%"></div>
+                </div>
+                <div class="music-poll-meta">
+                    <span class="music-poll-count">${count} ${count === 1 ? 'Stimme' : 'Stimmen'}</span>
+                    <span class="music-poll-share">${share}%</span>
+                </div>
+            `;
+            btn.addEventListener('click', () => castMusicVote(opt.id));
+            lobbyMusicOptionsEl.append(btn);
+        }
+        if (lobbyMusicStatusEl) {
+            if (playerLobbyMusicLocked) {
+                const winner = LOBBY_MUSIC_VOTE_OPTIONS.find(
+                    (o) => o.id === playerLobbyMusicWinner
+                );
+                lobbyMusicStatusEl.innerHTML = winner
+                    ? `Spielmusik: <strong>${sanitizeHTML(winner.icon)} ${sanitizeHTML(winner.label)}</strong>`
+                    : 'Spielmusik: <strong>Keine Musik</strong>';
+            } else {
+                lobbyMusicStatusEl.textContent =
+                    'Mehrheit entscheidet · Gleichstand → Keine Musik';
+            }
+        }
+    }
+
+    /**
+     * Sends a music vote to the server (idempotent — re-clicks just resend).
+     * @param {string} choice
+     */
+    function castMusicVote(choice) {
+        if (playerLobbyMusicLocked) return;
+        if (!LOBBY_MUSIC_VOTE_IDS.has(choice)) return;
+        playerVote = choice;
+        if (playerWs && playerWs.readyState === WebSocket.OPEN) {
+            playerWs.send(JSON.stringify({ type: 'cast_music_vote', choice }));
+        }
+        renderMusicVote();
+    }
+
+    /**
+     * Renders the topic chips. Hidden entirely when no categories present.
+     */
+    function renderCategoryChips() {
+        if (!lobbyCategoriesEl || !lobbyCategoriesListEl) return;
+        lobbyCategoriesListEl.innerHTML = '';
+        if (!playerLobbyCategories || playerLobbyCategories.length === 0) {
+            lobbyCategoriesEl.classList.add('hidden');
+            return;
+        }
+        lobbyCategoriesEl.classList.remove('hidden');
+        for (const cat of playerLobbyCategories) {
+            const chip = document.createElement('span');
+            chip.className = 'topic-chip';
+            chip.textContent = cat;
+            lobbyCategoriesListEl.append(chip);
+        }
+    }
+
+    /**
+     * One-time renders + timebox start when the waiting room first appears.
+     * Idempotent — reentry on reconnect is fine.
+     */
+    function enterLobbyUI() {
+        if (!playerLobbyAvatarRendered) renderAvatarBuilder();
+        renderMusicVote();
+        renderCategoryChips();
+    }
+
     if (!isPlayerInitialized) {
         // logger.log("Setting up player event listeners for the first time.");
+
+        if (lobbyAvatarBaseEl) {
+            lobbyAvatarBaseEl.addEventListener('click', (e) => {
+                e.stopPropagation();
+                toggleBasePicker();
+            });
+        }
+        // Click outside the base picker to dismiss.
+        document.addEventListener('click', (e) => {
+            if (!lobbyAvatarBasePickerEl || lobbyAvatarBasePickerEl.classList.contains('hidden')) return;
+            if (lobbyAvatarBasePickerEl.contains(e.target)) return;
+            if (lobbyAvatarBaseEl && lobbyAvatarBaseEl.contains(e.target)) return;
+            closeBasePicker();
+        });
+
+        // Restore previously chosen avatar (if any) so returning players don't redo it.
+        try {
+            const stored = localStorage.getItem(LOBBY_AVATAR_STORAGE_KEY);
+            if (stored) {
+                const parsed = JSON.parse(stored);
+                if (parsed && LOBBY_AVATAR_BASE_SET.has(parsed.base)) {
+                    playerAvatarBase = parsed.base;
+                    playerAvatarAccessory =
+                        parsed.accessory && LOBBY_AVATAR_ACCESSORY_SET.has(parsed.accessory)
+                            ? parsed.accessory
+                            : null;
+                    playerAvatar = composeAvatar(playerAvatarBase, playerAvatarAccessory);
+                }
+            }
+        } catch { /* private mode or stale schema */ }
 
         joinBtn.addEventListener('click', async () => {
             const roomCode = roomCodeInput.value.trim().replaceAll(/\s/g, ''); // Remove spaces
@@ -1910,6 +2561,7 @@ function initializePlayerFeatures(reconnectInfo) {
         joinForm.classList.add('hidden');
         waitingRoom.classList.remove('hidden');
         waitingMessage.textContent = `Verbinde mit Raum ${playerRoomId}...`;
+        enterLobbyUI();
 
         // Check for existing session (reconnection)
         const existingSession = getPlayerSession(playerRoomId);
@@ -1958,8 +2610,45 @@ function initializePlayerFeatures(reconnectInfo) {
                         msg.playerName || pName
                     );
                     waitingMessage.textContent = msg.isReconnect
-                        ? 'Wieder verbunden! Warte auf Host...'
-                        : 'Verbunden! Warte auf Host...';
+                        ? 'Wieder drin — wir warten auf den Host.'
+                        : 'Du bist drin — wir warten auf den Host.';
+                    {
+                        const parsed = parseAvatarString(msg.avatar);
+                        if (parsed) {
+                            playerAvatarBase = parsed.base;
+                            playerAvatarAccessory = parsed.accessory;
+                            playerAvatar = composeAvatar(playerAvatarBase, playerAvatarAccessory);
+                            if (playerLobbyAvatarRendered) renderAvatarBuilder();
+                        }
+                    }
+                    if (Array.isArray(msg.categories)) playerLobbyCategories = msg.categories;
+                    if (msg.musicTally) playerLobbyTally = msg.musicTally;
+                    playerLobbyMusicLocked = !!msg.musicLocked;
+                    playerLobbyMusicWinner = msg.musicWinner || null;
+                    if (typeof msg.lobbyMusic === 'string') playerLobbyHostMusic = msg.lobbyMusic;
+                    enterLobbyUI();
+                    break;
+                }
+
+                case 'lobby_music': {
+                    if (typeof msg.theme === 'string') {
+                        playerLobbyHostMusic = msg.theme;
+                        renderMusicVote();
+                    }
+                    break;
+                }
+
+                case 'categories': {
+                    playerLobbyCategories = Array.isArray(msg.categories) ? msg.categories : [];
+                    renderCategoryChips();
+                    break;
+                }
+
+                case 'music_vote_update': {
+                    if (msg.tally) playerLobbyTally = msg.tally;
+                    playerLobbyMusicLocked = !!msg.locked;
+                    if (msg.winner) playerLobbyMusicWinner = msg.winner;
+                    renderMusicVote();
                     break;
                 }
 
@@ -2050,6 +2739,7 @@ function initializePlayerFeatures(reconnectInfo) {
                             roomCode: roomCode,
                             playerName: pName,
                             sessionId: existingSessionId || playerCurrentId,
+                            avatar: playerAvatar || '',
                         })
                     );
 

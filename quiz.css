@@ -870,3 +870,501 @@ select:focus {
     border-color: rgba(230, 74, 25, 0.3);
     color: #ffccbc;
 }
+
+/* --- Lobby cosmetics: avatar picker, music vote, topic chips --- */
+.lobby-section {
+    margin: 1rem 0;
+    padding: 0.75rem;
+    background-color: var(--quiz-surface);
+    border-radius: 8px;
+}
+
+.lobby-section h3 {
+    margin: 0 0 0.5rem;
+    font-size: 1rem;
+    color: var(--primary-color);
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+/* Lobby welcome banner */
+.lobby-welcome {
+    text-align: center;
+    padding: 1rem 0.75rem 0.75rem;
+    margin-bottom: 0.5rem;
+}
+
+.lobby-welcome-art {
+    font-size: 2.4rem;
+    line-height: 1;
+    letter-spacing: 0.5rem;
+    margin-bottom: 0.4rem;
+}
+
+.lobby-welcome-title {
+    margin: 0 0 0.35rem;
+    font-size: 1.4rem;
+    color: var(--primary-color);
+}
+
+.lobby-welcome-status {
+    margin: 0 auto 0.4rem;
+    font-size: 1rem;
+    color: var(--text-color, #222);
+    max-width: 28rem;
+}
+
+.lobby-welcome-hint {
+    margin: 0 auto;
+    font-size: 0.92rem;
+    color: var(--text-muted, #555);
+    max-width: 28rem;
+}
+
+/* Topic chips */
+.lobby-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+}
+
+.topic-chip {
+    display: inline-block;
+    padding: 0.25rem 0.6rem;
+    border-radius: 999px;
+    background-color: var(--quiz-hover);
+    color: var(--primary-color);
+    font-size: 0.9rem;
+    border: 1px solid var(--cards-highlight-border);
+}
+
+/* --- Music vote poll: rich theme cards --- */
+.lobby-music-poll h3 {
+    font-size: 1.05rem;
+    margin-bottom: 0.6rem;
+}
+
+.music-poll-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.6rem;
+}
+
+@media (max-width: 420px) {
+    .music-poll-grid { grid-template-columns: 1fr; }
+}
+
+.music-poll-card {
+    --theme-color: var(--primary-color);
+    --theme-tint: rgba(107, 66, 166, 0.1);
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+    padding: 0.7rem 0.8rem;
+    border: 2px solid var(--cards-highlight-border);
+    border-radius: 12px;
+    background-color: var(--surface-color, #fff);
+    color: var(--text-color, #222);
+    cursor: pointer;
+    text-align: left;
+    transition: transform 0.08s ease, border-color 0.15s, background-color 0.15s, box-shadow 0.2s;
+}
+
+.music-poll-card[data-theme='arcade']    { --theme-color: #e91e63; --theme-tint: rgba(233, 30, 99, 0.12); }
+.music-poll-card[data-theme='cinematic'] { --theme-color: #6b42a6; --theme-tint: rgba(107, 66, 166, 0.14); }
+.music-poll-card[data-theme='lofi']      { --theme-color: #2e8b8b; --theme-tint: rgba(46, 139, 139, 0.14); }
+.music-poll-card[data-theme='none']      { --theme-color: #6c7480; --theme-tint: rgba(108, 116, 128, 0.14); }
+
+.music-poll-card:hover:not(:disabled) {
+    transform: translateY(-1px);
+    border-color: var(--theme-color);
+    background-color: var(--theme-tint);
+}
+
+.music-poll-card:active:not(:disabled) {
+    transform: scale(0.98);
+}
+
+.music-poll-card.selected {
+    border-color: var(--theme-color);
+    background-color: var(--theme-tint);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--theme-color) 25%, transparent);
+}
+
+.music-poll-card.locked {
+    cursor: default;
+    opacity: 0.5;
+    transform: none;
+}
+
+.music-poll-card.locked.winner {
+    opacity: 1;
+    border-color: var(--theme-color);
+    background-color: var(--theme-tint);
+    box-shadow: 0 0 0 4px color-mix(in srgb, var(--theme-color) 35%, transparent);
+}
+
+/* "Now playing" badge — appears in the upper-right of whichever card
+   matches the host's current lobby theme. Subtle pulse hints at audio. */
+.music-poll-now {
+    position: absolute;
+    top: 0.4rem;
+    right: 0.4rem;
+    width: 1.5rem;
+    height: 1.5rem;
+    border-radius: 999px;
+    background-color: var(--theme-color);
+    color: white;
+    font-size: 0.85rem;
+    line-height: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--theme-color) 50%, transparent);
+    animation: music-poll-now-pulse 1.6s ease-in-out infinite;
+}
+
+@keyframes music-poll-now-pulse {
+    0%, 100% {
+        box-shadow: 0 0 0 0 color-mix(in srgb, var(--theme-color) 55%, transparent);
+    }
+    50% {
+        box-shadow: 0 0 0 6px color-mix(in srgb, var(--theme-color) 0%, transparent);
+    }
+}
+
+.music-poll-card-head {
+    display: flex;
+    align-items: center;
+    gap: 0.55rem;
+}
+
+.music-poll-icon {
+    font-size: 1.6rem;
+    line-height: 1;
+    flex: 0 0 auto;
+}
+
+.music-poll-titles {
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+.music-poll-name {
+    font-weight: 600;
+    font-size: 1rem;
+    color: var(--theme-color);
+    line-height: 1.15;
+}
+
+.music-poll-tag {
+    font-size: 0.78rem;
+    color: var(--text-muted, #555);
+    margin-top: 0.1rem;
+}
+
+.music-poll-check {
+    flex: 0 0 auto;
+    width: 1.3rem;
+    height: 1.3rem;
+    border-radius: 50%;
+    background: var(--theme-color);
+    color: white;
+    font-size: 0.85rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0;
+    transform: scale(0.7);
+    transition: opacity 0.15s, transform 0.15s;
+}
+
+.music-poll-card.selected .music-poll-check,
+.music-poll-card.winner .music-poll-check {
+    opacity: 1;
+    transform: scale(1);
+}
+
+.music-poll-bar {
+    height: 6px;
+    border-radius: 999px;
+    background-color: rgba(0, 0, 0, 0.07);
+    overflow: hidden;
+}
+
+.music-poll-bar-fill {
+    height: 100%;
+    background-color: var(--theme-color);
+    border-radius: 999px;
+    transition: width 0.4s ease;
+    min-width: 0;
+}
+
+.music-poll-meta {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.78rem;
+    color: var(--text-muted, #555);
+}
+
+.music-poll-share {
+    font-weight: 600;
+    color: var(--theme-color);
+}
+
+.lobby-music-status {
+    margin: 0.6rem 0 0;
+    font-size: 0.88rem;
+    color: var(--text-muted, #555);
+    text-align: center;
+}
+
+/* --- Radial avatar picker --- */
+.avatar-builder {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.4rem;
+}
+
+.avatar-radial {
+    position: relative;
+    width: min(26rem, 100%);
+    aspect-ratio: 1;
+    margin: 0.3rem auto;
+}
+
+.avatar-center-wrapper {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    z-index: 2;
+}
+
+.avatar-base-center {
+    position: relative;
+    width: 8rem;
+    height: 8rem;
+    font-size: 4.6rem;
+    line-height: 1;
+    border: 4px solid var(--accent-color);
+    border-radius: 50%;
+    background: var(--surface-color, #fff);
+    box-shadow: 0 6px 20px var(--shadow-color);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: transform 0.1s, box-shadow 0.15s;
+}
+
+.avatar-base-center:hover {
+    transform: scale(1.04);
+    box-shadow: 0 10px 26px var(--shadow-color);
+}
+
+.avatar-base-center::after {
+    content: '⌄';
+    position: absolute;
+    bottom: -0.3rem;
+    right: -0.2rem;
+    width: 1.5rem;
+    height: 1.5rem;
+    border-radius: 50%;
+    background: var(--accent-color);
+    color: white;
+    font-size: 1rem;
+    line-height: 1.05;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 2px 6px var(--shadow-color);
+}
+
+.avatar-base-picker {
+    position: absolute;
+    top: calc(100% + 0.45rem);
+    left: 50%;
+    transform: translateX(-50%);
+    background: var(--surface-color, #fff);
+    border-radius: 999px;
+    padding: 0.3rem;
+    box-shadow: 0 6px 18px var(--shadow-color);
+    display: flex;
+    gap: 0.25rem;
+    z-index: 10;
+    border: 1px solid var(--cards-highlight-border);
+}
+
+.avatar-base-picker.hidden {
+    display: none;
+}
+
+.avatar-base-option {
+    width: 2.8rem;
+    height: 2.8rem;
+    font-size: 1.7rem;
+    line-height: 1;
+    background: transparent;
+    border: 2px solid transparent;
+    border-radius: 50%;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background-color 0.1s, border-color 0.1s, transform 0.05s;
+}
+
+.avatar-base-option:hover {
+    background-color: var(--quiz-hover);
+}
+
+.avatar-base-option:active {
+    transform: scale(0.94);
+}
+
+.avatar-base-option.selected {
+    border-color: var(--accent-color);
+    background-color: rgba(255, 51, 102, 0.12);
+}
+
+.avatar-accessory-ring {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+}
+
+.avatar-accessory-tile {
+    --angle: 0deg;
+    --radius: 10.5rem;
+    pointer-events: auto;
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: 3.6rem;
+    height: 3.6rem;
+    margin: -1.8rem 0 0 -1.8rem;
+    font-size: 2.2rem;
+    line-height: 1;
+    background: var(--surface-color, #fff);
+    border: 2px solid var(--cards-highlight-border);
+    border-radius: 50%;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transform:
+        rotate(var(--angle))
+        translateY(calc(-1 * var(--radius)))
+        rotate(calc(-1 * var(--angle)));
+    transition: background-color 0.1s, border-color 0.1s, box-shadow 0.15s, transform 0.1s;
+    transform-origin: center;
+}
+
+.avatar-accessory-tile:hover {
+    background-color: var(--quiz-hover);
+    border-color: var(--accent-color);
+}
+
+.avatar-accessory-tile:active {
+    transform:
+        rotate(var(--angle))
+        translateY(calc(-1 * var(--radius)))
+        rotate(calc(-1 * var(--angle)))
+        scale(0.92);
+}
+
+.avatar-accessory-tile.selected {
+    background: var(--accent-color);
+    border-color: var(--accent-color);
+    box-shadow: 0 0 0 4px rgba(255, 51, 102, 0.32);
+}
+
+@media (max-width: 480px) {
+    .avatar-radial { width: 22rem; max-width: 100%; }
+    .avatar-base-center { width: 6.4rem; height: 6.4rem; font-size: 3.6rem; border-width: 3px; }
+    .avatar-base-center::after { width: 1.25rem; height: 1.25rem; font-size: 0.9rem; }
+    .avatar-accessory-tile {
+        --radius: 8.5rem;
+        width: 3rem; height: 3rem;
+        margin: -1.5rem 0 0 -1.5rem;
+        font-size: 1.8rem;
+    }
+}
+
+@media (max-width: 360px) {
+    .avatar-radial { width: 100%; }
+    .avatar-base-center { width: 5.6rem; height: 5.6rem; font-size: 3.2rem; }
+    .avatar-accessory-tile {
+        --radius: 7.4rem;
+        width: 2.6rem; height: 2.6rem;
+        margin: -1.3rem 0 0 -1.3rem;
+        font-size: 1.5rem;
+    }
+}
+
+.avatar-builder-hint {
+    margin: 0.3rem 0 0;
+    font-size: 0.8rem;
+    color: var(--text-muted, #555);
+    text-align: center;
+}
+
+.host-music-status {
+    margin: 0.5rem 0;
+    font-size: 0.95rem;
+    color: var(--text-muted, #555);
+    font-style: italic;
+}
+
+.host-lobby-music {
+    margin: 0.75rem 0;
+    padding: 0.5rem 0.75rem;
+    background-color: var(--quiz-surface);
+    border-radius: 8px;
+}
+
+.host-lobby-music h4 {
+    margin: 0 0 0.4rem;
+    font-size: 0.95rem;
+    color: var(--primary-color);
+}
+
+.host-music-options {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+}
+
+.host-music-option {
+    padding: 0.35rem 0.75rem;
+    border: 2px solid var(--cards-highlight-border);
+    border-radius: 999px;
+    background-color: var(--surface-color, #fff);
+    color: var(--text-color, #222);
+    cursor: pointer;
+    font-size: 0.95rem;
+    transition: border-color 0.1s, background-color 0.1s;
+}
+
+.host-music-option:hover {
+    background-color: var(--quiz-hover);
+}
+
+.host-music-option.selected {
+    border-color: var(--primary-color);
+    background-color: var(--quiz-hover);
+    font-weight: 600;
+}
+
+.host-lobby-music-hint {
+    margin: 0.4rem 0 0;
+    font-size: 0.8rem;
+    color: var(--text-muted, #555);
+    font-style: italic;
+}
