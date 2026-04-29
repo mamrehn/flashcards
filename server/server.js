@@ -104,15 +104,13 @@ function broadcastMusicTally(room) {
  */
 function decideMusicWinner(room) {
     const tally = tallyMusicVotes(room);
-    let winner = 'none';
-    let best = tally.none;
-    for (const theme of ['arcade', 'cinematic', 'lofi']) {
-        if (tally[theme] > best) {
-            best = tally[theme];
-            winner = theme;
-        }
-    }
-    return winner;
+    const themes = ['arcade', 'cinematic', 'lofi'];
+    const themeMax = Math.max(...themes.map((t) => tally[t]));
+    // 'none' wins outright if it has at least as many votes as the leading theme.
+    if (tally.none >= themeMax) return 'none';
+    // A theme only wins if it's the *unique* leader — multi-way ties go to 'none'.
+    const leaders = themes.filter((t) => tally[t] === themeMax);
+    return leaders.length === 1 ? leaders[0] : 'none';
 }
 
 function sanitizeName(name) {

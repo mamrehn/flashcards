@@ -665,6 +665,53 @@ select:focus {
     border-radius: 4px;
     margin-bottom: 0.25rem;
     border-left: 3px solid var(--primary-color);
+    display: flex;
+    align-items: center;
+    gap: 0.55rem;
+}
+
+/* Avatar icon used everywhere a player name appears on the host:
+   lobby list, scoreboard, final leaderboard. Sits to the left of the
+   name; slightly oversized so the emoji reads as an icon, not a glyph. */
+.player-avatar {
+    font-size: 1.5em;
+    line-height: 1;
+    flex: 0 0 auto;
+    width: 1.7em;
+    height: 1.7em;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    background-color: var(--surface-color, #fff);
+    border: 1px solid var(--cards-highlight-border);
+}
+
+.player-row {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+.player-rank {
+    font-weight: 600;
+    color: var(--text-muted, #555);
+    flex: 0 0 auto;
+}
+
+.player-name {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.player-score {
+    flex: 0 0 auto;
+    font-variant-numeric: tabular-nums;
 }
 
 .flex-row {

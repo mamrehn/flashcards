@@ -1555,8 +1555,11 @@ async function initializeHostFeatures(reconnectInfo) {
             const i = document.createElement('div');
             i.className = 'player-item';
             if (p.isConnected === false) i.classList.add('disconnected');
-            const avatarPrefix = p.avatar ? `${p.avatar} ` : '';
-            i.textContent = avatarPrefix + p.name + (p.isConnected === false ? ' (getrennt)' : '');
+            const avatarHtml = p.avatar
+                ? `<span class="player-avatar" aria-hidden="true">${sanitizeHTML(p.avatar)}</span>`
+                : '';
+            const offlineSuffix = p.isConnected === false ? ' (getrennt)' : '';
+            i.innerHTML = `${avatarHtml}<span class="player-name">${sanitizeHTML(p.name)}${sanitizeHTML(offlineSuffix)}</span>`;
             playersList.append(i);
         }
 
@@ -1898,8 +1901,10 @@ async function initializeHostFeatures(reconnectInfo) {
                     break;
                 }
             }
-            const avatarPrefix = p.avatar ? `${sanitizeHTML(p.avatar)} ` : '';
-            li.innerHTML = `<span>${idx + 1}. ${avatarPrefix}${sanitizeHTML(p.name)}</span><span>${Math.round(p.score)} Punkte</span>`;
+            const avatarHtml = p.avatar
+                ? `<span class="player-avatar" aria-hidden="true">${sanitizeHTML(p.avatar)}</span>`
+                : '';
+            li.innerHTML = `<span class="player-row"><span class="player-rank">${idx + 1}.</span>${avatarHtml}<span class="player-name">${sanitizeHTML(p.name)}</span></span><span class="player-score">${Math.round(p.score)} Punkte</span>`;
             scoreboardListEl.append(li);
         }
     }
@@ -1939,8 +1944,10 @@ async function initializeHostFeatures(reconnectInfo) {
                 case 1: { i.classList.add('rank-2'); break; }
                 case 2: { i.classList.add('rank-3'); break; }
             }
-            const avatarPrefix = p.avatar ? `${sanitizeHTML(p.avatar)} ` : '';
-            i.innerHTML = `<span>${idx + 1}. ${avatarPrefix}${sanitizeHTML(p.name)}</span><span>${Math.round(p.score)} Punkte</span>`;
+            const avatarHtml = p.avatar
+                ? `<span class="player-avatar" aria-hidden="true">${sanitizeHTML(p.avatar)}</span>`
+                : '';
+            i.innerHTML = `<span class="player-row"><span class="player-rank">${idx + 1}.</span>${avatarHtml}<span class="player-name">${sanitizeHTML(p.name)}</span></span><span class="player-score">${Math.round(p.score)} Punkte</span>`;
             leaderboard.append(i);
         }
     }
