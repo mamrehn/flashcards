@@ -401,73 +401,202 @@ const RECONNECT_DELAY_MS = 10_000;
  *
  * @returns {{setTheme:Function, play:Function, stop:Function, getTheme:Function}}
  */
-function createMusicEngine() {
-    // Two parallel audio elements so a stinger can play to its end while the
-    // queued loop is held back; they don't fight each other.
-    const loopAudio = new Audio();
-    loopAudio.loop = true;
-    loopAudio.preload = 'auto';
-    loopAudio.volume = 0.7;
-    loopAudio.addEventListener('error', () => { /* silent fallback */ });
+function clamp01(v) { return Math.max(0, Math.min(1, v)); }
 
-    const stingerAudio = new Audio();
-    stingerAudio.loop = false;
-    stingerAudio.preload = 'auto';
-    stingerAudio.volume = 0.85;
+/**
+ * Warm the HTTP cache with every audio file the engine might play, so the
+ * first time a stinger is set as `audio.src` the browser already has the
+ * bytes locally. Without this, the very first `new_question.aac` (or any
+ * other stinger) would incur a download round-trip and miss its cue.
+ */
+function preloadAudioCache() {
+    const themes = ['arcade', 'cinematic', 'lofi'];
+    const tracks = [...HOST_AUDIO_LOOPS, ...HOST_AUDIO_STINGERS];
+    const urls = [];
+    for (const theme of themes) {
+        for (const track of tracks) urls.push(audioFilePath(theme, track));
+    }
+    urls.push(HOST_AUDIO_FINAL_PATH);
+    for (const url of urls) {
+        // Same-origin → no CORS. `force-cache` serves from cache if already
+        // present, otherwise the request still populates it for later loads.
+        fetch(url, { cache: 'force-cache' }).catch(() => { /* ignore */ });
+    }
+}
+
+function createMusicEngine() {
+    // Prefetch on engine creation so by the time the host clicks
+    // "Quiz hosten" → "Fragen starten", every track is already cached.
+    preloadAudioCache();
+
+    // Crossfade tunables. 250 ms per the user's preference; the same
+    // machinery handles both track transitions (lobby → question) and
+    // same-track loop wraps (lobby's last 250 ms overlaps its restart).
+    const FADE_MS = 250;
+    const FADE_TICK_MS = 20;
+    const LOOP_VOLUME = 0.7;
+    const STINGER_VOLUME = 0.85;
+
+    function makeLoopAudio() {
+        const a = new Audio();
+        a.loop = false; // manual loop management with crossfade
+        a.preload = 'auto';
+        a.volume = 0;
+        a.addEventListener('error', () => { /* silent fallback */ });
+        return a;
+    }
+
+    // Ping-pong pair of loop elements: while one fades out, the other fades in.
+    const loops = [makeLoopAudio(), makeLoopAudio()];
+
+    const stinger = new Audio();
+    stinger.loop = false;
+    stinger.preload = 'auto';
+    stinger.volume = STINGER_VOLUME;
 
     let theme = 'none';
-    let currentLoop = null;
+    let activeIdx = 0;
+    let activeTrack = null;
     let pendingLoop = null;
+    const fadeIntervals = new WeakMap();
+    const wrapHandlers = new WeakMap();
 
-    function startLoop(track) {
+    function cancelFade(audio) {
+        const id = fadeIntervals.get(audio);
+        if (id !== undefined) {
+            clearInterval(id);
+            fadeIntervals.delete(audio);
+        }
+    }
+
+    /**
+     * Linearly ramp `audio.volume` from its current value to `to` over
+     * `durationMs`. Cancels any ramp already in progress on this element.
+     * @param {HTMLAudioElement} audio
+     * @param {number} to
+     * @param {number} durationMs
+     * @param {Function} [onDone]
+     */
+    function rampVolume(audio, to, durationMs, onDone) {
+        cancelFade(audio);
+        if (durationMs <= 0) {
+            audio.volume = clamp01(to);
+            if (onDone) onDone();
+            return;
+        }
+        const from = audio.volume;
+        const steps = Math.max(1, Math.round(durationMs / FADE_TICK_MS));
+        let step = 0;
+        const id = setInterval(() => {
+            step++;
+            const t = step / steps;
+            audio.volume = clamp01(from + (to - from) * t);
+            if (step >= steps) {
+                audio.volume = clamp01(to);
+                clearInterval(id);
+                fadeIntervals.delete(audio);
+                if (onDone) onDone();
+            }
+        }, FADE_TICK_MS);
+        fadeIntervals.set(audio, id);
+    }
+
+    function detachWrap(audio) {
+        const h = wrapHandlers.get(audio);
+        if (h) {
+            audio.removeEventListener('timeupdate', h);
+            wrapHandlers.delete(audio);
+        }
+    }
+
+    /**
+     * Schedule the loop wrap: when the active element reaches its last
+     * `FADE_MS`, kick off a crossfade into a fresh playback of the same
+     * track on the other element. Skips when duration is unknown / zero
+     * (empty stub files), so the engine stays silent rather than thrashing.
+     * @param {HTMLAudioElement} audio
+     * @param {string} track
+     */
+    function attachWrap(audio, track) {
+        detachWrap(audio);
+        const handler = () => {
+            if (!audio.duration || !Number.isFinite(audio.duration)) return;
+            if (audio.duration <= FADE_MS / 1000) return; // too short to wrap
+            const remaining = audio.duration - audio.currentTime;
+            if (remaining > FADE_MS / 1000) return;
+            detachWrap(audio);
+            crossfadeToTrack(track);
+        };
+        audio.addEventListener('timeupdate', handler);
+        wrapHandlers.set(audio, handler);
+    }
+
+    /**
+     * Start `track` on the inactive element with a fade-in, while fading
+     * out the currently-active element. Used for both new-track transitions
+     * and same-track loop wraps.
+     * @param {string} track
+     */
+    function crossfadeToTrack(track) {
         if (theme === 'none' || !HOST_AUDIO_LOOPS.has(track)) return;
-        currentLoop = track;
-        loopAudio.src = audioFilePath(theme, track);
-        loopAudio.currentTime = 0;
-        const p = loopAudio.play();
+        const next = (activeIdx + 1) % 2;
+        const incoming = loops[next];
+        const outgoing = loops[activeIdx];
+
+        cancelFade(incoming);
+        detachWrap(incoming);
+        incoming.src = audioFilePath(theme, track);
+        incoming.currentTime = 0;
+        incoming.volume = 0;
+        const p = incoming.play();
         if (p && typeof p.catch === 'function') {
             p.catch(() => { /* autoplay blocked or empty file */ });
         }
+
+        rampVolume(incoming, LOOP_VOLUME, FADE_MS);
+        if (!outgoing.paused) {
+            const tail = outgoing;
+            rampVolume(tail, 0, FADE_MS, () => tail.pause());
+        }
+
+        activeIdx = next;
+        activeTrack = track;
+        attachWrap(incoming, track);
     }
 
     function flushPending() {
         if (!pendingLoop) return;
         const next = pendingLoop;
         pendingLoop = null;
-        startLoop(next);
+        crossfadeToTrack(next);
     }
 
-    // When the stinger finishes (or fails to load), start the queued loop.
-    stingerAudio.addEventListener('ended', flushPending);
-    stingerAudio.addEventListener('error', flushPending);
+    stinger.addEventListener('ended', flushPending);
+    stinger.addEventListener('error', flushPending);
 
     return {
         getTheme() { return theme; },
-        getCurrentTrack() { return currentLoop; },
+        getCurrentTrack() { return activeTrack; },
         setTheme(newTheme) {
             if (newTheme === theme) return;
             theme = newTheme;
-            // Pause the loop element — its src points at the old theme.
-            // An in-flight stinger keeps playing; its `ended` handler will
-            // start the queued loop under the *new* theme.
-            loopAudio.pause();
-            currentLoop = null;
+            // Clear activeTrack so the next playLoop call crossfades into
+            // the new theme's source even if the track id is the same.
+            // The element keeps playing the old-theme audio in the
+            // meantime; the upcoming crossfade fades it out.
+            activeTrack = null;
         },
         playLoop(track) {
             if (theme === 'none' || !HOST_AUDIO_LOOPS.has(track)) return;
-            if (currentLoop === track && !loopAudio.paused) return;
-            // Caller wants this loop right now; cancel any queued follow-up.
+            if (activeTrack === track && !loops[activeIdx].paused) return;
             pendingLoop = null;
-            startLoop(track);
+            crossfadeToTrack(track);
         },
         /**
          * Plays a stinger (one-shot) in isolation, optionally queueing a loop
-         * to start when the stinger ends. The queued loop is started under
-         * whatever theme is current at that moment, so a theme switch during
-         * the stinger seamlessly applies to the follow-up loop.
-         *
-         * The 'final' track is universal (audio/final.aac) — it ignores the
-         * current theme and never has a follow-up.
+         * to start (via crossfade) when the stinger ends. 'final' is a
+         * universal one-shot played from `audio/final.aac` regardless of the
+         * current theme; it never has a follow-up.
          * @param {string} track
          * @param {string} [followLoop]
          */
@@ -475,27 +604,41 @@ function createMusicEngine() {
             const isUniversal = track === 'final';
             if (!isUniversal && theme === 'none') return;
             if (!isUniversal && !HOST_AUDIO_STINGERS.has(track)) return;
-            // Stop the loop so it doesn't fight the stinger.
-            loopAudio.pause();
-            currentLoop = null;
-            stingerAudio.src = isUniversal
+            // Quick fade-out on whichever loop is playing so the stinger
+            // doesn't fight it. 250 ms is short enough to feel like a
+            // hand-off rather than a pause.
+            for (const a of loops) {
+                detachWrap(a);
+                if (a.paused) {
+                    cancelFade(a);
+                    a.volume = 0;
+                } else {
+                    rampVolume(a, 0, FADE_MS, () => a.pause());
+                }
+            }
+            activeTrack = null;
+            stinger.src = isUniversal
                 ? HOST_AUDIO_FINAL_PATH
                 : audioFilePath(theme, track);
-            stingerAudio.currentTime = 0;
+            stinger.currentTime = 0;
+            stinger.volume = STINGER_VOLUME;
             pendingLoop = followLoop || null;
-            const p = stingerAudio.play();
+            const p = stinger.play();
             if (p && typeof p.catch === 'function') {
-                p.catch(() => {
-                    // Autoplay block or empty file — don't strand the queued loop.
-                    flushPending();
-                });
+                p.catch(() => flushPending());
             }
         },
         stop() {
-            currentLoop = null;
             pendingLoop = null;
-            loopAudio.pause();
-            stingerAudio.pause();
+            activeTrack = null;
+            for (const a of loops) {
+                cancelFade(a);
+                detachWrap(a);
+                a.pause();
+                a.volume = 0;
+            }
+            cancelFade(stinger);
+            stinger.pause();
         },
     };
 }
