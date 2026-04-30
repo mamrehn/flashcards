@@ -168,9 +168,6 @@ const HOST_AUDIO_STINGERS = new Set(['time_up', 'new_question']);
 // themes (and even when the chosen theme is "none").
 const HOST_AUDIO_FINAL_PATH = 'audio/final.aac';
 
-// DELETE this line, this is legacy code.
-const HOST_AUDIO_TRACKS = new Set([]);
-
 /**
  * Builds the audio file URL for a (theme, track) pair.
  * @param {string} theme
@@ -405,38 +402,100 @@ const RECONNECT_DELAY_MS = 10_000;
  * @returns {{setTheme:Function, play:Function, stop:Function, getTheme:Function}}
  */
 function createMusicEngine() {
-    const audio = new Audio();
-    audio.loop = true;
-    audio.preload = 'auto';
-    audio.volume = 0.7;
-    audio.addEventListener('error', () => { /* silent fallback for missing files */ });
+    // Two parallel audio elements so a stinger can play to its end while the
+    // queued loop is held back; they don't fight each other.
+    const loopAudio = new Audio();
+    loopAudio.loop = true;
+    loopAudio.preload = 'auto';
+    loopAudio.volume = 0.7;
+    loopAudio.addEventListener('error', () => { /* silent fallback */ });
+
+    const stingerAudio = new Audio();
+    stingerAudio.loop = false;
+    stingerAudio.preload = 'auto';
+    stingerAudio.volume = 0.85;
+
     let theme = 'none';
-    let currentTrack = null;
+    let currentLoop = null;
+    let pendingLoop = null;
+
+    function startLoop(track) {
+        if (theme === 'none' || !HOST_AUDIO_LOOPS.has(track)) return;
+        currentLoop = track;
+        loopAudio.src = audioFilePath(theme, track);
+        loopAudio.currentTime = 0;
+        const p = loopAudio.play();
+        if (p && typeof p.catch === 'function') {
+            p.catch(() => { /* autoplay blocked or empty file */ });
+        }
+    }
+
+    function flushPending() {
+        if (!pendingLoop) return;
+        const next = pendingLoop;
+        pendingLoop = null;
+        startLoop(next);
+    }
+
+    // When the stinger finishes (or fails to load), start the queued loop.
+    stingerAudio.addEventListener('ended', flushPending);
+    stingerAudio.addEventListener('error', flushPending);
+
     return {
         getTheme() { return theme; },
-        getCurrentTrack() { return currentTrack; },
+        getCurrentTrack() { return currentLoop; },
         setTheme(newTheme) {
             if (newTheme === theme) return;
             theme = newTheme;
-            audio.pause();
-            // Track is preserved so callers can decide whether to resume it
-            // under the new theme (see the music_vote_update lock handler).
+            // Pause the loop element — its src points at the old theme.
+            // An in-flight stinger keeps playing; its `ended` handler will
+            // start the queued loop under the *new* theme.
+            loopAudio.pause();
+            currentLoop = null;
         },
-        play(track) {
-            if (theme === 'none') return;
-            if (!HOST_AUDIO_TRACKS.has(track)) return;
-            if (currentTrack === track && !audio.paused) return;
-            currentTrack = track;
-            audio.src = audioFilePath(theme, track);
-            audio.currentTime = 0;
-            const playPromise = audio.play();
-            if (playPromise && typeof playPromise.catch === 'function') {
-                playPromise.catch(() => { /* autoplay blocked or empty file */ });
+        playLoop(track) {
+            if (theme === 'none' || !HOST_AUDIO_LOOPS.has(track)) return;
+            if (currentLoop === track && !loopAudio.paused) return;
+            // Caller wants this loop right now; cancel any queued follow-up.
+            pendingLoop = null;
+            startLoop(track);
+        },
+        /**
+         * Plays a stinger (one-shot) in isolation, optionally queueing a loop
+         * to start when the stinger ends. The queued loop is started under
+         * whatever theme is current at that moment, so a theme switch during
+         * the stinger seamlessly applies to the follow-up loop.
+         *
+         * The 'final' track is universal (audio/final.aac) — it ignores the
+         * current theme and never has a follow-up.
+         * @param {string} track
+         * @param {string} [followLoop]
+         */
+        playStinger(track, followLoop) {
+            const isUniversal = track === 'final';
+            if (!isUniversal && theme === 'none') return;
+            if (!isUniversal && !HOST_AUDIO_STINGERS.has(track)) return;
+            // Stop the loop so it doesn't fight the stinger.
+            loopAudio.pause();
+            currentLoop = null;
+            stingerAudio.src = isUniversal
+                ? HOST_AUDIO_FINAL_PATH
+                : audioFilePath(theme, track);
+            stingerAudio.currentTime = 0;
+            pendingLoop = followLoop || null;
+            const p = stingerAudio.play();
+            if (p && typeof p.catch === 'function') {
+                p.catch(() => {
+                    // Autoplay block or empty file — don't strand the queued loop.
+                    flushPending();
+                });
             }
         },
         stop() {
-            currentTrack = null;
-            audio.pause();
+            currentLoop = null;
+            pendingLoop = null;
+            loopAudio.pause();
+            stingerAudio.pause();
         },
     };
 }
@@ -1133,7 +1192,7 @@ async function initializeHostFeatures(reconnectInfo) {
                     const prevTrack = hostMusicEngine.getCurrentTrack();
                     hostMusicEngine.setTheme(hostMusicWinner || 'none');
                     if (prevTrack && hostMusicWinner && hostMusicWinner !== 'none') {
-                        hostMusicEngine.play(prevTrack);
+                        hostMusicEngine.playLoop(prevTrack);
                     }
                 }
                 if (hostMusicLocked) renderHostLobbyMusicOptions();
@@ -1468,7 +1527,7 @@ async function initializeHostFeatures(reconnectInfo) {
         if (hostMusicEngine) {
             hostMusicEngine.setTheme(themeId);
             if (themeId === 'none') hostMusicEngine.stop();
-            else hostMusicEngine.play('lobby');
+            else hostMusicEngine.playLoop('lobby');
         }
         if (hostWs && hostWs.readyState === WebSocket.OPEN) {
             hostWs.send(JSON.stringify({ type: 'set_lobby_music', theme: themeId }));
@@ -1489,7 +1548,7 @@ async function initializeHostFeatures(reconnectInfo) {
         }
         if (hostMusicEngine) {
             hostMusicEngine.setTheme(hostLobbyMusicTheme);
-            if (hostLobbyMusicTheme !== 'none') hostMusicEngine.play('lobby');
+            if (hostLobbyMusicTheme !== 'none') hostMusicEngine.playLoop('lobby');
         }
         if (hostWs && hostWs.readyState === WebSocket.OPEN) {
             hostWs.send(JSON.stringify({ type: 'set_lobby_music', theme: hostLobbyMusicTheme }));
@@ -1669,7 +1728,9 @@ async function initializeHostFeatures(reconnectInfo) {
         const currentDuration = quizState.questionDurations[quizState.currentQuestionIndex];
         startTimer(currentDuration);
         await sendQuestionToPlayers(currentQuestion); // Pass the question object which now contains shuffled data
-        if (hostMusicEngine) hostMusicEngine.play('question');
+        // Play the "new question" stinger first; queue the question loop so
+        // it kicks in once the stinger fully plays out.
+        if (hostMusicEngine) hostMusicEngine.playStinger('new_question', 'question');
     }
 
     /**
@@ -1759,7 +1820,9 @@ async function initializeHostFeatures(reconnectInfo) {
         }
 
         quizState.isQuestionActive = false;
-        if (hostMusicEngine) hostMusicEngine.play('reveal');
+        // Time-up stinger plays in full; the leaderboard loop queues to
+        // start when the stinger ends, so the scoreboard view has audio.
+        if (hostMusicEngine) hostMusicEngine.playStinger('time_up', 'leaderboard');
 
         // Calculate option counts for display on host side
         const currentQuestion = quizState.shuffledQuestions[quizState.currentQuestionIndex];
@@ -1881,7 +1944,8 @@ async function initializeHostFeatures(reconnectInfo) {
         const sortedPlayers = getLeaderboardData(); // This function already filters out the host
         scoreboardListEl.innerHTML = '';
         hostScoreboardEl.classList.remove('hidden');
-        if (hostMusicEngine) hostMusicEngine.play('scoreboard');
+        // No music call here: the leaderboard loop is queued by `endQuestion`
+        // (after the time_up stinger) and starts itself once the stinger ends.
 
         const topPlayers = sortedPlayers.slice(0, 10);
 
@@ -1924,7 +1988,10 @@ async function initializeHostFeatures(reconnectInfo) {
         if (hostViewHeading) hostViewHeading.classList.remove('hidden'); // Show "Quiz hosten" heading
 
         displayLeaderboard();
-        if (hostMusicEngine) hostMusicEngine.play('final');
+        // Universal `audio/final.aac` (theme-agnostic applause / ovation).
+        // No follow-up loop: the final screen sits in silence after the
+        // ovation finishes, which matches the README's "palate cleanser" goal.
+        if (hostMusicEngine) hostMusicEngine.playStinger('final');
 
         // No need to send 'final' broadcast here, it's already sent with the last 'result'
         // This function just handles the host UI transition
