@@ -942,6 +942,14 @@ select:focus {
     margin-bottom: 0.5rem;
 }
 
+/* `.in-game` is set on #waiting-room when the player reconnects mid-quiz
+   (or is parked between questions). Hides the lobby-only sections so the
+   reconnect view matches the rest of the players' experience. */
+#waiting-room.in-game .lobby-welcome,
+#waiting-room.in-game .lobby-section {
+    display: none;
+}
+
 .lobby-welcome-art {
     font-size: 2.4rem;
     line-height: 1;

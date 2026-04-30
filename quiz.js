@@ -2616,9 +2616,6 @@ function initializePlayerFeatures(reconnectInfo) {
                         msg.sessionId,
                         msg.playerName || pName
                     );
-                    waitingMessage.textContent = msg.isReconnect
-                        ? 'Wieder drin — wir warten auf den Host.'
-                        : 'Du bist drin — wir warten auf den Host.';
                     {
                         const parsed = parseAvatarString(msg.avatar);
                         if (parsed) {
@@ -2633,7 +2630,33 @@ function initializePlayerFeatures(reconnectInfo) {
                     playerLobbyMusicLocked = !!msg.musicLocked;
                     playerLobbyMusicWinner = msg.musicWinner || null;
                     if (typeof msg.lobbyMusic === 'string') playerLobbyHostMusic = msg.lobbyMusic;
-                    enterLobbyUI();
+
+                    // Phase-aware view selection. The lobby UI only makes
+                    // sense while the room is in 'lobby'; for any other phase
+                    // a 'question' or 'result' message will follow this one
+                    // and complete the transition.
+                    const phase = typeof msg.phase === 'string' ? msg.phase : 'lobby';
+                    if (phase === 'lobby') {
+                        waitingMessage.textContent = msg.isReconnect
+                            ? 'Wieder drin — wir warten auf den Host.'
+                            : 'Du bist drin — wir warten auf den Host.';
+                        waitingRoom.classList.remove('in-game');
+                        enterLobbyUI();
+                    } else if (phase === 'result') {
+                        // Between questions: no replay payload, so park them
+                        // in a slim "quiz running" view until the next
+                        // question arrives.
+                        waitingMessage.textContent = 'Quiz läuft — warte auf die nächste Frage.';
+                        waitingRoom.classList.add('in-game');
+                        waitingRoom.classList.remove('hidden');
+                        playerQuestionView.classList.add('hidden');
+                        playerResultView.classList.add('hidden');
+                        playerFinalResultView.classList.add('hidden');
+                    } else {
+                        // 'question' or 'final': the next replay message
+                        // takes over the view. Park briefly to avoid flicker.
+                        waitingRoom.classList.add('in-game');
+                    }
                     break;
                 }
 
@@ -2664,7 +2687,28 @@ function initializePlayerFeatures(reconnectInfo) {
                     selectedAnswers = [];
                     playerCurrentQuestionIndex = msg.index;
                     displayQuestion(msg);
-                    startPlayerTimer(msg.duration);
+                    // Reconnect path: server-supplied startTime lets us show
+                    // the right remaining time instead of restarting the full
+                    // duration. For the normal broadcast, startTime ≈ now.
+                    let remaining = msg.duration;
+                    if (typeof msg.startTime === 'number') {
+                        const elapsedSec = (Date.now() - msg.startTime) / 1000;
+                        remaining = Math.max(0, msg.duration - elapsedSec);
+                    }
+                    startPlayerTimer(remaining);
+                    if (msg.alreadySubmitted) {
+                        // Player had submitted before disconnecting. Server
+                        // still has their answer; the host won't accept a
+                        // second submission, so freeze the UI accordingly.
+                        playerHasSubmitted = true;
+                        submitAnswerBtn.disabled = true;
+                        submitAnswerBtn.classList.add('hidden');
+                        submitAnswerBtn.classList.remove('pulse-cta');
+                        for (const btn of optionsContainer.querySelectorAll('button.option-btn')) {
+                            btn.disabled = true;
+                        }
+                        showMessage('Antwort wurde bereits gesendet.', 'info');
+                    }
                     break;
                 }
 

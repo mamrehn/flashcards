@@ -337,6 +337,11 @@ function handleCreateRoom(ws) {
         musicLocked: false,
         musicWinner: null,
         lobbyMusic: LOBBY_MUSIC_DEFAULT,
+        // Quiz phase tracking — lets the server replay the current state
+        // (active question / final results) to a reconnecting player.
+        phase: 'lobby',
+        activeQuestion: null,
+        finalSnapshot: null,
     };
     rooms.set(roomId, room);
 
@@ -478,6 +483,9 @@ function handleRestoreRoom(ws, msg) {
         musicLocked: false,
         musicWinner: null,
         lobbyMusic: LOBBY_MUSIC_DEFAULT,
+        phase: 'lobby',
+        activeQuestion: null,
+        finalSnapshot: null,
     };
 
     // Restore players if provided (limit to MAX_PLAYERS_PER_ROOM)
@@ -572,7 +580,26 @@ function handleJoin(ws, msg) {
             musicLocked: !!room.musicLocked,
             musicWinner: room.musicWinner || null,
             lobbyMusic: room.lobbyMusic || LOBBY_MUSIC_DEFAULT,
+            phase: room.phase || 'lobby',
         });
+
+        // Replay current quiz state so the reconnecting player matches what
+        // everyone else sees, instead of getting dropped back into the lobby.
+        if (room.phase === 'question' && room.activeQuestion) {
+            send(ws, {
+                ...room.activeQuestion,
+                alreadySubmitted: !!player.hasAnswered,
+            });
+        } else if (room.phase === 'final' && room.finalSnapshot) {
+            send(ws, {
+                type: 'result',
+                correct: room.finalSnapshot.correct,
+                isFinal: true,
+                questionIndex: room.finalSnapshot.questionIndex,
+                leaderboard: room.finalSnapshot.leaderboard,
+                playerScore: player.score,
+            });
+        }
 
         if (room.hostWs && room.hostWs.readyState === 1) {
             send(room.hostWs, {
@@ -653,6 +680,10 @@ function handleSubmitAnswer(ws, msg) {
     // Validate answerData: must be an array of at most 20 indices
     if (!Array.isArray(msg.answerData) || msg.answerData.length > 20) return;
 
+    // Persist on the player object so a reconnect can show "already answered".
+    player.hasAnswered = true;
+    player.currentAnswer = msg.answerData;
+
     if (room.hostWs && room.hostWs.readyState === 1) {
         // Compute elapsed time on server for fair scoring
         const serverNow = Date.now();
@@ -697,8 +728,13 @@ function handleStartQuestion(ws, msg) {
     room.questionStartTime = Date.now();
     room.currentQuestionIndex = questionIndex;
 
-    // Relay to all players, using server timestamp
-    broadcastToPlayers(room, {
+    // Reset per-player answer state so reconnecting players see a fresh slate.
+    for (const player of room.players.values()) {
+        player.hasAnswered = false;
+        player.currentAnswer = null;
+    }
+
+    const payload = {
         type: 'question',
         question: msg.question,
         options: msg.options,
@@ -706,7 +742,14 @@ function handleStartQuestion(ws, msg) {
         total: questionTotal,
         startTime: room.questionStartTime,
         duration: duration,
-    });
+    };
+    // Snapshot for replay on reconnect.
+    room.phase = 'question';
+    room.activeQuestion = payload;
+    room.finalSnapshot = null;
+
+    // Relay to all players, using server timestamp
+    broadcastToPlayers(room, payload);
 }
 
 /**
@@ -735,6 +778,18 @@ function handleSendResults(ws, msg) {
             name: typeof entry.name === 'string' ? entry.name.slice(0, 50) : 'Spieler',
             score: typeof entry.score === 'number' && Number.isFinite(entry.score) ? entry.score : 0,
         }));
+    }
+
+    // Phase transition: question → result (or final). Snapshot for reconnect
+    // replay; no longer in an active question.
+    room.phase = msg.isFinal ? 'final' : 'result';
+    room.activeQuestion = null;
+    if (msg.isFinal) {
+        room.finalSnapshot = {
+            correct: Array.isArray(msg.correct) ? msg.correct : [],
+            leaderboard,
+            questionIndex: room.currentQuestionIndex,
+        };
     }
 
     // Send personalized results to each player
