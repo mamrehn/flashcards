@@ -160,10 +160,13 @@ const LOBBY_MUSIC_VOTE_OPTIONS = [
 ];
 const LOBBY_MUSIC_VOTE_IDS = new Set(LOBBY_MUSIC_VOTE_OPTIONS.map((o) => o.id));
 
-// Host-side audio: tracks served from /audio/themes/<theme>/<track>.aac.
-const HOST_AUDIO_TRACKS = new Set([
-    'lobby', 'question', 'waiting_for_answer', 'reveal', 'scoreboard', 'final',
-]);
+// Host-side audio split into seamless loops vs. one-shot stingers.
+// See audio/themes/README.md for the full spec.
+const HOST_AUDIO_LOOPS = new Set(['lobby', 'question', 'leaderboard']);
+const HOST_AUDIO_STINGERS = new Set(['time_up', 'new_question']);
+// Universal one-shot played on the final results screen — same file for all
+// themes (and even when the chosen theme is "none").
+const HOST_AUDIO_FINAL_PATH = 'audio/final.aac';
 
 /**
  * Builds the audio file URL for a (theme, track) pair.
