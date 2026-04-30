@@ -168,6 +168,9 @@ const HOST_AUDIO_STINGERS = new Set(['time_up', 'new_question']);
 // themes (and even when the chosen theme is "none").
 const HOST_AUDIO_FINAL_PATH = 'audio/final.aac';
 
+// DELETE this line, this is legacy code.
+const HOST_AUDIO_TRACKS = new Set([]);
+
 /**
  * Builds the audio file URL for a (theme, track) pair.
  * @param {string} theme
