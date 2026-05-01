@@ -1027,10 +1027,48 @@ select:focus {
     transition: transform 0.08s ease, border-color 0.15s, background-color 0.15s, box-shadow 0.2s;
 }
 
-.music-poll-card[data-theme='arcade']    { --theme-color: #e91e63; --theme-tint: rgba(233, 30, 99, 0.12); }
-.music-poll-card[data-theme='cinematic'] { --theme-color: #6b42a6; --theme-tint: rgba(107, 66, 166, 0.14); }
-.music-poll-card[data-theme='lofi']      { --theme-color: #2e8b8b; --theme-tint: rgba(46, 139, 139, 0.14); }
-.music-poll-card[data-theme='none']      { --theme-color: #6c7480; --theme-tint: rgba(108, 116, 128, 0.14); }
+/* Per-theme palette + typography, mirroring the README vibes:
+   arcade=hot-pink chiptune, cinematic=violet trailer, modern_minimal=clean
+   cyan app, classical=warm gold chamber. */
+.music-poll-card[data-theme='arcade']         { --theme-color: #e91e63; --theme-tint: rgba(233, 30, 99, 0.12); }
+.music-poll-card[data-theme='cinematic']      { --theme-color: #6b42a6; --theme-tint: rgba(107, 66, 166, 0.14); }
+.music-poll-card[data-theme='modern_minimal'] { --theme-color: #4dabf7; --theme-tint: rgba(77, 171, 247, 0.12); }
+.music-poll-card[data-theme='classical']      { --theme-color: #b8860b; --theme-tint: rgba(184, 134, 11, 0.14); }
+.music-poll-card[data-theme='none']           { --theme-color: #6c7480; --theme-tint: rgba(108, 116, 128, 0.14); }
+
+/* Subtle typographic flair so each card *feels* like its theme without
+   shouting. Names only — taglines stay in the system font for legibility. */
+.music-poll-card[data-theme='arcade'] .music-poll-name {
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+}
+.music-poll-card[data-theme='cinematic'] .music-poll-name {
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+.music-poll-card[data-theme='modern_minimal'] .music-poll-name {
+    font-weight: 500;
+    letter-spacing: 0;
+}
+.music-poll-card[data-theme='classical'] .music-poll-name {
+    font-family: 'Georgia', 'Times New Roman', serif;
+    font-style: italic;
+    font-weight: 600;
+    letter-spacing: 0.01em;
+}
+.music-poll-card[data-theme='none'] .music-poll-name {
+    font-weight: 500;
+    color: var(--text-muted, #555);
+}
+
+/* "Keine Musik" gets its own row at the bottom of the 2-col grid so the
+   four themes stay paired and the opt-out reads as a footer. Mobile
+   already collapses to 1 col, so this is a no-op there. */
+.music-poll-card[data-theme='none'] {
+    grid-column: 1 / -1;
+}
 
 .music-poll-card:hover:not(:disabled) {
     transform: translateY(-1px);

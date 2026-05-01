@@ -144,15 +144,21 @@ function commitAvatar() {
     }
 }
 
+// Themes mirror audio/themes/<id>/ folders. Keep ids in sync with the server.
 const LOBBY_MUSIC_THEMES = [
-    { id: 'arcade',    label: 'Arcade',    icon: '🕹️', tagline: 'Schnell & spielerisch' },
-    { id: 'cinematic', label: 'Cinematic', icon: '🎬', tagline: 'Episch & dramatisch' },
-    { id: 'lofi',      label: 'Lo-Fi',     icon: '🎧', tagline: 'Ruhig & fokussiert' },
+    { id: 'arcade',         label: 'Arcade',    icon: '🕹️', tagline: 'Schnell & spielerisch' },
+    { id: 'cinematic',      label: 'Cinematic', icon: '🎬', tagline: 'Episch & dramatisch' },
+    { id: 'modern_minimal', label: 'Minimal',   icon: '📱', tagline: 'Klar & ruhig' },
+    { id: 'classical',      label: 'Klassik',   icon: '🎻', tagline: 'Elegant & akademisch' },
 ];
-const LOBBY_HOST_MUSIC_DEFAULT = 'lofi';
+const LOBBY_HOST_MUSIC_DEFAULT = 'modern_minimal';
 const LOBBY_HOST_MUSIC_STORAGE_KEY = 'quiz_host_lobby_music';
 const LOBBY_MUSIC_THEME_LABELS = {
-    arcade: 'Arcade', cinematic: 'Cinematic', lofi: 'Lo-Fi', none: 'Keine Musik',
+    arcade: 'Arcade',
+    cinematic: 'Cinematic',
+    modern_minimal: 'Minimal',
+    classical: 'Klassik',
+    none: 'Keine Musik',
 };
 const LOBBY_MUSIC_VOTE_OPTIONS = [
     ...LOBBY_MUSIC_THEMES,
@@ -410,7 +416,7 @@ function clamp01(v) { return Math.max(0, Math.min(1, v)); }
  * other stinger) would incur a download round-trip and miss its cue.
  */
 function preloadAudioCache() {
-    const themes = ['arcade', 'cinematic', 'lofi'];
+    const themes = LOBBY_MUSIC_THEMES.map((t) => t.id);
     const tracks = [...HOST_AUDIO_LOOPS, ...HOST_AUDIO_STINGERS];
     const urls = [];
     for (const theme of themes) {
@@ -644,7 +650,9 @@ function createMusicEngine() {
 }
 
 let hostMusicEngine = null;
-let hostMusicVoteTally = { arcade: 0, cinematic: 0, lofi: 0, none: 0 };
+let hostMusicVoteTally = {
+    arcade: 0, cinematic: 0, modern_minimal: 0, classical: 0, none: 0,
+};
 let hostMusicLocked = false;
 let hostMusicWinner = null;
 // Lobby music is host-controlled (separate from the in-game vote). The teacher
@@ -1702,11 +1710,7 @@ async function initializeHostFeatures(reconnectInfo) {
     function renderHostMusicStatus() {
         const el = document.querySelector('#host-music-status');
         if (!el) return;
-        const total =
-            hostMusicVoteTally.arcade +
-            hostMusicVoteTally.cinematic +
-            hostMusicVoteTally.lofi +
-            hostMusicVoteTally.none;
+        const total = Object.values(hostMusicVoteTally).reduce((a, n) => a + (n || 0), 0);
         if (hostMusicLocked) {
             el.classList.remove('hidden');
             const label = LOBBY_MUSIC_THEME_LABELS[hostMusicWinner] || 'Keine Musik';
@@ -2184,11 +2188,13 @@ let playerScore = 0;
 let playerAvatarBase = LOBBY_AVATAR_BASE_DEFAULT;
 let playerAvatarAccessory = null; // null = bare base
 let playerAvatar = composeAvatar(playerAvatarBase, playerAvatarAccessory);
-let playerVote = null; // 'arcade' | 'cinematic' | 'lofi' | 'none' | null (no vote)
-let playerLobbyTally = { arcade: 0, cinematic: 0, lofi: 0, none: 0 };
+let playerVote = null; // theme id ('arcade' | 'cinematic' | 'modern_minimal' | 'classical' | 'none') or null
+let playerLobbyTally = {
+    arcade: 0, cinematic: 0, modern_minimal: 0, classical: 0, none: 0,
+};
 let playerLobbyMusicLocked = false;
 let playerLobbyMusicWinner = null;
-let playerLobbyHostMusic = 'lofi'; // host's currently-playing lobby theme
+let playerLobbyHostMusic = 'modern_minimal'; // host's currently-playing lobby theme
 let playerLobbyCategories = [];
 let playerLobbyAvatarRendered = false;
 let playerCurrentQuestionIndex = -1;
@@ -2544,11 +2550,7 @@ function initializePlayerFeatures(reconnectInfo) {
      */
     function renderMusicVote() {
         if (!lobbyMusicOptionsEl) return;
-        const total =
-            (playerLobbyTally.arcade || 0) +
-            (playerLobbyTally.cinematic || 0) +
-            (playerLobbyTally.lofi || 0) +
-            (playerLobbyTally.none || 0);
+        const total = Object.values(playerLobbyTally).reduce((a, n) => a + (n || 0), 0);
         lobbyMusicOptionsEl.innerHTML = '';
         for (const opt of LOBBY_MUSIC_VOTE_OPTIONS) {
             const count = playerLobbyTally[opt.id] || 0;

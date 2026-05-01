@@ -36,9 +36,11 @@ function generateSessionId() {
  * @param name
  */
 // Lobby cosmetic state — server stays a relay; clients enforce the curated set.
-const VALID_MUSIC_VOTES = new Set(['arcade', 'cinematic', 'lofi', 'none']);
-const VALID_LOBBY_MUSIC = new Set(['arcade', 'cinematic', 'lofi', 'none']);
-const LOBBY_MUSIC_DEFAULT = 'lofi';
+// Themes mirror audio/themes/<id>/ folder names. See audio/themes/README.md.
+const MUSIC_THEME_IDS = ['arcade', 'cinematic', 'modern_minimal', 'classical'];
+const VALID_MUSIC_VOTES = new Set([...MUSIC_THEME_IDS, 'none']);
+const VALID_LOBBY_MUSIC = new Set([...MUSIC_THEME_IDS, 'none']);
+const LOBBY_MUSIC_DEFAULT = 'modern_minimal';
 const AVATAR_MAX_BYTES = 32;
 
 /**
@@ -76,7 +78,8 @@ function sanitizeCategories(categories) {
  * @param room
  */
 function tallyMusicVotes(room) {
-    const tally = { arcade: 0, cinematic: 0, lofi: 0, none: 0 };
+    const tally = { none: 0 };
+    for (const id of MUSIC_THEME_IDS) tally[id] = 0;
     const votes = room.musicVotes;
     if (votes) {
         for (const choice of votes.values()) {
@@ -104,12 +107,11 @@ function broadcastMusicTally(room) {
  */
 function decideMusicWinner(room) {
     const tally = tallyMusicVotes(room);
-    const themes = ['arcade', 'cinematic', 'lofi'];
-    const themeMax = Math.max(...themes.map((t) => tally[t]));
+    const themeMax = Math.max(...MUSIC_THEME_IDS.map((t) => tally[t]));
     // 'none' wins outright if it has at least as many votes as the leading theme.
     if (tally.none >= themeMax) return 'none';
     // A theme only wins if it's the *unique* leader — multi-way ties go to 'none'.
-    const leaders = themes.filter((t) => tally[t] === themeMax);
+    const leaders = MUSIC_THEME_IDS.filter((t) => tally[t] === themeMax);
     return leaders.length === 1 ? leaders[0] : 'none';
 }
 
