@@ -14,24 +14,25 @@ Each theme folder must contain the same six tracks:
 # 🎵 Quiz App Audio Implementation Plan & Specifications
 
 ## 📌 Overview
-This document outlines the background music (BGM) and sound effects (SFX) strategy for the multiplayer quiz app. The audio design balances cognitive load, engagement, and learning psychology.
+This document outlines the background music (BGM) and sound effects (SFX) strategy for the multiplayer quiz app. The audio design balances cognitive load, engagement, and learning psychology across four distinct themes.
 
 ### Structure
-* **3 Themed Folders** (`arcade`, `cinematic`, `lofi`)
-* **5 Audio Files per Theme** (3 seamless loops, 2 short stingers)
-* **1 Universal Finale File** (Non-musical, pure Foley)
-* **Total Files:** 16
+* **4 Themed Folders:** `arcade`, `cinematic`, `modern_minimal`, `classical`
+* **5 Audio Files per Theme:** 3 seamless loops, 2 short stingers
+* **1 Universal Finale File:** Non-musical, pure Foley (CC0)
+* **Total Files:** 21
 
 ### 🛠️ Technical Implementation Notes
-* **Loops:** Add a 1-second crossfade when looping `lobby.aac`, `question.aac`, and `leaderboard.aac` to ensure seamless transitions.
-* **Signals (Stingers):** `time_up.aac` and `new_question.aac` are short, 2-to-4-second punchy sound effects designed to cut through chatter and command attention.
+* **Suno Custom Mode:** For all generated tracks, use Custom Mode and include `[Instrumental]` in the lyrics box.
+* **Loops:** Add a 1-second crossfade when looping `lobby.aac`, `question.aac`, and `leaderboard.aac` in the game engine to ensure seamless transitions.
+* **Signals (Stingers):** `time_up.aac` and `new_question.aac` are short, 2-to-4-second punchy sound effects. You will need to generate a track in Suno, isolate the clean stinger, and crop it using an audio editor.
 
 ---
 
 ## 🕹️ Theme 1: Arcade
 **Vibe:** Playful, high extrinsic motivation, fast-paced trivia.
 
-| File | Type | UX / Psychological Goal | Suno "Style of Music" Prompt / Source |
+| File | Type | UX / Psychological Goal | Suno "Style of Music" Prompt |
 | :--- | :--- | :--- | :--- |
 | `lobby.aac` | Loop | Welcoming, bouncy, signals a fun experience. | `120 bpm, upbeat arcade lobby menu music, playful chiptune synthwave, bright melodies, bouncy bass, 16-bit era, seamless loop, background video game OST` |
 | `question.aac` | Loop | Fast-paced focus, mild time-pressure. | `140 bpm, fast-paced arcade quiz background music, pulsing synth bass, ticking hi-hats, tension building, focus, repetitive chiptune arpeggios, video game loop` |
@@ -44,7 +45,7 @@ This document outlines the background music (BGM) and sound effects (SFX) strate
 ## 🍿 Theme 2: Cinematic
 **Vibe:** High stakes, dramatic, deep focus (ideal for older students/serious trivia).
 
-| File | Type | UX / Psychological Goal | Suno "Style of Music" Prompt / Source |
+| File | Type | UX / Psychological Goal | Suno "Style of Music" Prompt |
 | :--- | :--- | :--- | :--- |
 | `lobby.aac` | Loop | Builds grand anticipation and awe. | `90 bpm, cinematic orchestral lobby music, slowly building tension, staccato strings, deep brass swells, epic movie soundtrack, anticipation, background music loop` |
 | `question.aac` | Loop | Drives momentum, repetitive elements for deep focus. | `120 bpm, intense cinematic quiz music, ticking clock percussion, driving string ostinato, high stakes, dark synth pulses, focus, suspenseful movie score, seamless loop` |
@@ -54,16 +55,29 @@ This document outlines the background music (BGM) and sound effects (SFX) strate
 
 ---
 
-## 📚 Theme 3: Lo-Fi
-**Vibe:** Chill, minimal cognitive load, studying, long-form reading.
+## 📱 Theme 3: Modern Minimal
+**Vibe:** Chill, minimal cognitive load, classic app aesthetic, uncluttered focus.
 
-| File | Type | UX / Psychological Goal | Suno "Style of Music" Prompt / Source |
+| File | Type | UX / Psychological Goal | Suno "Style of Music" Prompt |
 | :--- | :--- | :--- | :--- |
-| `lobby.aac` | Loop | Warm, inviting, safe space for learning. | `80 bpm, chill lofi hip hop lobby music, warm rhodes piano chords, dusty vinyl crackle, relaxed boom bap beat, cozy background music, studying, loopable` |
-| `question.aac` | Loop | Highly unobtrusive. Steady rhythm to anchor attention. | `85 bpm, lofi beats for studying, repetitive deep bass, muted guitar melody, soft percussion, high focus, unobtrusive background music, minimal, seamless loop` |
-| `leaderboard.aac` | Loop | Smooth, relaxed positive reinforcement. | `90 bpm, positive lofi victory music, upbeat chillhop, smooth jazz saxophone lick, warm bassline, rewarding but relaxed, study break, loopable` |
-| `time_up.aac` | Stinger | Gentle boundary setting. | `Lofi tape stop sound effect, gentle vinyl scratch, soft muted electric piano chord fading out, relaxed ending sting, short chillout` |
-| `new_question.aac`| Stinger | Soft auditory nudge to look back at the screen. | `Lofi new question alert, gentle rhodes piano upward glissando, soft vinyl needle drop sound, subtle chime sting, quick warm notification` |
+| `lobby.aac` | Loop | Welcoming, lighthearted, clean. | `100 bpm, modern minimal app background music, bright marimba, light acoustic guitar strumming, finger snaps, cheerful, clean, unobtrusive, seamless loop` |
+| `question.aac` | Loop | Steady focus, clear pulse without anxiety. | `110 bpm, minimalist quiz thinking music, repetitive pizzicato strings, subtle wooden block ticking, light upright bass pulse, focused, neutral, seamless loop` |
+| `leaderboard.aac` | Loop | Positive reinforcement, bright and rewarding. | `100 bpm, happy minimal victory music, bright glockenspiel melody, warm piano chords, light upbeat acoustic percussion, rewarding app sound, loopable` |
+| `time_up.aac` | Stinger | Clear boundary, soft but definitive stop. | `Minimalist time up sting, descending marimba scale ending in a soft wooden percussion thud, clear stop, clean app notification sound effect short` |
+| `new_question.aac`| Stinger | Sharp, pleasant auditory reset. | `Minimalist new question alert, ascending bright acoustic guitar pluck, clear bell chime ring, quick positive app notification sound effect short` |
+
+---
+
+## 🎻 Theme 4: Classical
+**Vibe:** Academic, sophisticated, elegant, mathematical focus (Mozart Effect).
+
+| File | Type | UX / Psychological Goal | Suno "Style of Music" Prompt |
+| :--- | :--- | :--- | :--- |
+| `lobby.aac` | Loop | Elegant, sophisticated, welcoming. | `110 bpm, upbeat classical string quartet, allegro, bright violins, elegant, welcoming, classical period, chamber music, seamless loop` |
+| `question.aac` | Loop | Mathematical, steady pulse to drive cognitive focus. | `100 bpm, classical baroque harpsichord and cello ostinato, steady driving rhythm, focused, academic, Bach style, unobtrusive, seamless loop` |
+| `leaderboard.aac` | Loop | Polite, grand resolution. | `120 bpm, classical symphony fanfare, bright orchestral hit into triumphant elegant major chords, positive reinforcement, loopable` |
+| `time_up.aac` | Stinger | Sharp, acoustic cessation. | `Classical staccato string hit, sharp violin pluck, definite ending, elegant, short sound effect` |
+| `new_question.aac`| Stinger | Light, airy attention grabber. | `Classical quick flute trill, ascending elegant woodwind run, bright, short alert sting` |
 
 ---
 
@@ -72,4 +86,4 @@ This document outlines the background music (BGM) and sound effects (SFX) strate
 
 | File | Type | UX / Psychological Goal | Source |
 | :--- | :--- | :--- | :--- |
-| `final.aac` | SFX (Play Once) | Strips away all genre constraints to provide a pure, human reward for completing the game. | **Do not use Suno.** Source a 10-15 second real audio clip of "polite medium-room applause" or "gentle ovation" from a CC0 SFX library. |
+| `final.aac` | SFX | Strips away all genre constraints to provide a pure, human reward. | **CC0 Foley Recording.** [Applause 4.mp3 by FunWithSound (Freesound)](https://freesound.org/people/FunWithSound/sounds/381358/) - Convert to `.aac` and crop/fade if necessary. |
