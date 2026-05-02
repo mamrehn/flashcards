@@ -723,6 +723,11 @@ function createMusicEngine() {
             pendingLoop = followLoop || null;
             pendingOnEnd = onEnd || null;
             stingerStartedAt = Date.now();
+            // Hard ceiling: some browsers neither 'end' nor 'error' on a
+            // 0-byte stub. Force-flush after MAX_STINGER_WAIT_MS so the
+            // visual transition still proceeds.
+            if (stingerSafetyTimer) clearTimeout(stingerSafetyTimer);
+            stingerSafetyTimer = setTimeout(flushPending, MAX_STINGER_WAIT_MS);
             const p = stinger.play();
             if (p && typeof p.catch === 'function') {
                 p.catch(() => flushPending());
@@ -730,7 +735,12 @@ function createMusicEngine() {
         },
         stop() {
             pendingLoop = null;
+            pendingOnEnd = null;
             activeTrack = null;
+            if (stingerSafetyTimer) {
+                clearTimeout(stingerSafetyTimer);
+                stingerSafetyTimer = null;
+            }
             for (const a of loops) {
                 cancelFade(a);
                 detachWrap(a);
