@@ -1463,19 +1463,27 @@ select:focus {
 }
 
 /* --- Phase veil + fly-in transitions ---
-   The veil is a full-viewport overlay that rises during stingers (so the
-   audio cue covers a clean DOM swap) and falls again at stinger-end.
-   `data-theme` tints it per music theme; `prefers-reduced-motion` reduces
-   the slide to a quick opacity blink. Decorative — aria-hidden in markup. */
+   Full-viewport overlay that rises during stingers (so the audio cue
+   covers a clean DOM swap) and falls again at stinger-end. `data-theme`
+   tints it per music theme. The veil is intentionally dark on light pages
+   and light on dark pages so it's *unambiguously* visible regardless of
+   surface colour — a near-white veil on a near-white page reads as no
+   transition at all. `prefers-reduced-motion` keeps only the opacity
+   change. Decorative — aria-hidden in markup. */
 .phase-veil {
-    --veil-bg: #ffffff;
+    --veil-bg: #1a1428;   /* deep violet — readable fade-to-dark on light pages */
     position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
     inset: 0;
     background-color: var(--veil-bg);
     opacity: 0;
     pointer-events: none;
-    z-index: 1000;
+    z-index: 9000;
     transition: opacity 200ms ease-out;
+    will-change: opacity;
 }
 
 .phase-veil.up {
@@ -1483,16 +1491,19 @@ select:focus {
     pointer-events: auto;
 }
 
-.phase-veil[data-theme='arcade']         { --veil-bg: #fff0f5; }   /* soft pink-cream */
-.phase-veil[data-theme='cinematic']      { --veil-bg: #1a1428; }   /* near-black violet */
-.phase-veil[data-theme='modern_minimal'] { --veil-bg: #f4f8fc; }   /* clean off-white */
-.phase-veil[data-theme='classical']      { --veil-bg: #fdf6e3; }   /* warm parchment */
-.phase-veil[data-theme='none']           { --veil-bg: #ffffff; }
+/* Light-mode tints — strong, theme-flavoured darks. */
+.phase-veil[data-theme='arcade']         { --veil-bg: #5d0f30; }   /* deep magenta */
+.phase-veil[data-theme='cinematic']      { --veil-bg: #0a0612; }   /* near-black */
+.phase-veil[data-theme='modern_minimal'] { --veil-bg: #1a3552; }   /* deep blue-grey */
+.phase-veil[data-theme='classical']      { --veil-bg: #3a2410; }   /* dark espresso */
+.phase-veil[data-theme='none']           { --veil-bg: #1a1428; }
 
-[data-theme='dark'] .phase-veil { --veil-bg: #1a1428; }
-[data-theme='dark'] .phase-veil[data-theme='arcade']         { --veil-bg: #2a0e1c; }
-[data-theme='dark'] .phase-veil[data-theme='modern_minimal'] { --veil-bg: #1c2230; }
-[data-theme='dark'] .phase-veil[data-theme='classical']      { --veil-bg: #2a2010; }
+/* Dark-mode tints — invert to a light wash so the veil still contrasts. */
+[data-theme='dark'] .phase-veil                                    { --veil-bg: #f5efe0; }
+[data-theme='dark'] .phase-veil[data-theme='arcade']               { --veil-bg: #ffd4e0; }
+[data-theme='dark'] .phase-veil[data-theme='cinematic']            { --veil-bg: #efe6ff; }
+[data-theme='dark'] .phase-veil[data-theme='modern_minimal']       { --veil-bg: #d8e6f0; }
+[data-theme='dark'] .phase-veil[data-theme='classical']            { --veil-bg: #f5e6c8; }
 
 @keyframes phase-fly-up {
     from { opacity: 0; transform: translateY(18px); }

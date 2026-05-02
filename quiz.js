@@ -400,6 +400,20 @@ const HOST_MAX_RECONNECT_ATTEMPTS = 30;
 const RECONNECT_DELAY_MS = 10_000;
 
 /**
+ * Reconnect backoff: 1s → 2s → 4s → 10s (then steady). A typical WS blip
+ * (phone screen off, brief Wi-Fi hiccup) recovers on the first retry instead
+ * of waiting the full 10 s, while sustained failures still throttle.
+ * @param {number} attempt 1-indexed
+ * @returns {number} ms before the next retry
+ */
+function reconnectBackoffMs(attempt) {
+    if (attempt <= 1) return 1000;
+    if (attempt === 2) return 2000;
+    if (attempt === 3) return 4000;
+    return RECONNECT_DELAY_MS;
+}
+
+/**
  * Minimal host-side audio engine. One looping `<audio>` element re-pointed at
  * the chosen theme's track files. Empty/missing files fail silently — the
  * placeholder `.aac` files in audio/themes are intentionally empty until the
@@ -608,14 +622,27 @@ function createMusicEngine() {
 
     let pendingOnEnd = null;
     let stingerStartedAt = 0;
+    let stingerSafetyTimer = null;
     // Minimum visible-transition duration so empty stub files (which fire
-    // 'error' immediately) still give the veil time to read on screen.
-    // Real stingers (2-4 s) far exceed this and fire onEnd at their natural end.
+    // 'error' immediately, or never) still give the veil time to read on
+    // screen. Real stingers (2-4 s) far exceed this and fire onEnd at
+    // their natural end.
     const MIN_STINGER_HOLD_MS = 700;
+    // Hard ceiling: if neither 'ended' nor 'error' fires by this point we
+    // assume the file is unplayable and proceed anyway. Set well above the
+    // README's "2-4 second" stinger spec.
+    const MAX_STINGER_WAIT_MS = 6000;
 
     function flushPending() {
+        // Idempotent — multiple events ('ended', 'error', play().catch(),
+        // safety timer) can race; only the first call does work.
+        if (stingerSafetyTimer) {
+            clearTimeout(stingerSafetyTimer);
+            stingerSafetyTimer = null;
+        }
         const cb = pendingOnEnd;
         const next = pendingLoop;
+        if (!cb && !next) return;
         pendingOnEnd = null;
         pendingLoop = null;
         const elapsed = Date.now() - stingerStartedAt;
@@ -1358,12 +1385,13 @@ async function initializeHostFeatures(reconnectInfo) {
                 // Push categories again in case server lost them (e.g. restored room).
                 sendCategoriesToServer();
                 refreshPlayerDisplay();
-                // If a question was active when we disconnected, restart it
-                // so players get a fresh copy and answers reset
-                if (quizState.isQuestionActive) {
-                    logger.log('Restarting active question after reconnect');
-                    startQuestion();
-                } else if (hostPendingQuestion) {
+                // Do NOT auto-restart the active question on reconnect: the
+                // host's local state (timer, options, players' submissions)
+                // is intact, and re-calling startQuestion would replay the
+                // new_question stinger and reset the timer for everyone.
+                // We just resume in place; the server kept relaying answers
+                // through the brief disconnect window.
+                if (hostPendingQuestion) {
                     // Resend question that failed to send before disconnect
                     logger.log('Resending pending question after reconnect');
                     if (hostWs && hostWs.readyState === WebSocket.OPEN) {
@@ -1501,10 +1529,12 @@ async function initializeHostFeatures(reconnectInfo) {
             if (suppressHostReconnect) return;
             if (hostRoomId && hostWsReconnectAttempts < HOST_MAX_RECONNECT_ATTEMPTS) {
                 hostWsReconnectAttempts++;
-                logger.log(
-                    `Host reconnecting (${hostWsReconnectAttempts}/${HOST_MAX_RECONNECT_ATTEMPTS})...`
+                const delay = reconnectBackoffMs(hostWsReconnectAttempts);
+                showMessage(
+                    `Verbindung unterbrochen. Reconnect ${hostWsReconnectAttempts}/${HOST_MAX_RECONNECT_ATTEMPTS}…`,
+                    'info'
                 );
-                setTimeout(reconnectHostWs, RECONNECT_DELAY_MS);
+                setTimeout(reconnectHostWs, delay);
             } else if (hostWsReconnectAttempts >= HOST_MAX_RECONNECT_ATTEMPTS) {
                 showMessage('Verbindung zum Server verloren. Bitte lade die Seite neu.', 'error');
             }
@@ -1592,7 +1622,12 @@ async function initializeHostFeatures(reconnectInfo) {
             if (suppressHostReconnect) return;
             if (hostRoomId && hostWsReconnectAttempts < HOST_MAX_RECONNECT_ATTEMPTS) {
                 hostWsReconnectAttempts++;
-                setTimeout(reconnectHostWs, RECONNECT_DELAY_MS);
+                const delay = reconnectBackoffMs(hostWsReconnectAttempts);
+                showMessage(
+                    `Verbindung unterbrochen. Reconnect ${hostWsReconnectAttempts}/${HOST_MAX_RECONNECT_ATTEMPTS}…`,
+                    'info'
+                );
+                setTimeout(reconnectHostWs, delay);
             } else if (hostWsReconnectAttempts >= HOST_MAX_RECONNECT_ATTEMPTS) {
                 showMessage('Verbindung zum Server verloren. Bitte lade die Seite neu.', 'error');
             }
@@ -1659,7 +1694,12 @@ async function initializeHostFeatures(reconnectInfo) {
             if (suppressHostReconnect) return;
             if (hostRoomId && hostWsReconnectAttempts < HOST_MAX_RECONNECT_ATTEMPTS) {
                 hostWsReconnectAttempts++;
-                setTimeout(reconnectHostWs, RECONNECT_DELAY_MS);
+                const delay = reconnectBackoffMs(hostWsReconnectAttempts);
+                showMessage(
+                    `Verbindung unterbrochen. Reconnect ${hostWsReconnectAttempts}/${HOST_MAX_RECONNECT_ATTEMPTS}…`,
+                    'info'
+                );
+                setTimeout(reconnectHostWs, delay);
             } else if (hostWsReconnectAttempts >= HOST_MAX_RECONNECT_ATTEMPTS) {
                 showMessage('Verbindung zum Server verloren. Bitte lade die Seite neu.', 'error');
             }
@@ -3100,8 +3140,13 @@ function initializePlayerFeatures(reconnectInfo) {
                 playerWsReconnectAttempts < MAX_RECONNECT_ATTEMPTS
             ) {
                 playerWsReconnectAttempts++;
-                waitingMessage.textContent = `Verbindung unterbrochen. Reconnect ${playerWsReconnectAttempts}/${MAX_RECONNECT_ATTEMPTS}...`;
-                setTimeout(connectPlayerWs, RECONNECT_DELAY_MS);
+                const delay = reconnectBackoffMs(playerWsReconnectAttempts);
+                const msg = `Verbindung unterbrochen. Reconnect ${playerWsReconnectAttempts}/${MAX_RECONNECT_ATTEMPTS}…`;
+                waitingMessage.textContent = msg;
+                // Toast banner — visible on top of question / result / final
+                // views, where the waiting-room message is hidden.
+                showMessage(msg, 'info');
+                setTimeout(connectPlayerWs, delay);
             } else if (playerWsReconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
                 showMessage(
                     'Verbindung zum Quiz-Raum verloren. Bitte lade die Seite neu.',
