@@ -409,6 +409,42 @@ const RECONNECT_DELAY_MS = 10_000;
  */
 function clamp01(v) { return Math.max(0, Math.min(1, v)); }
 
+// --- Phase veil + fly-in helpers ---
+// One persistent #phase-veil overlay in the document; we just toggle the
+// `up` class to fade it in/out and set data-theme for the per-theme tint.
+let phaseVeilEl = null;
+function getPhaseVeil() {
+    if (!phaseVeilEl) phaseVeilEl = document.querySelector('#phase-veil');
+    return phaseVeilEl;
+}
+
+/**
+ * Raise the phase veil with the given theme tint. Idempotent.
+ * @param {string} themeId
+ */
+function raisePhaseVeil(themeId) {
+    const el = getPhaseVeil();
+    if (!el) return;
+    el.dataset.theme = themeId || 'none';
+    el.classList.add('up');
+}
+
+function lowerPhaseVeil() {
+    const el = getPhaseVeil();
+    if (el) el.classList.remove('up');
+}
+
+/**
+ * Restart the `phase-fly-up` animation on `el`. Removing then re-adding the
+ * class on the same frame is a no-op, so we wait one frame between toggles.
+ * @param {HTMLElement} el
+ */
+function flyInElement(el) {
+    if (!el) return;
+    el.classList.remove('phase-fly-up');
+    requestAnimationFrame(() => el.classList.add('phase-fly-up'));
+}
+
 /**
  * Warm the HTTP cache with every audio file the engine might play, so the
  * first time a stinger is set as `audio.src` the browser already has the
@@ -570,11 +606,28 @@ function createMusicEngine() {
         attachWrap(incoming, track);
     }
 
+    let pendingOnEnd = null;
+    let stingerStartedAt = 0;
+    // Minimum visible-transition duration so empty stub files (which fire
+    // 'error' immediately) still give the veil time to read on screen.
+    // Real stingers (2-4 s) far exceed this and fire onEnd at their natural end.
+    const MIN_STINGER_HOLD_MS = 700;
+
     function flushPending() {
-        if (!pendingLoop) return;
+        const cb = pendingOnEnd;
         const next = pendingLoop;
+        pendingOnEnd = null;
         pendingLoop = null;
-        crossfadeToTrack(next);
+        const elapsed = Date.now() - stingerStartedAt;
+        const remaining = Math.max(0, MIN_STINGER_HOLD_MS - elapsed);
+        const finish = () => {
+            if (cb) {
+                try { cb(); } catch { /* swallow */ }
+            }
+            if (next) crossfadeToTrack(next);
+        };
+        if (remaining > 0) setTimeout(finish, remaining);
+        else finish();
     }
 
     stinger.addEventListener('ended', flushPending);
@@ -599,16 +652,28 @@ function createMusicEngine() {
             crossfadeToTrack(track);
         },
         /**
-         * Plays a stinger (one-shot) in isolation, optionally queueing a loop
-         * to start (via crossfade) when the stinger ends. 'final' is a
-         * universal one-shot played from `audio/final.aac` regardless of the
-         * current theme; it never has a follow-up.
+         * Plays a stinger (one-shot) in isolation. Optional `followLoop` is
+         * crossfaded in when the stinger ends; optional `onEnd` fires at the
+         * same moment, *before* the loop's crossfade starts — this is the
+         * sync point for a visual reveal (e.g. veil drop + question fly-in).
+         *
+         * 'final' is a universal one-shot played from `audio/final.aac`
+         * regardless of the current theme; it never has a follow-up.
          * @param {string} track
-         * @param {string} [followLoop]
+         * @param {string|null} [followLoop]
+         * @param {Function} [onEnd]
          */
-        playStinger(track, followLoop) {
+        playStinger(track, followLoop, onEnd) {
             const isUniversal = track === 'final';
-            if (!isUniversal && theme === 'none') return;
+            if (!isUniversal && theme === 'none') {
+                // No audio path — but still fire onEnd so visual transitions
+                // proceed even when the host picked "Keine Musik".
+                pendingOnEnd = onEnd || null;
+                pendingLoop = null;
+                stingerStartedAt = Date.now();
+                flushPending();
+                return;
+            }
             if (!isUniversal && !HOST_AUDIO_STINGERS.has(track)) return;
             // Quick fade-out on whichever loop is playing so the stinger
             // doesn't fight it. 250 ms is short enough to feel like a
@@ -629,6 +694,8 @@ function createMusicEngine() {
             stinger.currentTime = 0;
             stinger.volume = STINGER_VOLUME;
             pendingLoop = followLoop || null;
+            pendingOnEnd = onEnd || null;
+            stingerStartedAt = Date.now();
             const p = stinger.play();
             if (p && typeof p.catch === 'function') {
                 p.catch(() => flushPending());
@@ -1040,9 +1107,9 @@ async function initializeHostFeatures(reconnectInfo) {
             if (hostWs && hostWs.readyState === WebSocket.OPEN) {
                 hostWs.send(JSON.stringify({ type: 'lock_music_vote' }));
             }
-            qrContainer.classList.add('hidden');
-            hostQuestionDisplay.classList.remove('hidden');
-            if (hostViewHeading) hostViewHeading.classList.add('hidden'); // Hide "Quiz hosten" heading
+            // The actual hide-qr / show-question swap happens inside
+            // startQuestion's reveal callback (after the new_question
+            // stinger ends), not here, so the veil can cover the swap.
             quizState.currentQuestionIndex = 0;
             await startQuestion();
         });
@@ -1836,7 +1903,6 @@ async function initializeHostFeatures(reconnectInfo) {
         const currentQuestion = quizState.shuffledQuestions[quizState.currentQuestionIndex];
         quizState.answersReceived = 0;
         quizState.isQuestionActive = true;
-        hostQuestionStartTime = Date.now();
 
         // Prepare shuffled options and correct indices for this question
         const optionObjects = currentQuestion.options.map((text, index) => ({
@@ -1860,24 +1926,56 @@ async function initializeHostFeatures(reconnectInfo) {
             p.hasAnswered = false;
         }
 
-        currentQuestionTextEl.textContent = currentQuestion.question;
-        // Display options on host side WITHOUT correct indicators initially
-        displayHostOptions(shuffledOptions, []); // Use shuffled options for display
-        questionCounterEl.textContent = `Frage ${quizState.currentQuestionIndex + 1} von ${quizState.shuffledQuestions.length}`;
-        answersCount.textContent = '0';
-        totalPlayers.textContent = getNonHostPlayerCount().toString();
+        // Phase 1: raise the veil and play the new_question stinger. The
+        // question is *not* visible to host or players yet — the veil covers
+        // the host screen and players still see the previous view.
+        const veilTheme = hostMusicWinner || hostLobbyMusicTheme || 'none';
+        raisePhaseVeil(veilTheme);
 
-        showNextBtn.classList.add('hidden');
-        showResultsBtn.classList.add('hidden');
-        hostScoreboardEl.classList.add('hidden'); // Hide scoreboard while question is active
-        if (hostViewHeading) hostViewHeading.classList.add('hidden'); // Hide "Quiz hosten" heading
+        // Phase 2: when the stinger ends, the reveal callback fires the
+        // simultaneous DOM swap on host + sends start_question to players.
+        const reveal = () => {
+            // Make sure the right host containers are visible (covers both
+            // first-question case and between-question case).
+            qrContainer.classList.add('hidden');
+            hostResults.classList.add('hidden');
+            hostQuestionDisplay.classList.remove('hidden');
 
-        const currentDuration = quizState.questionDurations[quizState.currentQuestionIndex];
-        startTimer(currentDuration);
-        await sendQuestionToPlayers(currentQuestion); // Pass the question object which now contains shuffled data
-        // Play the "new question" stinger first; queue the question loop so
-        // it kicks in once the stinger fully plays out.
-        if (hostMusicEngine) hostMusicEngine.playStinger('new_question', 'question');
+            // Populate the question UI.
+            currentQuestionTextEl.textContent = currentQuestion.question;
+            displayHostOptions(shuffledOptions, []);
+            questionCounterEl.textContent = `Frage ${quizState.currentQuestionIndex + 1} von ${quizState.shuffledQuestions.length}`;
+            answersCount.textContent = '0';
+            totalPlayers.textContent = getNonHostPlayerCount().toString();
+
+            showNextBtn.classList.add('hidden');
+            showResultsBtn.classList.add('hidden');
+            hostScoreboardEl.classList.add('hidden');
+            if (hostViewHeading) hostViewHeading.classList.add('hidden');
+
+            // Anchor the timer's wall-clock at the actual reveal moment,
+            // not when the stinger started — fair scoring.
+            hostQuestionStartTime = Date.now();
+            const currentDuration = quizState.questionDurations[quizState.currentQuestionIndex];
+            startTimer(currentDuration);
+
+            // Fire the question to players now (server timestamps it for fair
+            // timing). They'll see it land at almost exactly the same moment.
+            sendQuestionToPlayers(currentQuestion);
+
+            // Lower the veil and animate the question content sliding up.
+            lowerPhaseVeil();
+            flyInElement(hostQuestionDisplay);
+        };
+
+        if (hostMusicEngine) {
+            // Engine fires `reveal` at stinger end (or immediately when the
+            // theme is "none" / file is empty, padded to MIN_STINGER_HOLD_MS).
+            hostMusicEngine.playStinger('new_question', 'question', reveal);
+        } else {
+            // Engine not initialised — keep the veil tiny then reveal.
+            setTimeout(reveal, 250);
+        }
     }
 
     /**
@@ -1967,11 +2065,10 @@ async function initializeHostFeatures(reconnectInfo) {
         }
 
         quizState.isQuestionActive = false;
-        // Time-up stinger plays in full; the leaderboard loop queues to
-        // start when the stinger ends, so the scoreboard view has audio.
-        if (hostMusicEngine) hostMusicEngine.playStinger('time_up', 'leaderboard');
 
-        // Calculate option counts for display on host side
+        // Phase 1 (no veil yet): reveal correct answers in-place on the
+        // question display so the audience can see what was right while the
+        // time_up stinger plays.
         const currentQuestion = quizState.shuffledQuestions[quizState.currentQuestionIndex];
         const optionCounts = Array.from({ length: currentQuestion.shuffledOptions.length }).fill(0);
         for (const p of getNonHostPlayers()) {
@@ -1983,8 +2080,6 @@ async function initializeHostFeatures(reconnectInfo) {
                 }
             }
         }
-
-        // Display correct answers and counts on the host side
         displayHostOptions(
             currentQuestion.shuffledOptions,
             currentQuestion.shuffledCorrect,
@@ -1994,14 +2089,37 @@ async function initializeHostFeatures(reconnectInfo) {
         calculateScores();
         await sendResultsToPlayers();
 
-        displayCurrentScoreboard(); // Display the scoreboard
+        // Phase 2: play the time_up stinger. On its end, raise the veil over
+        // the question display, swap to the leaderboard, then drop the veil
+        // with the scoreboard flying in. The leaderboard loop crossfades in
+        // right after, queued via the stinger's followLoop.
+        const veilTheme = hostMusicWinner || hostLobbyMusicTheme || 'none';
+        const isFinal =
+            quizState.currentQuestionIndex >= quizState.shuffledQuestions.length - 1;
 
-        if (quizState.currentQuestionIndex < quizState.shuffledQuestions.length - 1) {
-            showNextBtn.classList.remove('hidden');
-            showResultsBtn.classList.add('hidden');
+        const goToLeaderboard = () => {
+            raisePhaseVeil(veilTheme);
+            // Hold a beat (~180 ms — the veil's fade-in) before swapping the
+            // DOM under the cover of full-opacity veil, then drop the veil
+            // and fly-in the scoreboard.
+            setTimeout(() => {
+                displayCurrentScoreboard();
+                if (isFinal) {
+                    showNextBtn.classList.add('hidden');
+                    showResultsBtn.classList.remove('hidden');
+                } else {
+                    showNextBtn.classList.remove('hidden');
+                    showResultsBtn.classList.add('hidden');
+                }
+                lowerPhaseVeil();
+                flyInElement(hostScoreboardEl);
+            }, 200);
+        };
+
+        if (hostMusicEngine) {
+            hostMusicEngine.playStinger('time_up', 'leaderboard', goToLeaderboard);
         } else {
-            showNextBtn.classList.add('hidden');
-            showResultsBtn.classList.remove('hidden');
+            setTimeout(goToLeaderboard, 250);
         }
     }
 
@@ -2135,6 +2253,7 @@ async function initializeHostFeatures(reconnectInfo) {
         if (hostViewHeading) hostViewHeading.classList.remove('hidden'); // Show "Quiz hosten" heading
 
         displayLeaderboard();
+        flyInElement(hostResults);
         // Universal `audio/final.aac` (theme-agnostic applause / ovation).
         // No follow-up loop: the final screen sits in silence after the
         // ovation finishes, which matches the README's "palate cleanser" goal.
@@ -3092,6 +3211,7 @@ function initializePlayerFeatures(reconnectInfo) {
         waitingRoom.classList.add('hidden');
         playerResultView.classList.add('hidden');
         playerQuestionView.classList.remove('hidden');
+        flyInElement(playerQuestionView);
 
         playerQuestionTextEl.textContent = qData.question;
         playerQuestionCounterEl.textContent = `Frage ${qData.index + 1} von ${qData.total}`;
@@ -3146,6 +3266,7 @@ function initializePlayerFeatures(reconnectInfo) {
     function displayResult(rData, playerAnswer, currentScore, gainedPoints = 0, oldScore = 0) {
         playerQuestionView.classList.add('hidden');
         playerResultView.classList.remove('hidden');
+        flyInElement(playerResultView);
 
         let resultHtml = 'Deine Antwort war ';
         // Use the actual playerAnswer passed to the function
@@ -3223,6 +3344,7 @@ function initializePlayerFeatures(reconnectInfo) {
         playerResultView.classList.add('hidden');
         waitingRoom.classList.add('hidden');
         playerFinalResultView.classList.remove('hidden'); // Ensure this view is shown
+        flyInElement(playerFinalResultView);
 
         finalScoreEl.textContent = Math.round(playerScore); // Use the global playerScore for final display
 

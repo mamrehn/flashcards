@@ -1461,3 +1461,58 @@ select:focus {
     color: var(--text-muted, #555);
     font-style: italic;
 }
+
+/* --- Phase veil + fly-in transitions ---
+   The veil is a full-viewport overlay that rises during stingers (so the
+   audio cue covers a clean DOM swap) and falls again at stinger-end.
+   `data-theme` tints it per music theme; `prefers-reduced-motion` reduces
+   the slide to a quick opacity blink. Decorative — aria-hidden in markup. */
+.phase-veil {
+    --veil-bg: #ffffff;
+    position: fixed;
+    inset: 0;
+    background-color: var(--veil-bg);
+    opacity: 0;
+    pointer-events: none;
+    z-index: 1000;
+    transition: opacity 200ms ease-out;
+}
+
+.phase-veil.up {
+    opacity: 1;
+    pointer-events: auto;
+}
+
+.phase-veil[data-theme='arcade']         { --veil-bg: #fff0f5; }   /* soft pink-cream */
+.phase-veil[data-theme='cinematic']      { --veil-bg: #1a1428; }   /* near-black violet */
+.phase-veil[data-theme='modern_minimal'] { --veil-bg: #f4f8fc; }   /* clean off-white */
+.phase-veil[data-theme='classical']      { --veil-bg: #fdf6e3; }   /* warm parchment */
+.phase-veil[data-theme='none']           { --veil-bg: #ffffff; }
+
+[data-theme='dark'] .phase-veil { --veil-bg: #1a1428; }
+[data-theme='dark'] .phase-veil[data-theme='arcade']         { --veil-bg: #2a0e1c; }
+[data-theme='dark'] .phase-veil[data-theme='modern_minimal'] { --veil-bg: #1c2230; }
+[data-theme='dark'] .phase-veil[data-theme='classical']      { --veil-bg: #2a2010; }
+
+@keyframes phase-fly-up {
+    from { opacity: 0; transform: translateY(18px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes phase-fade-in {
+    from { opacity: 0; }
+    to   { opacity: 1; }
+}
+
+.phase-fly-up {
+    animation: phase-fly-up 320ms cubic-bezier(0.22, 0.61, 0.36, 1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .phase-veil {
+        transition: opacity 100ms linear;
+    }
+    .phase-fly-up {
+        animation: phase-fade-in 100ms linear;
+    }
+}
