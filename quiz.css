@@ -1472,6 +1472,7 @@ select:focus {
    change. Decorative — aria-hidden in markup. */
 .phase-veil {
     --veil-bg: #1a1428;   /* deep violet — readable fade-to-dark on light pages */
+    --veil-fg: #fdf6e3;   /* warm parchment text on the deep-violet bg */
     position: fixed;
     top: 0;
     left: 0;
@@ -1479,6 +1480,7 @@ select:focus {
     bottom: 0;
     inset: 0;
     background-color: var(--veil-bg);
+    color: var(--veil-fg);
     opacity: 0;
     pointer-events: none;
     z-index: 9000;
@@ -1491,19 +1493,74 @@ select:focus {
     pointer-events: auto;
 }
 
-/* Light-mode tints — strong, theme-flavoured darks. */
-.phase-veil[data-theme='arcade']         { --veil-bg: #5d0f30; }   /* deep magenta */
-.phase-veil[data-theme='cinematic']      { --veil-bg: #0a0612; }   /* near-black */
-.phase-veil[data-theme='modern_minimal'] { --veil-bg: #1a3552; }   /* deep blue-grey */
-.phase-veil[data-theme='classical']      { --veil-bg: #3a2410; }   /* dark espresso */
-.phase-veil[data-theme='none']           { --veil-bg: #1a1428; }
+/* Light-mode tints — strong, theme-flavoured darks. The matching --veil-fg
+   is the *inverse* tonal palette, so foreground text always reads cleanly. */
+.phase-veil[data-theme='arcade']         { --veil-bg: #5d0f30; --veil-fg: #ffd4e0; }
+.phase-veil[data-theme='cinematic']      { --veil-bg: #0a0612; --veil-fg: #f4e8ff; }
+.phase-veil[data-theme='modern_minimal'] { --veil-bg: #1a3552; --veil-fg: #d8e6f0; }
+.phase-veil[data-theme='classical']      { --veil-bg: #3a2410; --veil-fg: #f5e6c8; }
+.phase-veil[data-theme='none']           { --veil-bg: #1a1428; --veil-fg: #fdf6e3; }
 
-/* Dark-mode tints — invert to a light wash so the veil still contrasts. */
-[data-theme='dark'] .phase-veil                                    { --veil-bg: #f5efe0; }
-[data-theme='dark'] .phase-veil[data-theme='arcade']               { --veil-bg: #ffd4e0; }
-[data-theme='dark'] .phase-veil[data-theme='cinematic']            { --veil-bg: #efe6ff; }
-[data-theme='dark'] .phase-veil[data-theme='modern_minimal']       { --veil-bg: #d8e6f0; }
-[data-theme='dark'] .phase-veil[data-theme='classical']            { --veil-bg: #f5e6c8; }
+/* Dark-mode tints — invert to a light wash so the veil still contrasts;
+   foreground flips to deep colour for legibility. */
+[data-theme='dark'] .phase-veil                                    { --veil-bg: #f5efe0; --veil-fg: #1a1428; }
+[data-theme='dark'] .phase-veil[data-theme='arcade']               { --veil-bg: #ffd4e0; --veil-fg: #5d0f30; }
+[data-theme='dark'] .phase-veil[data-theme='cinematic']            { --veil-bg: #efe6ff; --veil-fg: #0a0612; }
+[data-theme='dark'] .phase-veil[data-theme='modern_minimal']       { --veil-bg: #d8e6f0; --veil-fg: #1a3552; }
+[data-theme='dark'] .phase-veil[data-theme='classical']            { --veil-bg: #f5e6c8; --veil-fg: #3a2410; }
+
+.phase-veil-content {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0.6rem;
+    padding: 2rem;
+    text-align: center;
+    pointer-events: none;
+    /* Fade in slightly later than the veil bg so the text doesn't pop
+       in before the veil has covered the swap. Out-fade is immediate
+       (no delay) so it leaves with the veil. */
+    opacity: 0;
+    transition: opacity 220ms ease-out;
+}
+
+.phase-veil.up .phase-veil-content {
+    opacity: 1;
+    transition: opacity 220ms ease-out 120ms;
+}
+
+.phase-veil-eyebrow {
+    margin: 0;
+    font-size: 0.85rem;
+    text-transform: uppercase;
+    letter-spacing: 0.18em;
+    opacity: 0.65;
+    color: var(--veil-fg);
+}
+
+.phase-veil-eyebrow:empty { display: none; }
+
+.phase-veil-categories {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 0.6rem 0.8rem;
+    max-width: min(90vw, 60rem);
+}
+
+.phase-veil-category {
+    font-size: clamp(1.4rem, 5vw, 3rem);
+    font-weight: 600;
+    letter-spacing: 0.01em;
+    line-height: 1.15;
+    padding: 0.3rem 1.1rem;
+    border: 2px solid currentColor;
+    border-radius: 999px;
+    color: var(--veil-fg);
+}
 
 @keyframes phase-fly-up {
     from { opacity: 0; transform: translateY(18px); }

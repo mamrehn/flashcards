@@ -312,8 +312,14 @@
         <!-- Phase veil: full-viewport overlay used for stinger-driven
              transitions (leaderboard ↔ question, → final). Theme-coloured
              via data-theme; respects prefers-reduced-motion. Decorative,
-             aria-hidden so screen readers ignore it. -->
-        <div id="phase-veil" class="phase-veil" aria-hidden="true"></div>
+             aria-hidden so screen readers ignore it. The inner content
+             surfaces upcoming-question categories as mental priming. -->
+        <div id="phase-veil" class="phase-veil" aria-hidden="true">
+            <div class="phase-veil-content">
+                <p id="phase-veil-eyebrow" class="phase-veil-eyebrow"></p>
+                <div id="phase-veil-categories" class="phase-veil-categories"></div>
+            </div>
+        </div>
 
         <footer style="text-align: center; margin-top: 20px; font-size: 0.9em">
             <p><a href="datenschutz.html" class="footer-link">Datenschutzhinweise</a></p>

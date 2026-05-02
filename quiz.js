@@ -449,6 +449,30 @@ function lowerPhaseVeil() {
 }
 
 /**
+ * Render category chips inside the veil for mental priming during a
+ * leaderboard → question transition. Pass `[]` (or null) to clear.
+ * The eyebrow label is shown only when there's at least one chip.
+ * @param {Array<string>|null} categories
+ * @param {string} [eyebrow] — defaults to "Nächste Frage" when categories present
+ */
+function setVeilCategories(categories, eyebrow = 'Nächste Frage') {
+    const eyebrowEl = document.querySelector('#phase-veil-eyebrow');
+    const listEl = document.querySelector('#phase-veil-categories');
+    if (!listEl) return;
+    listEl.innerHTML = '';
+    const list = Array.isArray(categories) ? categories : [];
+    if (eyebrowEl) eyebrowEl.textContent = list.length > 0 ? eyebrow : '';
+    if (list.length === 0) return;
+    for (const cat of list) {
+        if (typeof cat !== 'string' || !cat.trim()) continue;
+        const span = document.createElement('span');
+        span.className = 'phase-veil-category';
+        span.textContent = cat.trim();
+        listEl.append(span);
+    }
+}
+
+/**
  * Restart the `phase-fly-up` animation on `el`. Removing then re-adding the
  * class on the same frame is a no-op, so we wait one frame between toggles.
  * @param {HTMLElement} el
@@ -625,9 +649,9 @@ function createMusicEngine() {
     let stingerSafetyTimer = null;
     // Minimum visible-transition duration so empty stub files (which fire
     // 'error' immediately, or never) still give the veil time to read on
-    // screen. Real stingers (2-4 s) far exceed this and fire onEnd at
-    // their natural end.
-    const MIN_STINGER_HOLD_MS = 700;
+    // screen. Long enough to read 1-3 short category chips on the priming
+    // veil. Real stingers (2-4 s) exceed this and fire onEnd naturally.
+    const MIN_STINGER_HOLD_MS = 1800;
     // Hard ceiling: if neither 'ended' nor 'error' fires by this point we
     // assume the file is unplayable and proceed anyway. Set well above the
     // README's "2-4 second" stinger spec.
@@ -1979,7 +2003,14 @@ async function initializeHostFeatures(reconnectInfo) {
         // Phase 1: raise the veil and play the new_question stinger. The
         // question is *not* visible to host or players yet — the veil covers
         // the host screen and players still see the previous view.
+        // While the veil is up, surface the upcoming question's categories
+        // (if any) so the audience gets a few seconds of mental priming on
+        // the topic before the question text appears.
         const veilTheme = hostMusicWinner || hostLobbyMusicTheme || 'none';
+        const upcomingCategories = Array.isArray(currentQuestion.categories)
+            ? currentQuestion.categories
+            : [];
+        setVeilCategories(upcomingCategories);
         raisePhaseVeil(veilTheme);
 
         // Phase 2: when the stinger ends, the reveal callback fires the
@@ -2148,6 +2179,9 @@ async function initializeHostFeatures(reconnectInfo) {
             quizState.currentQuestionIndex >= quizState.shuffledQuestions.length - 1;
 
         const goToLeaderboard = () => {
+            // No category priming on the question→leaderboard veil; this is
+            // a "round over" beat, not a "topic incoming" cue.
+            setVeilCategories([]);
             raisePhaseVeil(veilTheme);
             // Hold a beat (~180 ms — the veil's fade-in) before swapping the
             // DOM under the cover of full-opacity veil, then drop the veil
