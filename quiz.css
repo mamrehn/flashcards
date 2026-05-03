@@ -655,19 +655,34 @@ select:focus {
     transition: width 1s linear;
 }
 
+/* Lobby player list — chip grid. `auto-fit` + `minmax(min(15rem, 100%), 1fr)`
+   gives ~4-5 chips per row on Full-HD, scaling down to a single column on
+   narrow viewports without overflowing. The min(15rem, 100%) wrapper is
+   the standard trick to prevent the 15-rem floor from blowing past a
+   smaller container. */
 .players-list {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(15rem, 100%), 1fr));
+    gap: 0.4rem 0.5rem;
     margin: 0.75rem 0;
 }
 
 .player-item {
     background-color: var(--quiz-surface);
-    padding: 0.4rem 0.6rem;
-    border-radius: 4px;
-    margin-bottom: 0.25rem;
-    border-left: 3px solid var(--primary-color);
+    padding: 0.3rem 0.85rem 0.3rem 0.35rem;
+    border-radius: 999px;
+    border: 1px solid var(--cards-highlight-border);
     display: flex;
     align-items: center;
-    gap: 0.55rem;
+    gap: 0.5rem;
+    min-width: 0;        /* let `.player-name` ellipsis kick in inside grid */
+    /* Subtle accent on the leading edge so connected players still read as
+       "active". Drops to muted grey when .disconnected (handled below). */
+    box-shadow: inset 3px 0 0 0 var(--primary-color);
+}
+
+.player-item .player-name {
+    font-size: 0.95rem;
 }
 
 /* Avatar icon used everywhere a player name appears on the host:
@@ -759,6 +774,7 @@ select:focus {
 .player-item.disconnected {
     opacity: 0.5;
     font-style: italic;
+    box-shadow: inset 3px 0 0 0 var(--text-muted, #888);
 }
 
 /* Toast Notification */
