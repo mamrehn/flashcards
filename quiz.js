@@ -172,7 +172,7 @@ const HOST_AUDIO_LOOPS = new Set(['lobby', 'question', 'leaderboard']);
 const HOST_AUDIO_STINGERS = new Set(['time_up', 'new_question']);
 // Universal one-shot played on the final results screen — same file for all
 // themes (and even when the chosen theme is "none").
-const HOST_AUDIO_FINAL_PATH = 'audio/final.aac';
+const HOST_AUDIO_FINAL_PATH = 'audio/final.opus';
 
 /**
  * Builds the audio file URL for a (theme, track) pair.
@@ -181,7 +181,7 @@ const HOST_AUDIO_FINAL_PATH = 'audio/final.aac';
  * @returns {string}
  */
 function audioFilePath(theme, track) {
-    return `audio/themes/${theme}/${track}.aac`;
+    return `audio/themes/${theme}/${track}.opus`;
 }
 
 /**
@@ -416,7 +416,7 @@ function reconnectBackoffMs(attempt) {
 /**
  * Minimal host-side audio engine. One looping `<audio>` element re-pointed at
  * the chosen theme's track files. Empty/missing files fail silently — the
- * placeholder `.aac` files in audio/themes are intentionally empty until the
+ * placeholder `.opus` files in audio/themes are intentionally empty until the
  * host records over them.
  *
  * @returns {{setTheme:Function, play:Function, stop:Function, getTheme:Function}}
@@ -489,7 +489,7 @@ function flyInElement(el, className = 'phase-fly-up') {
 /**
  * Warm the HTTP cache with every audio file the engine might play, so the
  * first time a stinger is set as `audio.src` the browser already has the
- * bytes locally. Without this, the very first `new_question.aac` (or any
+ * bytes locally. Without this, the very first `new_question.opus` (or any
  * other stinger) would incur a download round-trip and miss its cue.
  */
 function preloadAudioCache() {
@@ -711,7 +711,7 @@ function createMusicEngine() {
          * same moment, *before* the loop's crossfade starts — this is the
          * sync point for a visual reveal (e.g. veil drop + question fly-in).
          *
-         * 'final' is a universal one-shot played from `audio/final.aac`
+         * 'final' is a universal one-shot played from `audio/final.opus`
          * regardless of the current theme; it never has a follow-up.
          * @param {string} track
          * @param {string|null} [followLoop]
@@ -2349,7 +2349,7 @@ async function initializeHostFeatures(reconnectInfo) {
 
         displayLeaderboard();
         flyInElement(hostResults);
-        // Universal `audio/final.aac` (theme-agnostic applause / ovation).
+        // Universal `audio/final.opus` (theme-agnostic applause / ovation).
         // No follow-up loop: the final screen sits in silence after the
         // ovation finishes, which matches the README's "palate cleanser" goal.
         if (hostMusicEngine) hostMusicEngine.playStinger('final');
