@@ -473,14 +473,17 @@ function setVeilCategories(categories, eyebrow = 'Nächste Frage') {
 }
 
 /**
- * Restart the `phase-fly-up` animation on `el`. Removing then re-adding the
- * class on the same frame is a no-op, so we wait one frame between toggles.
+ * Restart an entrance animation on `el`. Default class is `phase-fly-up`;
+ * pass `phase-burst-up` for the bigger leaderboard reveal. Removing then
+ * re-adding the class on the same frame is a no-op, so we wait one frame
+ * between toggles.
  * @param {HTMLElement} el
+ * @param {string} [className]
  */
-function flyInElement(el) {
+function flyInElement(el, className = 'phase-fly-up') {
     if (!el) return;
-    el.classList.remove('phase-fly-up');
-    requestAnimationFrame(() => el.classList.add('phase-fly-up'));
+    el.classList.remove(className);
+    requestAnimationFrame(() => el.classList.add(className));
 }
 
 /**
@@ -2196,7 +2199,10 @@ async function initializeHostFeatures(reconnectInfo) {
                     showResultsBtn.classList.add('hidden');
                 }
                 lowerPhaseVeil();
-                flyInElement(hostScoreboardEl);
+                // Stronger entrance for the leaderboard panel itself —
+                // 60 px slide + slight scale-up while the rows inside
+                // stagger top-to-bottom with a winner pop on rank-1.
+                flyInElement(hostScoreboardEl, 'phase-burst-up');
             }, 200);
         };
 
@@ -2293,6 +2299,11 @@ async function initializeHostFeatures(reconnectInfo) {
         const sortedPlayers = getLeaderboardData(); // This function already filters out the host
         scoreboardListEl.innerHTML = '';
         hostScoreboardEl.classList.remove('hidden');
+        // The list children animate in via `.phase-stagger`. Removing the
+        // class first then re-adding on the next frame restarts the stagger
+        // for every reveal (between every question), not just the first.
+        scoreboardListEl.classList.remove('phase-stagger');
+        requestAnimationFrame(() => scoreboardListEl.classList.add('phase-stagger'));
         // No music call here: the leaderboard loop is queued by `endQuestion`
         // (after the time_up stinger) and starts itself once the stinger ends.
 
