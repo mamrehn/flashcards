@@ -139,16 +139,24 @@ header h1 {
     margin: 0.3rem 0.3rem 0.3rem 0;
 }
 
-.btn:hover {
-    background-color: var(--secondary-color);
+/* `:hover` rules below are gated on `(hover: hover)` so they don't apply on
+   touch devices, where the hover state would stick after a tap and mimic a
+   selected/active style — confusing players and, on iOS, sometimes requiring
+   a second tap to actually fire the click. */
+@media (hover: hover) {
+    .btn:hover {
+        background-color: var(--secondary-color);
+    }
 }
 
 .btn-accent {
     background-color: var(--accent-color);
 }
 
-.btn-accent:hover {
-    background-color: #e02858;
+@media (hover: hover) {
+    .btn-accent:hover {
+        background-color: #e02858;
+    }
 }
 
 .btn-reconnect {
@@ -159,9 +167,11 @@ header h1 {
     margin-top: 5px;
 }
 
-.btn-reconnect:hover {
-    background-color: var(--secondary-color);
-    color: white;
+@media (hover: hover) {
+    .btn-reconnect:hover {
+        background-color: var(--secondary-color);
+        color: white;
+    }
 }
 
 .card {
@@ -331,9 +341,11 @@ select:focus {
     font-size: 1.1em;
 }
 
-.option-btn:hover:not(:disabled) {
-    background-color: var(--quiz-hover);
-    border-color: var(--primary-color);
+@media (hover: hover) {
+    .option-btn:hover:not(:disabled) {
+        background-color: var(--quiz-hover);
+        border-color: var(--primary-color);
+    }
 }
 
 .option-btn.selected {
@@ -909,8 +921,10 @@ select:focus {
     color: #fff;
 }
 
-[data-theme='dark'] .btn-accent:hover {
-    background-color: #e04a6d;
+@media (hover: hover) {
+    [data-theme='dark'] .btn-accent:hover {
+        background-color: #e04a6d;
+    }
 }
 
 [data-theme='dark'] .leaderboard-item.rank-1,
@@ -1086,10 +1100,12 @@ select:focus {
     grid-column: 1 / -1;
 }
 
-.music-poll-card:hover:not(:disabled) {
-    transform: translateY(-1px);
-    border-color: var(--theme-color);
-    background-color: var(--theme-tint);
+@media (hover: hover) {
+    .music-poll-card:hover:not(:disabled) {
+        transform: translateY(-1px);
+        border-color: var(--theme-color);
+        background-color: var(--theme-tint);
+    }
 }
 
 .music-poll-card:active:not(:disabled) {
@@ -1272,9 +1288,11 @@ select:focus {
     transition: transform 0.1s, box-shadow 0.15s;
 }
 
-.avatar-base-center:hover {
-    transform: scale(1.04);
-    box-shadow: 0 10px 26px var(--shadow-color);
+@media (hover: hover) {
+    .avatar-base-center:hover {
+        transform: scale(1.04);
+        box-shadow: 0 10px 26px var(--shadow-color);
+    }
 }
 
 .avatar-base-center::after {
@@ -1329,8 +1347,10 @@ select:focus {
     transition: background-color 0.1s, border-color 0.1s, transform 0.05s;
 }
 
-.avatar-base-option:hover {
-    background-color: var(--quiz-hover);
+@media (hover: hover) {
+    .avatar-base-option:hover {
+        background-color: var(--quiz-hover);
+    }
 }
 
 .avatar-base-option:active {
@@ -1375,9 +1395,11 @@ select:focus {
     transform-origin: center;
 }
 
-.avatar-accessory-tile:hover {
-    background-color: var(--quiz-hover);
-    border-color: var(--accent-color);
+@media (hover: hover) {
+    .avatar-accessory-tile:hover {
+        background-color: var(--quiz-hover);
+        border-color: var(--accent-color);
+    }
 }
 
 .avatar-accessory-tile:active {

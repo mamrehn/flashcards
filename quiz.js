@@ -3338,15 +3338,18 @@ function initializePlayerFeatures(reconnectInfo) {
                     btn.classList.remove('selected');
                 }
 
-                submitAnswerBtn.classList.toggle('hidden', selectedAnswers.length === 0);
+                submitAnswerBtn.disabled = selectedAnswers.length === 0;
             });
 
             optionsContainer.append(btn);
         }
 
-        submitAnswerBtn.classList.add('hidden');
+        // Keep submit button visible-but-disabled while a question is active so
+        // it doesn't materialize under the player's finger when they tap the
+        // bottom-most option (which previously caused a ghost-click auto-submit).
+        submitAnswerBtn.classList.remove('hidden');
         submitAnswerBtn.classList.remove('pulse-cta');
-        submitAnswerBtn.disabled = false;
+        submitAnswerBtn.disabled = true;
         playerHasSubmitted = false;
         playerWasAutoSubmitted = false;
         for (const btn of optionsContainer.querySelectorAll('button.option-btn')) {
