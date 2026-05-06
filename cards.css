@@ -802,6 +802,10 @@ body {
     margin-right: auto;
 }
 
+#next-card {
+    flex: 2;
+}
+
 #undo-btn:disabled {
     opacity: 0.4;
     cursor: not-allowed;
