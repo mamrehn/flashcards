@@ -280,6 +280,11 @@ function initializeApp() {
         }
     });
 
+    // Back-link: target index.html from the deck-picker, but stay on
+    // cards.html (reload to a clean picker) while a quiz or Lesemodus
+    // is active — so users don't lose context with one stray click.
+    setupBackLink();
+
     // Hide the next button initially
     nextCardBtn.style.display = 'none';
 
@@ -555,6 +560,30 @@ globalThis.toggleJsonSample = toggleJsonSample;
 globalThis.openBookViewForBucket = openBookViewForBucket;
 globalThis.handleMoveSRCard = handleMoveSRCard;
 globalThis.handleDeleteSRCard = handleDeleteSRCard;
+
+/**
+ * Keep the header back-link in sync with the current view: from the
+ * deck-picker it goes home (index.html); from an active quiz or
+ * Lesemodus it returns to the cards.html picker so a single click
+ * doesn't drop the user all the way out of the app.
+ */
+function setupBackLink() {
+    const backLink = document.querySelector('.back-link');
+    if (!backLink || !appContent || !bookView) return;
+
+    const update = () => {
+        const inSession =
+            !appContent.classList.contains('hidden') ||
+            !bookView.classList.contains('hidden');
+        backLink.href = inSession ? 'cards.html' : 'index.html';
+        backLink.title = inSession ? 'Zur Deck-Auswahl' : 'Zur Startseite';
+    };
+
+    const observer = new MutationObserver(update);
+    observer.observe(appContent, { attributes: true, attributeFilter: ['class'] });
+    observer.observe(bookView, { attributes: true, attributeFilter: ['class'] });
+    update();
+}
 
 /**
  * Set up drop zone for drag-and-drop file import
