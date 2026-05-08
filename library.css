@@ -277,10 +277,6 @@ body {
 }
 
 /* Detail view */
-.back-to-grid {
-    margin-bottom: 1rem;
-}
-
 .detail-card {
     background-color: var(--surface-color, #fff);
     border-radius: 6px;

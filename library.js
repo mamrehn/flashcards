@@ -20,7 +20,7 @@ const els = {
     gridContainer: null,
     detail: null,
     detailContent: null,
-    backToGrid: null,
+    backLink: null,
     search: null,
     empty: null,
     banner: null,
@@ -50,7 +50,7 @@ function cacheElements() {
     els.grid = document.querySelector('#deck-grid');
     els.detail = document.querySelector('#detail-view');
     els.detailContent = document.querySelector('#detail-content');
-    els.backToGrid = document.querySelector('#back-to-grid');
+    els.backLink = document.querySelector('.back-link');
     els.search = document.querySelector('#library-search');
     els.empty = document.querySelector('#empty-state');
     els.banner = document.querySelector('#message-banner');
@@ -62,9 +62,15 @@ function cacheElements() {
  *
  */
 function bindEvents() {
-    els.backToGrid.addEventListener('click', () => {
-        history.pushState({}, '', 'library.html');
-        routeFromURL();
+    // Back-arrow: from the detail view, transition in-page to the grid
+    // (no reload); from the grid, fall through to the default index.html
+    // link target.
+    els.backLink.addEventListener('click', (e) => {
+        if (new URLSearchParams(location.search).get('deck')) {
+            e.preventDefault();
+            history.pushState({}, '', 'library.html');
+            routeFromURL();
+        }
     });
     els.search.addEventListener('input', () => renderGrid(els.search.value.trim().toLowerCase()));
     globalThis.addEventListener('popstate', routeFromURL);
@@ -115,6 +121,8 @@ function showGrid() {
     els.detail.classList.add('hidden');
     els.gridContainer.classList.remove('hidden');
     els.title.textContent = '📚 Lernkarten-Bibliothek';
+    els.backLink.href = 'index.html';
+    els.backLink.title = 'Zur Startseite';
     const deckSuffix = manifest.decks.length === 1 ? '' : 's';
     els.subtitle.textContent =
         manifest.decks.length === 0
@@ -327,6 +335,9 @@ function formatTypeBreakdown(types, prefix, suffix) {
  * @param deckId
  */
 function showDetail(deckId) {
+    els.backLink.href = 'library.html';
+    els.backLink.title = 'Zur Übersicht';
+
     const deck = manifest.decks.find((d) => d.id === deckId);
     if (!deck) {
         els.gridContainer.classList.add('hidden');
