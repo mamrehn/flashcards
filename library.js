@@ -406,14 +406,14 @@ function renderDetail(deck, importedMeta) {
     });
     actions.append(importBtn);
 
-    const readBtn = document.createElement('button');
-    readBtn.className = 'btn btn-secondary';
-    readBtn.textContent = isCurrentlyImported ? '📖 Lesen starten' : '📖 Importieren & lesen';
-    readBtn.title = 'Alle Karten dieses Decks im Lesemodus anzeigen';
-    readBtn.addEventListener('click', () => {
-        location.href = `cards.html?import=${encodeURIComponent(deck.id)}&mode=read`;
+    const previewBtn = document.createElement('button');
+    previewBtn.className = 'btn btn-secondary';
+    previewBtn.textContent = '👁 Vorschau';
+    previewBtn.title = 'Alle Karten dieses Decks linear anzeigen — keine Speicherung';
+    previewBtn.addEventListener('click', () => {
+        location.href = `cards.html?preview=${encodeURIComponent(deck.id)}`;
     });
-    actions.append(readBtn);
+    actions.append(previewBtn);
 
     card.append(actions);
 

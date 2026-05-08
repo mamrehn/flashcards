@@ -572,9 +572,20 @@ function setupBackLink() {
     if (!backLink || !appContent || !bookView) return;
 
     const update = () => {
+        const inBookView = !bookView.classList.contains('hidden');
+        const previewId = new URLSearchParams(location.search).get('preview');
+
+        // Vorschau was opened from a library detail page — route back there
+        // rather than to the cards.html deck-picker.
+        if (inBookView && previewId) {
+            backLink.href = `library.html?deck=${encodeURIComponent(previewId)}`;
+            backLink.title = 'Zurück zur Bibliothek';
+            return;
+        }
+
         const inSession =
             !appContent.classList.contains('hidden') ||
-            !bookView.classList.contains('hidden') ||
+            inBookView ||
             (srManagerContainer && !srManagerContainer.classList.contains('hidden'));
         backLink.href = inSession ? 'cards.html' : 'index.html';
         backLink.title = inSession ? 'Zur Deck-Auswahl' : 'Zur Startseite';
@@ -767,17 +778,24 @@ async function handleZipUpload(event) {
 }
 
 /**
- * Handle deep link cards.html?import=<library-deck-id>.
- * Fetches the manifest + ZIP from /decks/, imports the deck(s), records
- * library metadata for the v2 update badge on library.html, and starts
- * a study session. The URL parameter is stripped on success so a refresh
- * doesn't re-import.
+ * Handle two library deep links:
+ *   - cards.html?import=<id>  → real import: writes deck + library meta to
+ *     localStorage, displays the deck-picker.
+ *   - cards.html?preview=<id> → read-only preview: fetches and parses the
+ *     deck in memory, opens the book view directly, writes nothing. The
+ *     deck does not appear in savedDecks or localStorage; reload returns
+ *     the user to a clean deck-picker.
+ *
+ * The URL parameter is stripped on completion so a refresh doesn't repeat
+ * the action.
  */
 async function handleLibraryImportDeepLink() {
     const params = new URLSearchParams(location.search);
-    const id = params.get('import');
+    const importId = params.get('import');
+    const previewId = params.get('preview');
+    const id = importId || previewId;
     if (!id) return;
-    const mode = params.get('mode') === 'read' ? 'read' : 'study';
+    const isPreview = !importId && Boolean(previewId);
 
     try {
         const manifestRes = await fetch('decks/library.json', { cache: 'no-cache' });
@@ -827,7 +845,10 @@ async function handleLibraryImportDeepLink() {
                 .split('/')
                 .pop()
                 .replace(/\.json$/i, '');
-            saveToLocalStorage(deckName, validCards, []);
+            // Preview: don't touch localStorage or savedDecks at all.
+            if (!isPreview) {
+                saveToLocalStorage(deckName, validCards, []);
+            }
             importedDeckNames.push(deckName);
             for (const card of validCards) {
                 allCards.push({ ...card, sourceDeck: deckName });
@@ -835,45 +856,54 @@ async function handleLibraryImportDeepLink() {
         }
 
         if (importedDeckNames.length === 0) {
-            showError('Keine gültigen Karten im Bibliotheks-Deck gefunden.');
+            showError(
+                isPreview
+                    ? 'Keine gültigen Karten in der Vorschau gefunden.'
+                    : 'Keine gültigen Karten im Bibliotheks-Deck gefunden.'
+            );
             history.replaceState({}, '', 'cards.html');
             return;
         }
 
-        // Persist library metadata so the detail page can show "imported" /
-        // "update available" pills. Failure here is non-fatal.
-        try {
-            let libMeta = JSON.parse(localStorage.getItem('flashcardLibraryMeta') || '{}');
-            libMeta = sanitizeParsedJSON(libMeta) || {};
-            for (const deckName of importedDeckNames) {
-                libMeta[deckName] = {
-                    libraryId: deckMeta.id,
-                    libraryVersion: deckMeta.version,
-                    importedAt: new Date().toISOString(),
-                };
+        if (!isPreview) {
+            // Persist library metadata so the detail page can show "imported" /
+            // "update available" pills. Failure here is non-fatal.
+            try {
+                let libMeta = JSON.parse(localStorage.getItem('flashcardLibraryMeta') || '{}');
+                libMeta = sanitizeParsedJSON(libMeta) || {};
+                for (const deckName of importedDeckNames) {
+                    libMeta[deckName] = {
+                        libraryId: deckMeta.id,
+                        libraryVersion: deckMeta.version,
+                        importedAt: new Date().toISOString(),
+                    };
+                }
+                localStorage.setItem('flashcardLibraryMeta', JSON.stringify(libMeta));
+            } catch (error) {
+                console.warn('Could not persist library meta:', error);
             }
-            localStorage.setItem('flashcardLibraryMeta', JSON.stringify(libMeta));
-        } catch (error) {
-            console.warn('Could not persist library meta:', error);
         }
 
-        history.replaceState({}, '', 'cards.html');
-
-        // Populate the deck-picker first so the user lands in a clean
-        // state if they later close the book view.
-        displaySavedDecks('', importedDeckNames);
-
-        if (mode === 'read') {
-            openBookView(allCards, `Lesemodus — ${deckMeta.title}`);
-            showMessage(`„${deckMeta.title}“ importiert (${allCards.length} Karten).`);
+        if (isPreview) {
+            // Keep ?preview=<id> in the URL so the back-link can route to
+            // library.html?deck=<id>, and a refresh re-renders cleanly.
+            // Render the linear view directly — no deck-picker refresh,
+            // because the deck was never saved and shouldn't appear there.
+            openBookView(allCards, `Vorschau — ${deckMeta.title}`);
         } else {
+            history.replaceState({}, '', 'cards.html');
+            displaySavedDecks('', importedDeckNames);
             showMessage(
                 `„${deckMeta.title}“ importiert (${allCards.length} Karten). Wähle Decks oder Kategorien für die nächste Runde.`
             );
         }
     } catch (error) {
-        console.error('Library import failed:', error);
-        showError('Bibliotheks-Deck konnte nicht importiert werden.');
+        console.error('Library deep-link failed:', error);
+        showError(
+            isPreview
+                ? 'Vorschau konnte nicht geladen werden.'
+                : 'Bibliotheks-Deck konnte nicht importiert werden.'
+        );
         history.replaceState({}, '', 'cards.html');
     }
 }
