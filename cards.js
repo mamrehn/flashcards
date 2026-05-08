@@ -574,7 +574,8 @@ function setupBackLink() {
     const update = () => {
         const inSession =
             !appContent.classList.contains('hidden') ||
-            !bookView.classList.contains('hidden');
+            !bookView.classList.contains('hidden') ||
+            (srManagerContainer && !srManagerContainer.classList.contains('hidden'));
         backLink.href = inSession ? 'cards.html' : 'index.html';
         backLink.title = inSession ? 'Zur Deck-Auswahl' : 'Zur Startseite';
     };
@@ -582,6 +583,9 @@ function setupBackLink() {
     const observer = new MutationObserver(update);
     observer.observe(appContent, { attributes: true, attributeFilter: ['class'] });
     observer.observe(bookView, { attributes: true, attributeFilter: ['class'] });
+    if (srManagerContainer) {
+        observer.observe(srManagerContainer, { attributes: true, attributeFilter: ['class'] });
+    }
     update();
 }
 
@@ -2406,9 +2410,8 @@ function returnToSRManager() {
     if (uploadSection) uploadSection.classList.add('hidden');
     if (subtitle) subtitle.classList.add('hidden');
 
-    // Update button state
-    openSrManagerBtn.textContent = '📚 Decks anzeigen';
-    openSrManagerBtn.classList.add('active');
+    // Hide the SR button — back-arrow is the only exit from this view
+    openSrManagerBtn.style.display = 'none';
 
     // Hide study mode selector in SR manager
     studyModeSelect.style.display = 'none';
@@ -3211,19 +3214,19 @@ function openSpacedRepetitionManager() {
         if (uploadSection) uploadSection.classList.remove('hidden');
         if (subtitle) subtitle.classList.remove('hidden');
         studyModeSelect.style.display = 'inline-block';
-        openSrManagerBtn.textContent = '📊 SR verwalten';
-        openSrManagerBtn.classList.remove('active');
+        openSrManagerBtn.style.display = 'inline-block';
         // Refresh saved decks display
         displaySavedDecks(deckSearchInput.value);
     } else {
-        // Open SR manager, hide saved decks
+        // Open SR manager, hide saved decks. The header back-arrow is the
+        // single exit affordance from this view, so we hide the SR button
+        // entirely rather than morphing it into a "Decks anzeigen" toggle.
         srManagerContainer.classList.remove('hidden');
         savedDecksContainer.classList.add('hidden');
         if (uploadSection) uploadSection.classList.add('hidden');
         if (subtitle) subtitle.classList.add('hidden');
         studyModeSelect.style.display = 'none';
-        openSrManagerBtn.textContent = '📚 Decks anzeigen';
-        openSrManagerBtn.classList.add('active');
+        openSrManagerBtn.style.display = 'none';
         displaySpacedRepetitionBuckets();
     }
 }
@@ -3558,8 +3561,6 @@ function startSelectedBuckets() {
     savedDecksContainer.classList.remove('hidden');
     if (uploadSection) uploadSection.classList.remove('hidden');
     if (subtitle) subtitle.classList.remove('hidden');
-    openSrManagerBtn.textContent = '📊 SR verwalten';
-    openSrManagerBtn.classList.remove('active');
 
     // Initialize the quiz with selected cards
     initializeQuiz(selectedCards);

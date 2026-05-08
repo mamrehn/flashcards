@@ -1104,11 +1104,6 @@ body {
     min-width: 130px;
 }
 
-.sr-manager-btn.active {
-    background-color: var(--primary);
-    color: white;
-}
-
 #spaced-repetition-manager-container {
     background: var(--surface-color);
     padding: 1.5rem;
