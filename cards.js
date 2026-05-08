@@ -744,6 +744,7 @@ async function handleLibraryImportDeepLink() {
     const params = new URLSearchParams(location.search);
     const id = params.get('import');
     if (!id) return;
+    const mode = params.get('mode') === 'read' ? 'read' : 'study';
 
     try {
         const manifestRes = await fetch('decks/library.json', { cache: 'no-cache' });
@@ -825,10 +826,18 @@ async function handleLibraryImportDeepLink() {
 
         history.replaceState({}, '', 'cards.html');
 
+        // Populate the deck-picker first so the user lands in a clean
+        // state if they later close the book view.
         displaySavedDecks('', importedDeckNames);
-        showMessage(
-            `„${deckMeta.title}“ importiert (${allCards.length} Karten). Wähle Decks oder Kategorien für die nächste Runde.`
-        );
+
+        if (mode === 'read') {
+            openBookView(allCards, `Lesemodus — ${deckMeta.title}`);
+            showMessage(`„${deckMeta.title}“ importiert (${allCards.length} Karten).`);
+        } else {
+            showMessage(
+                `„${deckMeta.title}“ importiert (${allCards.length} Karten). Wähle Decks oder Kategorien für die nächste Runde.`
+            );
+        }
     } catch (error) {
         console.error('Library import failed:', error);
         showError('Bibliotheks-Deck konnte nicht importiert werden.');

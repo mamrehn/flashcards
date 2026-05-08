@@ -396,16 +396,24 @@ function renderDetail(deck, importedMeta) {
         actions.append(updateBtn);
     }
 
+    const isCurrentlyImported = importedMeta && importedMeta.libraryVersion === deck.version;
+
     const importBtn = document.createElement('button');
     importBtn.className = 'btn btn-primary';
-    importBtn.textContent =
-        importedMeta && importedMeta.libraryVersion === deck.version
-            ? '▶ Lernen starten'
-            : '⬇ Importieren & lernen';
+    importBtn.textContent = isCurrentlyImported ? '▶ Lernen starten' : '⬇ Importieren & lernen';
     importBtn.addEventListener('click', () => {
         location.href = `cards.html?import=${encodeURIComponent(deck.id)}`;
     });
     actions.append(importBtn);
+
+    const readBtn = document.createElement('button');
+    readBtn.className = 'btn btn-secondary';
+    readBtn.textContent = isCurrentlyImported ? '📖 Lesen starten' : '📖 Importieren & lesen';
+    readBtn.title = 'Alle Karten dieses Decks im Lesemodus anzeigen';
+    readBtn.addEventListener('click', () => {
+        location.href = `cards.html?import=${encodeURIComponent(deck.id)}&mode=read`;
+    });
+    actions.append(readBtn);
 
     card.append(actions);
 
