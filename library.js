@@ -26,6 +26,62 @@ const els = {
     banner: null,
     title: null,
     subtitle: null,
+    resultCount: null,
+    facetsPanel: null,
+    facets: null,
+    facetsClear: null,
+    facetsToggle: null,
+};
+
+/**
+ * Faceted-filter axes (in display order). Each axis reads a single
+ * meta field; values are enumerated from the loaded manifest. Axes
+ * with fewer than 2 distinct values are hidden — single-option groups
+ * are pure noise (no narrowing power).
+ */
+const FACET_DEFS = [
+    { key: 'institution', label: 'Schulart' },
+    { key: 'program', label: 'Bildungsgang' },
+    { key: 'subject', label: 'Fach' },
+    { key: 'gradeLevel', label: 'Klassenstufe' },
+    { key: 'learningUnit', label: 'Lerneinheit' },
+    // Categories live at the deck level (deck.categories[].name), not
+    // inside meta. Default-collapsed because the value list is long
+    // (often one entry per deck-section) and would otherwise dominate
+    // the sidebar.
+    { key: 'categories', label: 'Kategorien', defaultOpen: false },
+];
+
+/**
+ * Pull all values for a facet axis off a deck. Returns an array
+ * regardless of source shape so callers don't have to branch:
+ *   - meta single-string field → [value] when non-empty
+ *   - deck.categories          → list of category names
+ *   - meta array field         → its contents (string-filtered)
+ * @param deck
+ * @param key
+ */
+function getDeckValues(deck, key) {
+    if (key === 'categories') {
+        if (!Array.isArray(deck.categories)) return [];
+        return deck.categories
+            .map((c) => (c && typeof c.name === 'string' ? c.name : null))
+            .filter((n) => n !== null && n !== '');
+    }
+    const v = deck.meta && deck.meta[key];
+    if (typeof v === 'string') return v === '' ? [] : [v];
+    if (Array.isArray(v)) return v.filter((x) => typeof x === 'string' && x !== '');
+    return [];
+}
+
+/**
+ * Active filter state. `text` is the free-text search; `facets`
+ * holds selected values per axis (key → Set<string>). Axes with no
+ * selections are absent from the map entirely.
+ */
+const filterState = {
+    text: '',
+    facets: new Map(),
 };
 
 document.addEventListener('DOMContentLoaded', init);
@@ -56,6 +112,11 @@ function cacheElements() {
     els.banner = document.querySelector('#message-banner');
     els.title = document.querySelector('#library-title');
     els.subtitle = document.querySelector('#library-subtitle');
+    els.resultCount = document.querySelector('#result-count');
+    els.facetsPanel = document.querySelector('#facets-panel');
+    els.facets = document.querySelector('#facets');
+    els.facetsClear = document.querySelector('#facets-clear');
+    els.facetsToggle = document.querySelector('#facets-toggle');
 }
 
 /**
@@ -72,7 +133,18 @@ function bindEvents() {
             routeFromURL();
         }
     });
-    els.search.addEventListener('input', () => renderGrid(els.search.value.trim().toLowerCase()));
+    els.search.addEventListener('input', () => {
+        filterState.text = els.search.value.trim().toLowerCase();
+        applyFiltersToUI();
+    });
+    els.facetsClear.addEventListener('click', () => {
+        filterState.facets.clear();
+        applyFiltersToUI();
+    });
+    els.facetsToggle.addEventListener('click', () => {
+        const open = els.facetsPanel.classList.toggle('facets-panel--open');
+        els.facetsToggle.setAttribute('aria-expanded', String(open));
+    });
     globalThis.addEventListener('popstate', routeFromURL);
 }
 
@@ -123,43 +195,301 @@ function showGrid() {
     els.title.textContent = '📚 Lernkarten-Bibliothek';
     els.backLink.href = 'index.html';
     els.backLink.title = 'Zur Startseite';
-    const deckSuffix = manifest.decks.length === 1 ? '' : 's';
     els.subtitle.textContent =
         manifest.decks.length === 0
             ? 'Noch keine Decks verfügbar.'
-            : `${manifest.decks.length} Deck${deckSuffix} verfügbar`;
-    renderGrid('');
+            : 'Wähle ein Deck zum Importieren';
+    applyFiltersToUI();
+}
+
+/**
+ * Re-render facets, grid, result counter, and reset-button visibility
+ * after any filter-state change.
+ */
+function applyFiltersToUI() {
+    renderFacets();
+    renderGrid();
+    renderResultCount();
+    renderClearButton();
+}
+
+/**
+ * True when the deck matches the free-text needle in any of its
+ * indexed fields. Empty needle matches everything.
+ * @param deck
+ * @param needle
+ */
+function matchesText(deck, needle) {
+    if (!needle) return true;
+    if (deck.title.toLowerCase().includes(needle)) return true;
+    if (deck.categories.some((c) => c.name.toLowerCase().includes(needle))) return true;
+    const m = deck.meta || {};
+    const haystack = [
+        m.institution,
+        m.program,
+        m.subject,
+        m.gradeLevel,
+        m.learningUnit,
+        m.description,
+        m.author,
+    ];
+    return haystack.some((v) => typeof v === 'string' && v.toLowerCase().includes(needle));
+}
+
+/**
+ * True when the deck satisfies the active facet selections, optionally
+ * skipping one axis (used when computing per-value counts so a facet's
+ * own selections don't zero out its other values).
+ * @param deck
+ * @param skipKey
+ */
+function matchesFacets(deck, skipKey) {
+    for (const [key, selected] of filterState.facets) {
+        if (key === skipKey) continue;
+        // OR within axis: at least one of the deck's values must be
+        // in the selected set. Works uniformly for single-string axes
+        // (one value) and array axes (tags).
+        const deckValues = getDeckValues(deck, key);
+        if (!deckValues.some((v) => selected.has(v))) return false;
+    }
+    return true;
+}
+
+/**
+ * Decks visible under the current full filter state.
+ */
+function visibleDecks() {
+    return manifest.decks.filter(
+        (d) => matchesText(d, filterState.text) && matchesFacets(d, null)
+    );
+}
+
+/**
+ * Map<value, count> for one axis, intersection-aware: counts reflect
+ * how many decks would remain if the user were to additionally pick
+ * each value, given everything *else* that's currently filtering.
+ * Uses the same skip-self trick that Amazon-style facet UIs use so
+ * the user can see what's reachable from here.
+ * @param facetKey
+ */
+function countsFor(facetKey) {
+    const counts = new Map();
+    for (const d of manifest.decks) {
+        if (!matchesText(d, filterState.text)) continue;
+        if (!matchesFacets(d, facetKey)) continue;
+        for (const v of getDeckValues(d, facetKey)) {
+            counts.set(v, (counts.get(v) || 0) + 1);
+        }
+    }
+    return counts;
+}
+
+/**
+ * Sort facet values: gradeLevel numerically when possible (so 8 < 10
+ * < 11), learningUnit by its leading "LSn.m" tokens, otherwise locale.
+ * @param key
+ * @param values
+ */
+function sortFacetValues(key, values) {
+    if (key === 'gradeLevel') {
+        return [...values].toSorted((a, b) => {
+            const an = Number.parseInt(a, 10);
+            const bn = Number.parseInt(b, 10);
+            if (Number.isNaN(an) || Number.isNaN(bn)) return a.localeCompare(b, 'de');
+            return an - bn || a.localeCompare(b, 'de');
+        });
+    }
+    return [...values].toSorted((a, b) => a.localeCompare(b, 'de'));
 }
 
 /**
  *
- * @param filter
  */
-function renderGrid(filter) {
+function renderFacets() {
+    els.facets.innerHTML = '';
+    let anyAxis = false;
+    for (const def of FACET_DEFS) {
+        const counts = countsFor(def.key);
+        const selected = filterState.facets.get(def.key);
+        // Hide only fully-empty axes. A single-value axis still has
+        // narrowing power when some decks have the value and others
+        // don't (e.g. ticking "Berufsschule" filters out a demo deck
+        // that has no institution at all). An axis with selections is
+        // always shown so the user can unselect it.
+        if (counts.size === 0 && (!selected || selected.size === 0)) continue;
+        anyAxis = true;
+        els.facets.append(buildFacetGroup(def, counts, selected));
+    }
+    if (!anyAxis) {
+        const empty = document.createElement('p');
+        empty.className = 'facets-empty';
+        empty.textContent = 'Keine Filter verfügbar.';
+        els.facets.append(empty);
+    }
+}
+
+/**
+ *
+ * @param def
+ * @param counts
+ * @param selected
+ */
+function buildFacetGroup(def, counts, selected) {
+    const group = document.createElement('details');
+    group.className = 'facet-group';
+    // Default-open unless explicitly opted out; selected axes always
+    // open so the user can see (and unselect) what's narrowing.
+    group.open = def.defaultOpen !== false || (selected && selected.size > 0);
+
+    const summary = document.createElement('summary');
+    summary.className = 'facet-summary';
+    summary.textContent = def.label;
+    group.append(summary);
+
+    const list = document.createElement('div');
+    list.className = 'facet-options';
+
+    // Union of reachable values + already-selected values (so a
+    // selection that has been narrowed out of reach by other facets
+    // still shows up — otherwise the user can't unselect it).
+    const allValues = new Set(counts.keys());
+    if (selected) for (const v of selected) allValues.add(v);
+
+    for (const value of sortFacetValues(def.key, allValues)) {
+        list.append(buildFacetOption(def.key, value, counts.get(value) || 0, selected));
+    }
+    group.append(list);
+    return group;
+}
+
+/**
+ *
+ * @param key
+ * @param value
+ * @param count
+ * @param selected
+ */
+function buildFacetOption(key, value, count, selected) {
+    const opt = document.createElement('label');
+    opt.className = 'facet-option';
+
+    const cb = document.createElement('input');
+    cb.type = 'checkbox';
+    cb.checked = Boolean(selected && selected.has(value));
+    cb.addEventListener('change', () => toggleFacet(key, value, cb.checked));
+    opt.append(cb);
+
+    const labelEl = document.createElement('span');
+    labelEl.className = 'facet-option-label';
+    labelEl.textContent = value;
+    opt.append(labelEl);
+
+    const countEl = document.createElement('span');
+    countEl.className = 'facet-option-count';
+    countEl.textContent = String(count);
+    opt.append(countEl);
+
+    return opt;
+}
+
+/**
+ *
+ * @param key
+ * @param value
+ * @param checked
+ */
+function toggleFacet(key, value, checked) {
+    let set = filterState.facets.get(key);
+    if (checked) {
+        if (!set) {
+            set = new Set();
+            filterState.facets.set(key, set);
+        }
+        set.add(value);
+    } else if (set) {
+        set.delete(value);
+        if (set.size === 0) filterState.facets.delete(key);
+    }
+    applyFiltersToUI();
+}
+
+/**
+ *
+ */
+function renderGrid() {
     els.grid.innerHTML = '';
-    const meta = readLibraryMeta();
-    const filtered = manifest.decks.filter((d) => {
-        if (!filter) return true;
-        if (d.title.toLowerCase().includes(filter)) return true;
-        if (d.categories.some((c) => c.name.toLowerCase().includes(filter))) return true;
-        const m = d.meta || {};
-        return [m.subject, m.gradeLevel, m.learningUnit, m.description, m.author].some(
-            (v) => typeof v === 'string' && v.toLowerCase().includes(filter)
-        );
-    });
+    const filtered = visibleDecks();
+    const importedMeta = readLibraryMeta();
 
     if (filtered.length === 0) {
-        els.empty.textContent = filter
-            ? 'Keine Decks passen zur Suche.'
-            : 'Keine Decks in der Bibliothek gefunden.';
-        els.empty.classList.remove('hidden');
+        renderEmptyState();
         return;
     }
     els.empty.classList.add('hidden');
 
     for (const deck of filtered) {
-        els.grid.append(buildDeckCard(deck, meta[deck.title]));
+        els.grid.append(buildDeckCard(deck, importedMeta[deck.title]));
     }
+}
+
+/**
+ *
+ */
+function renderEmptyState() {
+    els.empty.innerHTML = '';
+    if (filterState.text || filterState.facets.size > 0) {
+        els.empty.append(
+            document.createTextNode('Keine Decks passen zu den aktiven Filtern. ')
+        );
+        const reset = document.createElement('a');
+        reset.href = '#';
+        reset.textContent = 'Filter zurücksetzen';
+        reset.addEventListener('click', (e) => {
+            e.preventDefault();
+            resetAllFilters();
+        });
+        els.empty.append(reset);
+    } else {
+        els.empty.textContent = 'Keine Decks in der Bibliothek gefunden.';
+    }
+    els.empty.classList.remove('hidden');
+}
+
+/**
+ *
+ */
+function renderResultCount() {
+    const total = manifest.decks.length;
+    const active = filterState.text || filterState.facets.size > 0;
+    if (!active || total === 0) {
+        els.resultCount.hidden = true;
+        return;
+    }
+    const visible = visibleDecks().length;
+    els.resultCount.hidden = false;
+    els.resultCount.textContent = `${visible} von ${total} Decks`;
+}
+
+/**
+ *
+ */
+function renderClearButton() {
+    const activeFacetCount = [...filterState.facets.values()].reduce((n, s) => n + s.size, 0);
+    els.facetsClear.hidden = activeFacetCount === 0;
+    // Surface the active count in the mobile toggle label so it
+    // remains useful when the panel is collapsed.
+    els.facetsToggle.textContent =
+        activeFacetCount > 0 ? `🎛 Filter (${activeFacetCount})` : '🎛 Filter';
+}
+
+/**
+ *
+ */
+function resetAllFilters() {
+    filterState.text = '';
+    filterState.facets.clear();
+    els.search.value = '';
+    applyFiltersToUI();
 }
 
 /**
@@ -257,8 +587,10 @@ function buildMetaTable(deck) {
     fileLink.textContent = deck.filename;
 
     const rows = [
-        ['Klassenstufe', m.gradeLevel],
+        ['Schulart', m.institution],
+        ['Bildungsgang', m.program],
         ['Fach', m.subject],
+        ['Klassenstufe', m.gradeLevel],
         ['Lerneinheit', m.learningUnit],
         ['Autor:in', m.author],
         ['Datei', fileLink],

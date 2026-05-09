@@ -108,10 +108,13 @@ body {
 
 .search-row {
     margin-bottom: 1rem;
+    display: flex;
+    gap: 0.5rem;
+    align-items: stretch;
 }
 
 .library-search-input {
-    width: 100%;
+    flex: 1;
     box-sizing: border-box;
     padding: 0.6rem 0.9rem;
     font-size: 1rem;
@@ -125,6 +128,169 @@ body {
     outline: none;
     border-color: var(--lib-primary);
     box-shadow: 0 0 0 2px var(--lib-light);
+}
+
+/* Mobile filter toggle: hidden on desktop, shown when sidebar collapses. */
+.facets-toggle-btn {
+    display: none;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0 1rem;
+    background-color: var(--surface-color, #fff);
+    border: 1px solid var(--input-border, #ced4da);
+    border-radius: 5px;
+    cursor: pointer;
+    font-family: inherit;
+    font-size: 0.92rem;
+    color: var(--text-color, #2a2f2c);
+    white-space: nowrap;
+}
+
+.facets-toggle-btn:hover {
+    background-color: var(--lib-hover-bg);
+}
+
+.result-count {
+    margin: 0 0 0.8rem 0;
+    color: var(--text-muted, #6c7570);
+    font-size: 0.88rem;
+}
+
+/* Two-column layout: facet sidebar + grid. */
+.grid-layout {
+    display: grid;
+    grid-template-columns: 240px 1fr;
+    gap: 1.25rem;
+    align-items: start;
+}
+
+.facets-panel {
+    background-color: var(--surface-color, #fff);
+    border-radius: 6px;
+    padding: 0.75rem 1rem;
+    box-shadow: 0 1px 3px var(--shadow-color, rgba(0, 0, 0, 0.08));
+}
+
+.facets-panel-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+    margin-bottom: 0.4rem;
+    padding-bottom: 0.4rem;
+    border-bottom: 1px solid var(--lib-light-border);
+}
+
+.facets-panel-title {
+    margin: 0;
+    font-size: 0.78rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--text-muted, #6c7570);
+}
+
+.facets-clear-btn {
+    background: none;
+    border: none;
+    color: var(--lib-primary);
+    cursor: pointer;
+    font-family: inherit;
+    font-size: 0.82rem;
+    padding: 0.15rem 0.4rem;
+    border-radius: 3px;
+}
+
+.facets-clear-btn:hover {
+    background-color: var(--lib-light);
+}
+
+.facet-group {
+    border-bottom: 1px solid var(--lib-light-border);
+    padding: 0.4rem 0;
+}
+
+.facet-group:last-child {
+    border-bottom: none;
+}
+
+.facet-summary {
+    cursor: pointer;
+    font-weight: 500;
+    font-size: 0.92rem;
+    padding: 0.25rem 0;
+    list-style: none;
+    user-select: none;
+    color: var(--text-color, #2a2f2c);
+}
+
+.facet-summary::-webkit-details-marker {
+    display: none;
+}
+
+.facet-summary::before {
+    content: '▸';
+    display: inline-block;
+    margin-right: 0.4rem;
+    color: var(--lib-accent);
+    transition: transform 0.15s ease;
+}
+
+.facet-group[open] > .facet-summary::before {
+    transform: rotate(90deg);
+}
+
+.facet-options {
+    margin: 0.3rem 0 0.2rem 0.6rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
+    /* Long facet lists (categories) get a scroll cap so they don't
+       run the sidebar off-screen. ~10 visible options at default
+       row height. */
+    max-height: 18rem;
+    overflow-y: auto;
+}
+
+.facet-option {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.18rem 0.35rem;
+    border-radius: 3px;
+    cursor: pointer;
+    font-size: 0.88rem;
+    line-height: 1.3;
+}
+
+.facet-option:hover {
+    background-color: var(--lib-hover-bg);
+}
+
+.facet-option input[type='checkbox'] {
+    margin: 0;
+    accent-color: var(--lib-primary);
+    cursor: pointer;
+    flex-shrink: 0;
+}
+
+.facet-option-label {
+    flex: 1;
+    word-break: break-word;
+}
+
+.facet-option-count {
+    color: var(--text-muted, #6c7570);
+    font-size: 0.8rem;
+    font-variant-numeric: tabular-nums;
+    flex-shrink: 0;
+}
+
+.facets-empty {
+    margin: 0.4rem 0;
+    color: var(--text-muted, #6c7570);
+    font-size: 0.85rem;
+    font-style: italic;
 }
 
 .deck-grid {
@@ -498,6 +664,24 @@ body {
 
 .hidden {
     display: none !important;
+}
+
+/* Below ~720px the sidebar collapses into a togglable panel above
+   the grid; above it stays a fixed-width column. */
+@media (max-width: 720px) {
+    .grid-layout {
+        grid-template-columns: 1fr;
+    }
+    .facets-panel {
+        display: none;
+    }
+    .facets-panel.facets-panel--open {
+        display: block;
+        margin-bottom: 0.5rem;
+    }
+    .facets-toggle-btn {
+        display: inline-flex;
+    }
 }
 
 @media (max-width: 600px) {

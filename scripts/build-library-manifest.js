@@ -85,8 +85,11 @@ function readMeta(data) {
     if (!data || typeof data.meta !== 'object' || data.meta === null) return null;
     const m = data.meta;
     const str = trimMetaString;
+    // Canonical field order; missing/empty values are dropped below.
     const out = {
         name: str(m.name),
+        institution: str(m.institution),
+        program: str(m.program),
         subject: str(m.subject),
         gradeLevel: str(m.gradeLevel),
         learningUnit: str(m.learningUnit),

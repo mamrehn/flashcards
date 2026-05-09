@@ -43,10 +43,36 @@
                         class="library-search-input"
                         placeholder="🔍 Decks durchsuchen …"
                     />
+                    <button
+                        type="button"
+                        id="facets-toggle"
+                        class="facets-toggle-btn"
+                        aria-expanded="false"
+                        aria-controls="facets-panel"
+                    >
+                        🎛 Filter
+                    </button>
                 </div>
-                <div id="deck-grid" class="deck-grid"></div>
-                <div id="empty-state" class="state-message hidden">
-                    Keine Decks in der Bibliothek gefunden.
+                <p id="result-count" class="result-count" hidden></p>
+                <div class="grid-layout">
+                    <aside id="facets-panel" class="facets-panel">
+                        <div class="facets-panel-header">
+                            <h2 class="facets-panel-title">Filter</h2>
+                            <button
+                                type="button"
+                                id="facets-clear"
+                                class="facets-clear-btn"
+                                hidden
+                            >
+                                Zurücksetzen
+                            </button>
+                        </div>
+                        <div id="facets"></div>
+                    </aside>
+                    <div class="grid-main">
+                        <div id="deck-grid" class="deck-grid"></div>
+                        <div id="empty-state" class="state-message hidden"></div>
+                    </div>
                 </div>
             </section>
 
