@@ -1,6 +1,12 @@
 <h1 align="center">
 <a href="https://ghloc.vercel.app/mamrehn/flashcards?branch=main">FlashCards</a>
-</h1><br>
+</h1>
+
+<p align="center">
+<a href="https://mamrehn.github.io/flashcards/"><strong>🚀 Open the Web App → mamrehn.github.io/flashcards</strong></a>
+</p>
+
+<br>
 
 Repository statistics:
 
