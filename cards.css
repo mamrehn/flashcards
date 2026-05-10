@@ -921,7 +921,7 @@ body {
         min-width: unset;
     }
 
-    .sr-manager-btn {
+    .header .sr-manager-btn {
         order: 3;
         flex: 1 0 100%;
         width: 100%;
