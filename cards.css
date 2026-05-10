@@ -950,6 +950,11 @@ body {
         display: none;
     }
 
+    .card-container {
+        height: calc(100vh - 300px);
+        height: calc(100dvh - 300px);
+    }
+
     .deck-folder-header {
         padding: 0.7rem 0.5rem;
         gap: 0.35rem;

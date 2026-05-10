@@ -75,3 +75,15 @@ html.theme-transition *::after {
     background-color: rgba(50, 50, 50, 0.9);
     border-color: rgba(128, 128, 128, 0.4);
 }
+
+@media (max-width: 768px) {
+    .theme-toggle {
+        top: 0.5rem;
+        right: 0.5rem;
+        bottom: auto;
+        width: 32px;
+        height: 32px;
+        font-size: 0.95rem;
+        border-width: 1px;
+    }
+}
