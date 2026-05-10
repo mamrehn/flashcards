@@ -1914,9 +1914,9 @@ function updateCardContent(card) {
     // Focus management: auto-focus the appropriate element
     setTimeout(() => {
         if (!isMultipleChoice && !userAnswerInput.classList.contains('hidden')) {
-            userAnswerInput.focus();
+            userAnswerInput.focus({ preventScroll: true });
         } else if (isMultipleChoice) {
-            showAnswerBtn.focus();
+            showAnswerBtn.focus({ preventScroll: true });
         }
     }, 100);
 
@@ -2167,9 +2167,9 @@ function showAnswer() {
     // Focus the first actionable button after flip animation
     setTimeout(() => {
         if (nextCardBtn.style.display !== 'none') {
-            nextCardBtn.focus();
+            nextCardBtn.focus({ preventScroll: true });
         } else if (markCorrectBtn.style.display !== 'none') {
-            markCorrectBtn.focus();
+            markCorrectBtn.focus({ preventScroll: true });
         }
     }, 400);
 }
@@ -2286,7 +2286,7 @@ function markAnswer(scoreOrBool) {
 
     // Focus the next button after marking
     if (nextCardBtn.style.display !== 'none') {
-        nextCardBtn.focus();
+        nextCardBtn.focus({ preventScroll: true });
     }
 }
 
@@ -2380,9 +2380,9 @@ function showFeedback() {
     // Focus first visible action button
     setTimeout(() => {
         if (restartBtn.style.display !== 'none') {
-            restartBtn.focus();
+            restartBtn.focus({ preventScroll: true });
         } else if (returnToSrBtn.style.display !== 'none') {
-            returnToSrBtn.focus();
+            returnToSrBtn.focus({ preventScroll: true });
         }
     }, 100);
 }
