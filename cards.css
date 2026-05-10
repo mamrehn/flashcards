@@ -307,11 +307,12 @@ body {
 }
 
 .card-content {
-    flex: 1;
+    flex: 1 1 0;
+    min-height: 0;
     margin-bottom: 0.75rem;
     font-size: 1.05rem;
     overflow-y: auto;
-    max-height: 100%;
+    overscroll-behavior: contain;
 }
 
 .question {
@@ -378,9 +379,11 @@ body {
     text-align: left;
 }
 
-.option-item:hover {
-    border-color: var(--primary);
-    background-color: var(--cards-hover-bg);
+@media (hover: hover) {
+    .option-item:hover {
+        border-color: var(--primary);
+        background-color: var(--cards-hover-bg);
+    }
 }
 
 .option-item.selected {
@@ -892,10 +895,36 @@ body {
 /* Responsive adjustments */
 @media (max-width: 768px) {
     .header {
-        flex-direction: column;
-        align-items: stretch;
-        gap: 0.75rem;
-        padding: 0.75rem;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 0.5rem 0.75rem;
+        padding: 0.5rem 0.75rem;
+    }
+
+    .header .back-link {
+        order: 0;
+        flex: 0 0 auto;
+    }
+
+    .header-content {
+        order: 1;
+        flex: 1 1 0;
+        min-width: 0;
+        text-align: left;
+    }
+
+    .study-mode-select {
+        order: 2;
+        flex: 1 0 100%;
+        width: 100%;
+        min-width: unset;
+    }
+
+    .sr-manager-btn {
+        order: 3;
+        flex: 1 0 100%;
+        width: 100%;
+        margin: 0;
     }
 
     .header h1 {
@@ -906,9 +935,15 @@ body {
         font-size: 1.05rem;
     }
 
-    .study-mode-select {
+    .options-container {
         width: 100%;
-        min-width: unset;
+        margin: 0.75rem 0;
+    }
+
+    .user-answer-input {
+        width: 100%;
+        box-sizing: border-box;
+        margin: 0.75rem 0;
     }
 
     .deck-folder-header {
