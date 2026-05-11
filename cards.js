@@ -645,7 +645,7 @@ function setupDropZone() {
  * Handle files dropped onto the drop zone
  * @param {FileList} files - Dropped files
  */
-function handleDroppedFiles(files) {
+async function handleDroppedFiles(files) {
     for (const file of files) {
         const isJson = file.type === 'application/json' || file.name.endsWith('.json');
         const isZip = file.type === 'application/zip' || file.name.endsWith('.zip');
@@ -653,9 +653,10 @@ function handleDroppedFiles(files) {
             showError('Bitte nur JSON- oder ZIP-Dateien ablegen.');
             continue;
         }
-        // Create a synthetic event compatible with handleFileUpload
+        // Create a synthetic event compatible with handleFileUpload.
+        // Await so concurrent imports don't race on savedDecks / localStorage.
         const syntheticEvent = { target: { files: [file], value: '' } };
-        handleFileUpload(syntheticEvent);
+        await handleFileUpload(syntheticEvent);
     }
 }
 
@@ -670,9 +671,10 @@ async function handleFileUpload(event) {
     for (const file of files) {
         // Check if it's a ZIP file
         if (file.type === 'application/zip' || file.name.endsWith('.zip')) {
-            // Create a synthetic single-file event for handleZipUpload
+            // Create a synthetic single-file event for handleZipUpload.
+            // Await so concurrent zips don't race on savedDecks / localStorage.
             const syntheticEvent = { target: { files: [file], value: '' } };
-            handleZipUpload(syntheticEvent);
+            await handleZipUpload(syntheticEvent);
             continue;
         }
 
@@ -1354,6 +1356,13 @@ function displaySavedDecks(searchTerm = '', preselectDeckNames = []) {
                     catName === '__uncategorized__' ? ' Allgemein' : ` ${catName}`
                 )
             );
+            // Sibling <label> (no `for=`) doesn't natively toggle the checkbox.
+            // CSS gives it a pointer cursor, so wire up the click manually.
+            labelEl.addEventListener('click', (e) => {
+                e.preventDefault();
+                catCheckbox.checked = !catCheckbox.checked;
+                catCheckbox.dispatchEvent(new Event('change', { bubbles: true }));
+            });
 
             const chips = document.createElement('span');
             chips.className = 'type-chips';
@@ -1389,7 +1398,16 @@ function displaySavedDecks(searchTerm = '', preselectDeckNames = []) {
         }
     }
 
-    updateStartButtonState();
+    // Chips are freshly created with `selected`, but the global filter buttons
+    // are static HTML and keep their state across renders. Re-apply the active
+    // filter so chip state stays in sync with the visibly-pressed button.
+    const activeFilterBtn = document.querySelector('.type-filter-btn.selected');
+    const activeFilter = activeFilterBtn ? activeFilterBtn.dataset.filter : 'all';
+    if (activeFilter && activeFilter !== 'all') {
+        applyGlobalTypeFilter(activeFilter);
+    } else {
+        updateStartButtonState();
+    }
 }
 
 /**
