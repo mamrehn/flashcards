@@ -3195,6 +3195,24 @@ function markAnswer(scoreOrBool) {
                 previousIncorrectIndices[deckName].push(originalIndex);
             }
         }
+    } else if (isFullyCorrect && deckName && savedDecks[deckName] && previousIncorrectIndices[deckName]?.length > 0) {
+        // Remove from incorrect indices when answered correctly
+        const originalDeckCards = savedDecks[deckName].cards;
+        const originalIndex = originalDeckCards.findIndex(
+            (c) =>
+                c.question === card.question &&
+                (c.answer === card.answer ||
+                    (Array.isArray(c.options) &&
+                        Array.isArray(card.options) &&
+                        JSON.stringify(c.options) === JSON.stringify(card.options)) ||
+                    (Array.isArray(c.pairs) &&
+                        Array.isArray(card.pairs) &&
+                        JSON.stringify(c.pairs) === JSON.stringify(card.pairs)))
+        );
+        if (originalIndex !== -1) {
+            const idx = previousIncorrectIndices[deckName].indexOf(originalIndex);
+            if (idx !== -1) previousIncorrectIndices[deckName].splice(idx, 1);
+        }
     }
 
     // Update incorrect indices in local storage
