@@ -76,14 +76,17 @@ let previousIncorrectIndices = {};
 /** @type {Array<number>} Selected option indices for multiple choice questions */
 let selectedOptionIndices = [];
 
-/** @type {Map<number, number>} Matching pairs: leftIndex → shuffledRightIndex */
-let matchingPairs = new Map();
+/** @type {Array<[number, number]>} Matching pairs: array of [leftIndex, shuffledRightIndex] tuples */
+let matchingPairs = [];
 
 /** @type {Array<{original: number, text: string}>} Shuffled right column items for matching */
 let shuffledRightItems = [];
 
 /** @type {number|null} Currently selected left item index for matching (null if none) */
 let selectedLeftIndex = null;
+
+/** @type {number|null} Currently selected right item index for matching (null if none) */
+let selectedRightIndex = null;
 
 /** @type {HTMLElement[]} DOM element references for left column items, indexed by leftIndex */
 let leftItemEls = [];
@@ -97,10 +100,28 @@ let unpairedLeftOrder = [];
 /** @type {number[]} Display order of unpaired right shuffled indices */
 let unpairedRightOrder = [];
 
+/** @type {number[]} Required pairing count per shuffled right item (0 for distractors; effectiveCapacity = max(count, 1)) */
+let rightRequiredCount = [];
+
+/** @type {number[]} Required pairing count per left item (defaults to 1) */
+let leftRequiredCount = [];
+
+/** @type {number} Total required pairings for the current matching card */
+let matchingRequiredCount = 0;
+
+/** @type {boolean} True when any right item can accept more than one left item */
+let isMultiRight = false;
+
+/** @type {boolean} True when any left item can pair with more than one right item */
+let isMultiLeft = false;
+
+/** @type {boolean} True when multi-pairing is possible in either direction */
+let isMultiCard = false;
+
 /** @type {{[deckName: string]: {correct: number, incorrect: number, total: number}}} Statistics per deck */
 let deckStats = {};
 
-/** @type {string} Current study mode: 'spaced-repetition', 'incorrect-first', 'incorrect-only' */
+/** @type {string} Current study mode: 'spaced-repetition', 'incorrect-only' */
 let studyMode = 'spaced-repetition';
 
 /** @type {{[cardKey: string]: {interval: number, easeFactor: number, repetitions: number, nextReview: Date}}} Spaced repetition data per card */
@@ -1048,13 +1069,13 @@ function validateCards(cards) {
         if (card.question && card.answer) {
             return true;
         }
-        // Check association format (question + pairs)
+        // Check matching format (question + pairs)
         if (
             card.question &&
             Array.isArray(card.pairs) &&
             card.pairs.length >= 2 &&
             card.pairs.every(
-                (p) => p && typeof p.left === 'string' && typeof p.right === 'string'
+                (p) => p && typeof p.right === 'string' && (p.left === null || p.left === undefined || typeof p.left === 'string')
             )
         ) {
             return true;
@@ -1163,12 +1184,12 @@ function updateIncorrectIndices() {
 // ============================================================================
 
 /**
- * Classify a card as multiple-choice, free-text, or association based on shape.
+ * Classify a card as multiple-choice, free-text, or matching based on shape.
  * @param {object} card
- * @returns {'mc'|'text'|'association'}
+ * @returns {'mc'|'text'|'matching'}
  */
 function cardType(card) {
-    if (Array.isArray(card.pairs)) return 'association';
+    if (Array.isArray(card.pairs)) return 'matching';
     return Array.isArray(card.options) && Array.isArray(card.correct) ? 'mc' : 'text';
 }
 
@@ -1182,7 +1203,7 @@ function cardType(card) {
  *   subtitle: string,
  *   decks: string[],
  *   totalCards: number,
- *   categories: Map<string, {mc: number, text: number, association: number}>,
+ *   categories: Map<string, {mc: number, text: number, matching: number}>,
  * }>}
  */
 function buildTopics() {
@@ -1215,7 +1236,7 @@ function buildTopics() {
             for (const cat of cats) {
                 let agg = topic.categories.get(cat);
                 if (!agg) {
-                    agg = { mc: 0, text: 0, association: 0 };
+                    agg = { mc: 0, text: 0, matching: 0 };
                     topic.categories.set(cat, agg);
                 }
                 agg[type]++;
@@ -1245,7 +1266,7 @@ function makeTypeChip(type, count, topicKey, catName) {
     if (type === 'mc') {
         chipLabel = 'MC';
         chipTitle = 'Multiple-Choice-Karten in dieser Kategorie ein-/ausblenden';
-    } else if (type === 'association') {
+    } else if (type === 'matching') {
         chipLabel = 'ZO';
         chipTitle = 'Zuordnungsaufgaben in dieser Kategorie ein-/ausblenden';
     } else {
@@ -1423,8 +1444,8 @@ function displaySavedDecks(searchTerm = '', preselectDeckNames = []) {
             if ((counts.text || 0) > 0) {
                 chips.append(makeTypeChip('text', counts.text, topic.key, catName));
             }
-            if ((counts.association || 0) > 0) {
-                chips.append(makeTypeChip('association', counts.association, topic.key, catName));
+            if ((counts.matching || 0) > 0) {
+                chips.append(makeTypeChip('matching', counts.matching, topic.key, catName));
             }
 
             row.append(catCheckbox, labelEl, chips);
@@ -1577,7 +1598,7 @@ function getSelectedFilters() {
             );
             if (chips.length === 0) {
                 // Degenerate: category checked but no chips rendered — include both types.
-                perCategory.set(catName, new Set(['mc', 'text', 'association']));
+                perCategory.set(catName, new Set(['mc', 'text', 'matching']));
                 continue;
             }
             const types = new Set();
@@ -1915,13 +1936,20 @@ function showCurrentCard() {
 
     isAnswered = false;
     selectedOptionIndices = []; // Reset selected options
-    matchingPairs = new Map();  // Reset matching state
+    matchingPairs = [];          // Reset matching state
     selectedLeftIndex = null;
+    selectedRightIndex = null;
     shuffledRightItems = [];
     leftItemEls = [];
     rightItemEls = [];
     unpairedLeftOrder = [];
     unpairedRightOrder = [];
+    rightRequiredCount = [];
+    leftRequiredCount = [];
+    matchingRequiredCount = 0;
+    isMultiRight = false;
+    isMultiLeft = false;
+    isMultiCard = false;
     const card = cards[currentCardIndex];
 
     // Check if we're currently showing the back side
@@ -1983,93 +2011,227 @@ function syncOptionSelection(checkbox, optionItem, selectedOptionIndices, origin
 }
 
 // ============================================================================
-// Association (Matching) Handlers
+// Matching Handlers
 // ============================================================================
 
 function renderMatchingPairs() {
     const card = cards[currentCardIndex];
     if (!card || !Array.isArray(card.pairs)) return;
 
-    // Clear all containers (items are moved, not destroyed — event listeners preserved)
+    // Clear all containers (items are recreated fresh each render)
     matchingPairedSection.innerHTML = '';
     matchingUnpairedLeftCol.innerHTML = '';
     matchingUnpairedRightCol.innerHTML = '';
 
-    // Populate unpaired columns in their current display order
+    // Populate unpaired left column
     for (const lIdx of unpairedLeftOrder) {
         const el = leftItemEls[lIdx];
         el.className = 'matching-item';
         if (lIdx === selectedLeftIndex) el.classList.add('selected');
+        if (isMultiCard) {
+            // Mark .full when left item has exhausted its pairing capacity
+            let pairings = 0;
+            for (const [l] of matchingPairs) {
+                if (l === lIdx) pairings++;
+            }
+            const cap = Math.max(leftRequiredCount[lIdx] ?? 1, 1);
+            if (pairings >= cap) el.classList.add('full');
+        }
         matchingUnpairedLeftCol.append(el);
     }
-    for (const rIdx of unpairedRightOrder) {
-        const el = rightItemEls[rIdx];
-        el.className = 'matching-item';
-        matchingUnpairedRightCol.append(el);
+
+    if (isMultiCard) {
+        // Right column: persistent tiles, .full when at capacity
+        for (const rIdx of unpairedRightOrder) {
+            const el = rightItemEls[rIdx];
+            el.textContent = shuffledRightItems[rIdx].text;
+            el.className = 'matching-item';
+            if (rIdx === selectedRightIndex) el.classList.add('selected');
+            let pairingCount = 0;
+            for (const [, r] of matchingPairs) {
+                if (r === rIdx) pairingCount++;
+            }
+            const cap = Math.max(rightRequiredCount[rIdx] ?? 1, 1);
+            if (pairingCount >= cap) el.classList.add('full');
+            matchingUnpairedRightCol.append(el);
+        }
+
+        // Paired section: one CSS-grid group per right item that has ≥1 pairing.
+        // Layout: [left item] [unlink btn] | [right item spanning all rows]
+        const pairedRightSet = new Set();
+        for (const [, r] of matchingPairs) pairedRightSet.add(r);
+        const pairedRightIndices = unpairedRightOrder.filter((rIdx) => pairedRightSet.has(rIdx));
+
+        for (const rIdx of pairedRightIndices) {
+            // Collect left indices for this right item, sorted for stable order
+            const pairedLeftIndices = [];
+            for (const [l, r] of matchingPairs) {
+                if (r === rIdx) pairedLeftIndices.push(l);
+            }
+            const sortedLeftIndices = pairedLeftIndices.toSorted((a, b) => a - b);
+            const rowCount = sortedLeftIndices.length;
+
+            const group = document.createElement('div');
+            group.className = 'matching-paired-group';
+
+            // Left items + unlink buttons auto-placed into cols 1–2 (one row each)
+            for (const lIdx of sortedLeftIndices) {
+                const leftEl = document.createElement('div');
+                leftEl.className = 'matching-item paired';
+                leftEl.textContent = leftItemEls[lIdx].textContent;
+
+                const unlinkBtn = document.createElement('button');
+                unlinkBtn.type = 'button';
+                unlinkBtn.className = 'matching-unlink-btn';
+                unlinkBtn.setAttribute('aria-label', 'Verknüpfung trennen');
+                const lIdx_ = lIdx;
+                const rIdx_ = rIdx;
+                unlinkBtn.addEventListener('click', () => unlinkPair(lIdx_, rIdx_));
+
+                group.append(leftEl, unlinkBtn);
+            }
+
+            // Right item appended last — explicitly placed in col 3, spanning all rows
+            const rightEl = document.createElement('div');
+            rightEl.className = 'matching-item paired matching-paired-group-right';
+            rightEl.textContent = shuffledRightItems[rIdx].text;
+            rightEl.style.gridColumn = '3';
+            rightEl.style.gridRow = `1 / span ${rowCount}`;
+            group.append(rightEl);
+
+            matchingPairedSection.append(group);
+        }
+    } else {
+        // Standard matching: right column tiles + flat paired rows
+        for (const rIdx of unpairedRightOrder) {
+            const el = rightItemEls[rIdx];
+            el.className = 'matching-item';
+            if (rIdx === selectedRightIndex) el.classList.add('selected');
+            matchingUnpairedRightCol.append(el);
+        }
+
+        const sortedPairs = matchingPairs.toSorted(([a], [b]) => a - b);
+        for (const [lIdx, rIdx] of sortedPairs) {
+            const row = document.createElement('div');
+            row.className = 'matching-pair-row';
+
+            const leftEl = leftItemEls[lIdx];
+            leftEl.className = 'matching-item paired';
+
+            const unlinkBtn = document.createElement('button');
+            unlinkBtn.type = 'button';
+            unlinkBtn.className = 'matching-unlink-btn';
+            unlinkBtn.setAttribute('aria-label', 'Verknüpfung trennen');
+            const lIdx_ = lIdx;
+            const rIdx_ = rIdx;
+            unlinkBtn.addEventListener('click', () => unlinkPair(lIdx_, rIdx_));
+
+            const rightEl = document.createElement('div');
+            rightEl.className = 'matching-item paired';
+            rightEl.textContent = shuffledRightItems[rIdx].text;
+
+            row.append(leftEl, unlinkBtn, rightEl);
+            matchingPairedSection.append(row);
+        }
     }
 
-    // Build paired rows (sorted by left index for visual stability)
-    const sortedPairs = [...matchingPairs.entries()].toSorted(([a], [b]) => a - b);
-    for (const [lIdx, rIdx] of sortedPairs) {
-        const row = document.createElement('div');
-        row.className = 'matching-pair-row';
-
-        const leftEl = leftItemEls[lIdx];
-        leftEl.className = 'matching-item paired';
-
-        const unlinkBtn = document.createElement('button');
-        unlinkBtn.type = 'button';
-        unlinkBtn.className = 'matching-unlink-btn';
-        unlinkBtn.setAttribute('aria-label', 'Verknüpfung trennen');
-        const lIdx_ = lIdx;
-        unlinkBtn.addEventListener('click', () => unlinkPair(lIdx_));
-
-        const rightEl = rightItemEls[rIdx];
-        rightEl.className = 'matching-item paired';
-
-        row.append(leftEl, unlinkBtn, rightEl);
-        matchingPairedSection.append(row);
-    }
-
-    // Show/hide unpaired section when all items are paired
-    const hasUnpaired = unpairedLeftOrder.length > 0 || unpairedRightOrder.length > 0;
+    // In multi-card mode the unpaired section always stays visible
+    const hasUnpaired = isMultiCard
+        ? true
+        : unpairedLeftOrder.length > 0 || unpairedRightOrder.length > 0;
     if (matchingUnpairedSection) {
         matchingUnpairedSection.classList.toggle('hidden', !hasUnpaired);
     }
 
     if (matchingProgressEl) {
-        matchingProgressEl.textContent = `${matchingPairs.size} von ${card.pairs.length} Paaren zugeordnet`;
+        matchingProgressEl.textContent = `${matchingPairs.length} von ${matchingRequiredCount} Begriffen zugeordnet`;
     }
+}
+
+function createPair(leftIndex, shuffledRightIndex) {
+    // Prevent duplicate pairing
+    if (matchingPairs.some(([l, r]) => l === leftIndex && r === shuffledRightIndex)) return;
+
+    // Check right capacity
+    let rightPairings = 0;
+    for (const [, r] of matchingPairs) {
+        if (r === shuffledRightIndex) rightPairings++;
+    }
+    const rightCap = Math.max(rightRequiredCount[shuffledRightIndex] ?? 1, 1);
+    if (rightPairings >= rightCap) return;
+
+    // Check left capacity
+    let leftPairings = 0;
+    for (const [l] of matchingPairs) {
+        if (l === leftIndex) leftPairings++;
+    }
+    const leftCap = Math.max(leftRequiredCount[leftIndex] ?? 1, 1);
+    if (leftPairings >= leftCap) return;
+
+    matchingPairs.push([leftIndex, shuffledRightIndex]);
+
+    // Remove left from column when at capacity (not needed in multi-left mode — stays with .full)
+    if (leftPairings + 1 >= leftCap && !isMultiLeft) {
+        unpairedLeftOrder = unpairedLeftOrder.filter((i) => i !== leftIndex);
+    }
+    // Remove right from column when at capacity (not needed in multi-right mode — stays with .full)
+    if (rightPairings + 1 >= rightCap && !isMultiRight) {
+        unpairedRightOrder = unpairedRightOrder.filter((k) => k !== shuffledRightIndex);
+    }
+
+    selectedLeftIndex = null;
+    selectedRightIndex = null;
+    renderMatchingPairs();
 }
 
 function handleMatchingLeftClick(leftIndex) {
     if (isAnswered) return;
-    if (matchingPairs.has(leftIndex)) return; // already paired — use unlink button
-    selectedLeftIndex = selectedLeftIndex === leftIndex ? null : leftIndex;
-    renderMatchingPairs();
+    // Reject if at full left capacity
+    let leftPairings = 0;
+    for (const [l] of matchingPairs) {
+        if (l === leftIndex) leftPairings++;
+    }
+    const leftCap = Math.max(leftRequiredCount[leftIndex] ?? 1, 1);
+    if (leftPairings >= leftCap) return;
+
+    if (selectedRightIndex === null) {
+        selectedLeftIndex = selectedLeftIndex === leftIndex ? null : leftIndex;
+        renderMatchingPairs();
+    } else {
+        createPair(leftIndex, selectedRightIndex);
+    }
 }
 
 function handleMatchingRightClick(shuffledRightIndex) {
     if (isAnswered) return;
-    if (selectedLeftIndex === null) return;
-    // Ignore if this right item is already paired
-    if ([...matchingPairs.values()].includes(shuffledRightIndex)) return;
-    // Create pair: move both items out of unpaired lists
-    matchingPairs.set(selectedLeftIndex, shuffledRightIndex);
-    unpairedLeftOrder = unpairedLeftOrder.filter((i) => i !== selectedLeftIndex);
-    unpairedRightOrder = unpairedRightOrder.filter((k) => k !== shuffledRightIndex);
-    selectedLeftIndex = null;
-    renderMatchingPairs();
+    if (selectedLeftIndex === null) {
+        let currentPairings = 0;
+        for (const [, r] of matchingPairs) {
+            if (r === shuffledRightIndex) currentPairings++;
+        }
+        const effectiveCapacity = Math.max(rightRequiredCount[shuffledRightIndex] ?? 1, 1);
+        if (currentPairings >= effectiveCapacity) return;
+        selectedRightIndex = selectedRightIndex === shuffledRightIndex ? null : shuffledRightIndex;
+        renderMatchingPairs();
+    } else {
+        createPair(selectedLeftIndex, shuffledRightIndex);
+    }
 }
 
-function unlinkPair(leftIndex) {
+function unlinkPair(leftIndex, rightIndex) {
     if (isAnswered) return;
-    const rIdx = matchingPairs.get(leftIndex);
-    if (rIdx === undefined) return;
-    matchingPairs.delete(leftIndex);
-    // Append to bottom of respective unpaired lists
-    unpairedLeftOrder.push(leftIndex);
-    unpairedRightOrder.push(rIdx);
+    const prevLength = matchingPairs.length;
+    matchingPairs = matchingPairs.filter(([l, r]) => !(l === leftIndex && r === rightIndex));
+    if (matchingPairs.length === prevLength) return;
+
+    // Re-add left to column if it was removed at capacity (standard non-multiLeft case)
+    if (!isMultiLeft && !unpairedLeftOrder.includes(leftIndex)) {
+        unpairedLeftOrder.push(leftIndex);
+    }
+    // Re-add right to column if it was removed at capacity (standard non-multiRight case)
+    if (!isMultiRight && !unpairedRightOrder.includes(rightIndex)) {
+        unpairedRightOrder.push(rightIndex);
+    }
     renderMatchingPairs();
 }
 
@@ -2085,26 +2247,59 @@ function updateCardContent(card) {
     // Show source deck info
     sourceDeckDisplay.textContent = `Quelle: ${card.sourceDeck}`;
 
-    // Check if current card is multiple choice, association, or standard
+    // Check if current card is multiple choice, matching, or standard
     const isMatching = Array.isArray(card.pairs) && card.pairs.length > 0;
     const isMultipleChoice = !isMatching && Array.isArray(card.options) && card.options.length > 0;
 
     if (isMatching) {
-        // Handle association / matching question
+        // Handle matching question
         userAnswerInput.classList.add('hidden');
         optionsContainer.classList.add('hidden');
         showAnswerBtn.classList.remove('hidden');
 
         // Reset matching state for this new card
-        matchingPairs = new Map();
+        matchingPairs = [];
         selectedLeftIndex = null;
+        selectedRightIndex = null;
         leftItemEls = [];
         rightItemEls = [];
         unpairedLeftOrder = [];
         unpairedRightOrder = [];
+        rightRequiredCount = [];
+        leftRequiredCount = [];
+        matchingRequiredCount = 0;
+        isMultiRight = false;
+        isMultiLeft = false;
+        isMultiCard = false;
 
-        // Build shuffled right-column items (Fisher-Yates)
-        shuffledRightItems = card.pairs.map((p, i) => ({ original: i, text: p.right }));
+        // Extract unique left values (non-null) and unique right values from pairs
+        const uniqueLeftValues = [];
+        const seenLeft = new Set();
+        for (const p of card.pairs) {
+            if (p.left !== null && p.left !== undefined && !seenLeft.has(p.left)) {
+                seenLeft.add(p.left);
+                uniqueLeftValues.push(p.left);
+            }
+        }
+        const uniqueRightValues = [];
+        const seenRight = new Set();
+        for (const p of card.pairs) {
+            if (!seenRight.has(p.right)) {
+                seenRight.add(p.right);
+                uniqueRightValues.push(p.right);
+            }
+        }
+
+        // Required pairings per right value (0 for distractors without a left partner)
+        const rightRequiredCounts = new Map();
+        for (const p of card.pairs) {
+            if (p.left !== null && p.left !== undefined) {
+                rightRequiredCounts.set(p.right, (rightRequiredCounts.get(p.right) ?? 0) + 1);
+            }
+        }
+
+        // Build shuffled right-column items from unique right values (Fisher-Yates)
+        shuffledRightItems = uniqueRightValues.map((v, i) => ({ original: i, text: v }));
         for (let i = shuffledRightItems.length - 1; i > 0; i--) {
             const j = Math.floor(Math.random() * (i + 1));
             [shuffledRightItems[i], shuffledRightItems[j]] = [
@@ -2113,12 +2308,40 @@ function updateCardContent(card) {
             ];
         }
 
+        // Set required pairing counts indexed by shuffled position
+        rightRequiredCount = shuffledRightItems.map((item) => rightRequiredCounts.get(item.text) ?? 0);
+
+        // Required pairings per left value (count occurrences in pairs with non-null right)
+        const leftRequiredCounts = new Map();
+        for (const p of card.pairs) {
+            if (p.left !== null && p.left !== undefined) {
+                leftRequiredCounts.set(p.left, (leftRequiredCounts.get(p.left) ?? 0) + 1);
+            }
+        }
+        leftRequiredCount = uniqueLeftValues.map((v) => leftRequiredCounts.get(v) ?? 1);
+
+        let totalRequired = 0;
+        for (const c of leftRequiredCount) totalRequired += c;
+        matchingRequiredCount = totalRequired;
+
+        isMultiRight = rightRequiredCount.some((c) => c > 1);
+        isMultiLeft = leftRequiredCount.some((c) => c > 1);
+        isMultiCard = isMultiRight || isMultiLeft;
+
         // Initial ordering: left in original order, right in shuffled order
-        unpairedLeftOrder = card.pairs.map((_, i) => i);
+        unpairedLeftOrder = uniqueLeftValues.map((_, i) => i);
         unpairedRightOrder = shuffledRightItems.map((_, k) => k);
 
         // Build matching UI skeleton
         matchingContainer.innerHTML = '';
+
+        // For multi-card mode: show a small hint so the student knows items can be reused
+        if (isMultiCard) {
+            const hint = document.createElement('div');
+            hint.className = 'matching-multi-hint';
+            hint.textContent = 'Hinweis: Einige Begriffe und/oder Zuordnungen können mehrfach vergeben werden.';
+            matchingContainer.append(hint);
+        }
 
         // Paired section (top — empty initially, grows as pairs are made)
         matchingPairedSection = document.createElement('div');
@@ -2161,15 +2384,15 @@ function updateCardContent(card) {
         matchingProgressEl.id = 'matching-progress';
         matchingContainer.append(matchingProgressEl);
 
-        // Pre-create left item elements (placed by renderMatchingPairs)
-        for (let i = 0; i < card.pairs.length; i++) {
+        // Pre-create left item elements from unique left values (placed by renderMatchingPairs)
+        for (const [i, leftValue] of uniqueLeftValues.entries()) {
             const item = document.createElement('div');
             item.className = 'matching-item';
             item.dataset.leftIndex = i;
             item.setAttribute('tabindex', '0');
             item.setAttribute('role', 'button');
-            item.setAttribute('aria-label', `Begriff: ${card.pairs[i].left}`);
-            item.textContent = card.pairs[i].left;
+            item.setAttribute('aria-label', `Begriff: ${leftValue}`);
+            item.textContent = leftValue;
             item.addEventListener('click', () => handleMatchingLeftClick(i));
             item.addEventListener('keydown', (e) => {
                 if (e.key === ' ' || e.key === 'Enter') {
@@ -2513,50 +2736,91 @@ function showAnswer() {
         let correctPairCount = 0;
         matchingResultContainer.innerHTML = '';
 
-        for (let i = 0; i < card.pairs.length; i++) {
-            const pairedShuffledIdx = matchingPairs.get(i);
-            const pairedOriginalIdx =
-                pairedShuffledIdx === undefined
-                    ? undefined
-                    : shuffledRightItems[pairedShuffledIdx]?.original;
-            const isCorrect = pairedOriginalIdx === i;
-            if (isCorrect) correctPairCount++;
+        for (const [i, el] of leftItemEls.entries()) {
+            const leftValue = el.textContent;
+            const requiredRights = card.pairs
+                .filter((p) => p.left === leftValue)
+                .map((p) => p.right);
 
-            const row = document.createElement('div');
-            row.className = `matching-result-pair ${isCorrect ? 'correct' : 'incorrect'}`;
-
-            const icon = document.createElement('span');
-            icon.className = 'matching-result-icon';
-            icon.textContent = isCorrect ? '✓' : '✗';
-
-            const textEl = document.createElement('span');
-            textEl.className = 'matching-result-text';
-            textEl.textContent = `${card.pairs[i].left} ↔ `;
-
-            const pairedText =
-                pairedShuffledIdx === undefined
-                    ? '(nicht zugeordnet)'
-                    : shuffledRightItems[pairedShuffledIdx]?.text;
-
-            const pairedSpan = document.createElement('span');
-            pairedSpan.textContent = pairedText;
-            textEl.append(pairedSpan);
-
-            row.append(icon, textEl);
-
-            if (!isCorrect) {
-                const correction = document.createElement('div');
-                correction.className = 'matching-correction';
-                correction.textContent = `Richtig: ${card.pairs[i].right}`;
-                row.append(correction);
+            // Collect all right values the user paired to this left item
+            const userRights = [];
+            for (const [l, r] of matchingPairs) {
+                if (l === i) userRights.push(shuffledRightItems[r].text);
             }
 
-            matchingResultContainer.append(row);
+            if (userRights.length === 0) {
+                // No pairing made — one incorrect row
+                const row = document.createElement('div');
+                row.className = 'matching-result-pair incorrect';
+                const icon = document.createElement('span');
+                icon.className = 'matching-result-icon';
+                icon.textContent = '✗';
+                const textEl = document.createElement('span');
+                textEl.className = 'matching-result-text';
+                textEl.textContent = `${leftValue} ↔ `;
+                const pairedSpan = document.createElement('span');
+                pairedSpan.textContent = '(nicht zugeordnet)';
+                textEl.append(pairedSpan);
+                row.append(icon, textEl);
+                const correction = document.createElement('div');
+                correction.className = 'matching-correction';
+                correction.textContent = `Richtig: ${requiredRights.join(', ')}`;
+                row.append(correction);
+                matchingResultContainer.append(row);
+            } else {
+                // One row per user pairing
+                for (const rightValue of userRights) {
+                    const isCorrect = card.pairs.some(
+                        (p) => p.left === leftValue && p.right === rightValue
+                    );
+                    if (isCorrect) correctPairCount++;
+                    const row = document.createElement('div');
+                    row.className = `matching-result-pair ${isCorrect ? 'correct' : 'incorrect'}`;
+                    const icon = document.createElement('span');
+                    icon.className = 'matching-result-icon';
+                    icon.textContent = isCorrect ? '✓' : '✗';
+                    const textEl = document.createElement('span');
+                    textEl.className = 'matching-result-text';
+                    textEl.textContent = `${leftValue} ↔ `;
+                    const pairedSpan = document.createElement('span');
+                    pairedSpan.textContent = rightValue;
+                    textEl.append(pairedSpan);
+                    row.append(icon, textEl);
+                    if (!isCorrect) {
+                        const correction = document.createElement('div');
+                        correction.className = 'matching-correction';
+                        correction.textContent = `Richtig: ${requiredRights.join(', ')}`;
+                        row.append(correction);
+                    }
+                    matchingResultContainer.append(row);
+                }
+
+                // For multi-pairing left items, also show any missed required pairings
+                if (requiredRights.length > 1) {
+                    for (const reqRight of requiredRights) {
+                        if (!userRights.includes(reqRight)) {
+                            const row = document.createElement('div');
+                            row.className = 'matching-result-pair incorrect';
+                            const icon = document.createElement('span');
+                            icon.className = 'matching-result-icon';
+                            icon.textContent = '✗';
+                            const textEl = document.createElement('span');
+                            textEl.className = 'matching-result-text';
+                            textEl.textContent = `${leftValue} ↔ `;
+                            const pairedSpan = document.createElement('span');
+                            pairedSpan.textContent = `(fehlt: ${reqRight})`;
+                            textEl.append(pairedSpan);
+                            row.append(icon, textEl);
+                            matchingResultContainer.append(row);
+                        }
+                    }
+                }
+            }
         }
 
         matchingResultContainer.classList.remove('hidden');
 
-        const score = card.pairs.length > 0 ? correctPairCount / card.pairs.length : 0;
+        const score = matchingRequiredCount > 0 ? correctPairCount / matchingRequiredCount : 0;
         markAnswer(score);
 
         markCorrectBtn.style.display = 'none';

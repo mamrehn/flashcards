@@ -70,6 +70,29 @@
         1,
         3
       ]
+    },
+    {
+      "categories": [
+        "Geografie"
+      ],
+      "question": "Ordne die Länder ihren Hauptstädten zu.",
+      "pairs": [
+        { "left": "Deutschland", "right": "Berlin" },
+        { "left": "Frankreich", "right": "Paris" },
+        { "left": "Japan", "right": "Tokio" },
+        { "left": "Australien", "right": "Canberra" }
+      ]
+    },
+    {
+      "categories": [
+        "Geografie"
+      ],
+      "question": "Ordne die Städte den richtigen Regionen zu. (Berlin gehört zu beiden Regionen. New York gehört zu keiner.)",
+      "pairs": [
+        { "left": "Deutschland", "right": "Berlin" },
+        { "left": "Europa", "right": "Berlin" },
+        { "right": "New York" }
+      ]
     }
   ]
 }

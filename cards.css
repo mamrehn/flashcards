@@ -264,7 +264,7 @@ body {
     background-color: var(--success, #2ecc71);
 }
 
-.type-chip-association.selected {
+.type-chip-matching.selected {
     background-color: #8e44ad;
 }
 
@@ -1870,7 +1870,7 @@ body {
 }
 
 /* ============================================================================
-   Matching / Association Card Styles
+   Matching Card Styles
    ============================================================================ */
 
 .matching-container {
@@ -2049,6 +2049,44 @@ body {
 .matching-item.paired:hover {
     border-color: var(--primary);
     transform: none;
+}
+
+/* Capacity-full state in multi-card mode: success border indicates all slots filled */
+.matching-item.full {
+    border-color: var(--success, #28a745);
+    background-color: rgba(39, 174, 96, 0.07);
+    cursor: default;
+}
+
+.matching-item.full:hover {
+    border-color: var(--success, #28a745);
+    transform: none;
+}
+
+/* Multi-card paired section: CSS grid with right item spanning all group rows */
+.matching-paired-group {
+    display: grid;
+    grid-template-columns: 1fr auto 1fr;
+    gap: 0.3rem;
+    align-items: center;
+}
+
+/* Right item spans all rows via inline grid-row style; stretches to full group height */
+.matching-paired-group-right {
+    align-self: stretch;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+}
+
+/* Hint badge shown at top of matching card when items can be reused */
+.matching-multi-hint {
+    font-size: 0.78rem;
+    color: var(--text-muted, #888);
+    text-align: center;
+    margin-bottom: 0.1rem;
+    font-style: italic;
 }
 
 .matching-progress {
