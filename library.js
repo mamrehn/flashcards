@@ -658,6 +658,7 @@ function formatTypeBreakdown(types, prefix, suffix) {
     const parts = [];
     if (types.text > 0) parts.push(`${types.text} Text`);
     if (types.multipleChoice > 0) parts.push(`${types.multipleChoice} MC`);
+    if ((types.matching ?? 0) > 0) parts.push(`${types.matching} ZO`);
     if (parts.length < 2) return '';
     return `${prefix}${parts.join(' + ')}${suffix}`;
 }
@@ -825,6 +826,7 @@ function formatDetailBreakdown(types) {
     const parts = [];
     if (types.text > 0) parts.push(`${types.text} Text-Antworten`);
     if (types.multipleChoice > 0) parts.push(`${types.multipleChoice} Multiple Choice`);
+    if ((types.matching ?? 0) > 0) parts.push(`${types.matching} Zuordnungsaufgaben`);
     if (parts.length < 2) return '';
     return `davon ${parts.join(' · ')}`;
 }
@@ -936,6 +938,7 @@ async function importDeckFromLibrary(deckMeta) {
  */
 function isValidCard(card) {
     if (!card || typeof card !== 'object') return false;
+    if (Array.isArray(card.pairs) && card.pairs.length > 0) return true;
     if (typeof card.question !== 'string' || card.question.trim() === '') return false;
     if (typeof card.answer === 'string' && card.answer.trim() !== '') return true;
     if (

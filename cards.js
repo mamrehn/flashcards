@@ -2028,15 +2028,6 @@ function renderMatchingPairs() {
         const el = leftItemEls[lIdx];
         el.className = 'matching-item';
         if (lIdx === selectedLeftIndex) el.classList.add('selected');
-        if (isMultiCard) {
-            // Mark .full when left item has exhausted its pairing capacity
-            let pairings = 0;
-            for (const [l] of matchingPairs) {
-                if (l === lIdx) pairings++;
-            }
-            const cap = Math.max(leftRequiredCount[lIdx] ?? 1, 1);
-            if (pairings >= cap) el.classList.add('full');
-        }
         matchingUnpairedLeftCol.append(el);
     }
 
@@ -2047,12 +2038,6 @@ function renderMatchingPairs() {
             el.textContent = shuffledRightItems[rIdx].text;
             el.className = 'matching-item';
             if (rIdx === selectedRightIndex) el.classList.add('selected');
-            let pairingCount = 0;
-            for (const [, r] of matchingPairs) {
-                if (r === rIdx) pairingCount++;
-            }
-            const cap = Math.max(rightRequiredCount[rIdx] ?? 1, 1);
-            if (pairingCount >= cap) el.classList.add('full');
             matchingUnpairedRightCol.append(el);
         }
 
@@ -2152,31 +2137,39 @@ function createPair(leftIndex, shuffledRightIndex) {
     // Prevent duplicate pairing
     if (matchingPairs.some(([l, r]) => l === leftIndex && r === shuffledRightIndex)) return;
 
-    // Check right capacity
-    let rightPairings = 0;
-    for (const [, r] of matchingPairs) {
-        if (r === shuffledRightIndex) rightPairings++;
-    }
-    const rightCap = Math.max(rightRequiredCount[shuffledRightIndex] ?? 1, 1);
-    if (rightPairings >= rightCap) return;
+    if (!isMultiCard) {
+        // Standard mode: enforce 1:1 capacity
+        let rightPairings = 0;
+        for (const [, r] of matchingPairs) {
+            if (r === shuffledRightIndex) rightPairings++;
+        }
+        if (rightPairings >= Math.max(rightRequiredCount[shuffledRightIndex] ?? 1, 1)) return;
 
-    // Check left capacity
-    let leftPairings = 0;
-    for (const [l] of matchingPairs) {
-        if (l === leftIndex) leftPairings++;
+        let leftPairings = 0;
+        for (const [l] of matchingPairs) {
+            if (l === leftIndex) leftPairings++;
+        }
+        if (leftPairings >= Math.max(leftRequiredCount[leftIndex] ?? 1, 1)) return;
     }
-    const leftCap = Math.max(leftRequiredCount[leftIndex] ?? 1, 1);
-    if (leftPairings >= leftCap) return;
 
     matchingPairs.push([leftIndex, shuffledRightIndex]);
 
-    // Remove left from column when at capacity (not needed in multi-left mode — stays with .full)
-    if (leftPairings + 1 >= leftCap && !isMultiLeft) {
-        unpairedLeftOrder = unpairedLeftOrder.filter((i) => i !== leftIndex);
-    }
-    // Remove right from column when at capacity (not needed in multi-right mode — stays with .full)
-    if (rightPairings + 1 >= rightCap && !isMultiRight) {
-        unpairedRightOrder = unpairedRightOrder.filter((k) => k !== shuffledRightIndex);
+    if (!isMultiCard) {
+        // Standard mode: remove items from columns once paired
+        let leftPairings = 0;
+        for (const [l] of matchingPairs) {
+            if (l === leftIndex) leftPairings++;
+        }
+        if (leftPairings >= Math.max(leftRequiredCount[leftIndex] ?? 1, 1)) {
+            unpairedLeftOrder = unpairedLeftOrder.filter((i) => i !== leftIndex);
+        }
+        let rightPairings = 0;
+        for (const [, r] of matchingPairs) {
+            if (r === shuffledRightIndex) rightPairings++;
+        }
+        if (rightPairings >= Math.max(rightRequiredCount[shuffledRightIndex] ?? 1, 1)) {
+            unpairedRightOrder = unpairedRightOrder.filter((k) => k !== shuffledRightIndex);
+        }
     }
 
     selectedLeftIndex = null;
@@ -2186,14 +2179,6 @@ function createPair(leftIndex, shuffledRightIndex) {
 
 function handleMatchingLeftClick(leftIndex) {
     if (isAnswered) return;
-    // Reject if at full left capacity
-    let leftPairings = 0;
-    for (const [l] of matchingPairs) {
-        if (l === leftIndex) leftPairings++;
-    }
-    const leftCap = Math.max(leftRequiredCount[leftIndex] ?? 1, 1);
-    if (leftPairings >= leftCap) return;
-
     if (selectedRightIndex === null) {
         selectedLeftIndex = selectedLeftIndex === leftIndex ? null : leftIndex;
         renderMatchingPairs();
@@ -2205,12 +2190,6 @@ function handleMatchingLeftClick(leftIndex) {
 function handleMatchingRightClick(shuffledRightIndex) {
     if (isAnswered) return;
     if (selectedLeftIndex === null) {
-        let currentPairings = 0;
-        for (const [, r] of matchingPairs) {
-            if (r === shuffledRightIndex) currentPairings++;
-        }
-        const effectiveCapacity = Math.max(rightRequiredCount[shuffledRightIndex] ?? 1, 1);
-        if (currentPairings >= effectiveCapacity) return;
         selectedRightIndex = selectedRightIndex === shuffledRightIndex ? null : shuffledRightIndex;
         renderMatchingPairs();
     } else {
@@ -2224,12 +2203,12 @@ function unlinkPair(leftIndex, rightIndex) {
     matchingPairs = matchingPairs.filter(([l, r]) => !(l === leftIndex && r === rightIndex));
     if (matchingPairs.length === prevLength) return;
 
-    // Re-add left to column if it was removed at capacity (standard non-multiLeft case)
-    if (!isMultiLeft && !unpairedLeftOrder.includes(leftIndex)) {
+    // Re-add left to column if it was removed (standard non-multi mode)
+    if (!isMultiCard && !unpairedLeftOrder.includes(leftIndex)) {
         unpairedLeftOrder.push(leftIndex);
     }
-    // Re-add right to column if it was removed at capacity (standard non-multiRight case)
-    if (!isMultiRight && !unpairedRightOrder.includes(rightIndex)) {
+    // Re-add right to column if it was removed (standard non-multi mode)
+    if (!isMultiCard && !unpairedRightOrder.includes(rightIndex)) {
         unpairedRightOrder.push(rightIndex);
     }
     renderMatchingPairs();

@@ -1071,11 +1071,6 @@ body {
 
     .category-label {
         font-size: 1.02rem;
-        flex-basis: 100%;
-    }
-
-    .type-chips {
-        margin-left: 1.6rem;
     }
 }
 

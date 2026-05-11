@@ -46,6 +46,7 @@ function slugify(str) {
  */
 function isValidCard(card) {
     if (!card || typeof card !== 'object') return false;
+    if (Array.isArray(card.pairs) && card.pairs.length > 0) return true;
     if (typeof card.question !== 'string' || card.question.trim() === '') return false;
     if (typeof card.answer === 'string' && card.answer.trim() !== '') return true;
     if (
@@ -64,6 +65,7 @@ function isValidCard(card) {
  * @param card
  */
 function cardType(card) {
+    if (Array.isArray(card.pairs)) return 'matching';
     return Array.isArray(card.options) ? 'multiple-choice' : 'text';
 }
 
@@ -132,6 +134,7 @@ async function processDeckFile(filePath) {
     let validCards = 0;
     let textCards = 0;
     let mcCards = 0;
+    let matchingCards = 0;
     const categoryCounts = new Map();
     const sourceFiles = [];
     let meta = null;
@@ -160,7 +163,8 @@ async function processDeckFile(filePath) {
             if (!isValidCard(card)) continue;
             validCards++;
             if (cardType(card) === 'text') textCards++;
-            else mcCards++;
+            else if (cardType(card) === 'multiple-choice') mcCards++;
+            else matchingCards++;
             if (Array.isArray(card.categories)) {
                 for (const c of card.categories) {
                     if (typeof c !== 'string' || c.trim() === '') continue;
@@ -189,7 +193,7 @@ async function processDeckFile(filePath) {
         size: buf.length,
         questionCount: validCards,
         invalidCount: totalCards - validCards,
-        types: { text: textCards, multipleChoice: mcCards },
+        types: { text: textCards, multipleChoice: mcCards, matching: matchingCards },
         categories,
         sourceFiles: sourceFiles.toSorted(),
     };
