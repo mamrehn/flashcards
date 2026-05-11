@@ -587,9 +587,16 @@ function handleJoin(ws, msg) {
 
         // Replay current quiz state so the reconnecting player matches what
         // everyone else sees, instead of getting dropped back into the lobby.
+        // Compute remaining seconds server-side so the player's local clock
+        // is never compared against the server epoch.
         if (room.phase === 'question' && room.activeQuestion) {
+            const elapsedSec = room.questionStartTime
+                ? (Date.now() - room.questionStartTime) / 1000
+                : 0;
+            const remaining = Math.max(0, room.activeQuestion.duration - elapsedSec);
             send(ws, {
                 ...room.activeQuestion,
+                remaining,
                 alreadySubmitted: !!player.hasAnswered,
             });
         } else if (room.phase === 'final' && room.finalSnapshot) {
@@ -742,7 +749,6 @@ function handleStartQuestion(ws, msg) {
         options: msg.options,
         index: questionIndex,
         total: questionTotal,
-        startTime: room.questionStartTime,
         duration: duration,
     };
     // Snapshot for replay on reconnect.
@@ -750,8 +756,10 @@ function handleStartQuestion(ws, msg) {
     room.activeQuestion = payload;
     room.finalSnapshot = null;
 
-    // Relay to all players, using server timestamp
-    broadcastToPlayers(room, payload);
+    // Relay to all players. Send server-computed remaining seconds (= full
+    // duration here since the question just started) so clients never need to
+    // compare clocks across machines.
+    broadcastToPlayers(room, { ...payload, remaining: duration });
 }
 
 /**

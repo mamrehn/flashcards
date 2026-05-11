@@ -3119,14 +3119,13 @@ function initializePlayerFeatures(reconnectInfo) {
                     selectedAnswers = [];
                     playerCurrentQuestionIndex = msg.index;
                     displayQuestion(msg);
-                    // Reconnect path: server-supplied startTime lets us show
-                    // the right remaining time instead of restarting the full
-                    // duration. For the normal broadcast, startTime ≈ now.
-                    let remaining = msg.duration;
-                    if (typeof msg.startTime === 'number') {
-                        const elapsedSec = (Date.now() - msg.startTime) / 1000;
-                        remaining = Math.max(0, msg.duration - elapsedSec);
-                    }
+                    // Use server-computed remaining seconds so the player's
+                    // local clock is never compared against the server epoch.
+                    // For initial broadcasts remaining === duration; for
+                    // reconnects the server pre-calculates the true remainder.
+                    const remaining = typeof msg.remaining === 'number'
+                        ? Math.max(0, msg.remaining)
+                        : msg.duration;
                     startPlayerTimer(remaining);
                     if (msg.alreadySubmitted) {
                         // Player had submitted before disconnecting. Server
