@@ -2041,50 +2041,243 @@ function renderMatchingPairs() {
             matchingUnpairedRightCol.append(el);
         }
 
-        // Paired section: one CSS-grid group per right item that has ≥1 pairing.
-        // Layout: [left item] [unlink btn] | [right item spanning all rows]
-        const pairedRightSet = new Set();
-        for (const [, r] of matchingPairs) pairedRightSet.add(r);
-        const pairedRightIndices = unpairedRightOrder.filter((rIdx) => pairedRightSet.has(rIdx));
+        // Paired section: bipartite connected-component grouping.
+        // For each component, choose layout by structure:
+        //   exactly 1 multi-left + ≥1 multi-right → 4-col complex group
+        //     (left-span | extra-left | unlink | right-or-span)
+        //   multi-left only  → 3-col left-span group per multi-left item
+        //   multi-right only → 3-col right-span group per multi-right item
+        //   simple           → flat 3-col row
+        const leftRightCount = new Map();
+        const rightLeftCount = new Map();
+        const leftNeighbors = new Map();
+        const rightNeighbors = new Map();
+        for (const [l, r] of matchingPairs) {
+            leftRightCount.set(l, (leftRightCount.get(l) ?? 0) + 1);
+            rightLeftCount.set(r, (rightLeftCount.get(r) ?? 0) + 1);
+            if (!leftNeighbors.has(l)) leftNeighbors.set(l, []);
+            leftNeighbors.get(l).push(r);
+            if (!rightNeighbors.has(r)) rightNeighbors.set(r, []);
+            rightNeighbors.get(r).push(l);
+        }
 
-        for (const rIdx of pairedRightIndices) {
-            // Collect left indices for this right item, sorted for stable order
-            const pairedLeftIndices = [];
-            for (const [l, r] of matchingPairs) {
-                if (r === rIdx) pairedLeftIndices.push(l);
+        // BFS: find connected components in the pair bipartite graph
+        const visitedLeft = new Set();
+        const components = [];
+        for (const [startL] of matchingPairs) {
+            if (visitedLeft.has(startL)) continue;
+            const compLefts = new Set();
+            const compRights = new Set();
+            const bfsQueue = [startL];
+            while (bfsQueue.length > 0) {
+                const cl = bfsQueue.shift();
+                if (compLefts.has(cl)) continue;
+                compLefts.add(cl);
+                visitedLeft.add(cl);
+                for (const cr of (leftNeighbors.get(cl) ?? [])) {
+                    if (compRights.has(cr)) continue;
+                    compRights.add(cr);
+                    for (const cl2 of (rightNeighbors.get(cr) ?? [])) bfsQueue.push(cl2);
+                }
             }
-            const sortedLeftIndices = pairedLeftIndices.toSorted((a, b) => a - b);
-            const rowCount = sortedLeftIndices.length;
+            const compPairs = matchingPairs.filter(([l]) => compLefts.has(l));
+            const multiLefts = unpairedLeftOrder.filter((l) => compLefts.has(l) && leftRightCount.get(l) > 1);
+            const multiRights = unpairedRightOrder.filter((r) => compRights.has(r) && rightLeftCount.get(r) > 1);
+            components.push({ compPairs, multiLefts, multiRights });
+        }
 
-            const group = document.createElement('div');
-            group.className = 'matching-paired-group';
+        for (const { compPairs, multiLefts, multiRights } of components) {
+            // Complex: ≥1 multi-left AND ≥1 multi-right → 3-col grid, both sides may span.
+            // Row order: for each multi-right, non-multiLeft rows first then multiLeft rows,
+            // so the multi-left's rows are contiguous (enabling a left span) while each
+            // multi-right's rows are also contiguous (enabling right spans).
+            if (multiLefts.length > 0 && multiRights.length > 0) {
+                const multiLeftSet = new Set(multiLefts);
+                const rowPairs = [];
+                const rowKeys = new Set();
+                for (const rIdx of multiRights) {
+                    for (const [l, r] of compPairs) {
+                        if (r === rIdx && !multiLeftSet.has(l) && !rowKeys.has(`${l},${r}`)) {
+                            rowPairs.push([l, r]); rowKeys.add(`${l},${r}`);
+                        }
+                    }
+                    for (const [l, r] of compPairs) {
+                        if (r === rIdx && multiLeftSet.has(l) && !rowKeys.has(`${l},${r}`)) {
+                            rowPairs.push([l, r]); rowKeys.add(`${l},${r}`);
+                        }
+                    }
+                }
+                for (const [l, r] of compPairs) {
+                    if (!rowKeys.has(`${l},${r}`)) { rowPairs.push([l, r]); rowKeys.add(`${l},${r}`); }
+                }
+                // Compute contiguous span info for left and right items
+                const leftSpanInfo = new Map();
+                for (const [i, [li]] of rowPairs.entries()) {
+                    if ((leftRightCount.get(li) ?? 0) > 1) {
+                        if (!leftSpanInfo.has(li)) leftSpanInfo.set(li, { start: i + 1, count: 0 });
+                        leftSpanInfo.get(li).count++;
+                    }
+                }
+                const rightSpanInfo = new Map();
+                for (const [i, [, ri]] of rowPairs.entries()) {
+                    if ((rightLeftCount.get(ri) ?? 0) > 1) {
+                        if (!rightSpanInfo.has(ri)) rightSpanInfo.set(ri, { start: i + 1, count: 0 });
+                        rightSpanInfo.get(ri).count++;
+                    }
+                }
+                const cGroup = document.createElement('div');
+                cGroup.className = 'matching-paired-group';
+                const leftSpanSeen = new Set();
+                const rightSpanSeen = new Set();
+                for (const [rowIdx, [lIdx, rIdx]] of rowPairs.entries()) {
+                    const rowNum = rowIdx + 1;
+                    if ((leftRightCount.get(lIdx) ?? 0) > 1 && !leftSpanSeen.has(lIdx)) {
+                        const info = leftSpanInfo.get(lIdx);
+                        const spanLeft = document.createElement('div');
+                        spanLeft.className = 'matching-item paired matching-paired-group-span';
+                        spanLeft.textContent = leftItemEls[lIdx].textContent;
+                        spanLeft.style.gridColumn = '1';
+                        spanLeft.style.gridRow = `${info.start} / span ${info.count}`;
+                        cGroup.append(spanLeft);
+                        leftSpanSeen.add(lIdx);
+                    } else if ((leftRightCount.get(lIdx) ?? 0) <= 1) {
+                        const leftEl = document.createElement('div');
+                        leftEl.className = 'matching-item paired';
+                        leftEl.style.gridColumn = '1';
+                        leftEl.style.gridRow = String(rowNum);
+                        leftEl.textContent = leftItemEls[lIdx].textContent;
+                        cGroup.append(leftEl);
+                    }
+                    const unlinkBtn = document.createElement('button');
+                    unlinkBtn.type = 'button';
+                    unlinkBtn.className = 'matching-unlink-btn';
+                    unlinkBtn.setAttribute('aria-label', 'Verknüpfung trennen');
+                    unlinkBtn.style.gridColumn = '2';
+                    unlinkBtn.style.gridRow = String(rowNum);
+                    const lIdx_ = lIdx;
+                    const rIdx_ = rIdx;
+                    unlinkBtn.addEventListener('click', () => unlinkPair(lIdx_, rIdx_));
+                    cGroup.append(unlinkBtn);
+                    if ((rightLeftCount.get(rIdx) ?? 0) > 1 && !rightSpanSeen.has(rIdx)) {
+                        const info = rightSpanInfo.get(rIdx);
+                        const spanRight = document.createElement('div');
+                        spanRight.className = 'matching-item paired matching-paired-group-span';
+                        spanRight.textContent = shuffledRightItems[rIdx].text;
+                        spanRight.style.gridColumn = '3';
+                        spanRight.style.gridRow = `${info.start} / span ${info.count}`;
+                        cGroup.append(spanRight);
+                        rightSpanSeen.add(rIdx);
+                    } else if ((rightLeftCount.get(rIdx) ?? 0) <= 1) {
+                        const rightEl = document.createElement('div');
+                        rightEl.className = 'matching-item paired';
+                        rightEl.style.gridColumn = '3';
+                        rightEl.style.gridRow = String(rowNum);
+                        rightEl.textContent = shuffledRightItems[rIdx].text;
+                        cGroup.append(rightEl);
+                    }
+                }
+                matchingPairedSection.append(cGroup);
+                continue;
+            }
 
-            // Left items + unlink buttons auto-placed into cols 1–2 (one row each)
-            for (const lIdx of sortedLeftIndices) {
+            // Non-complex: 3-col groups
+            const handledKeys = new Set();
+            for (const lIdx of multiLefts) {
+                const pRights = [];
+                for (const [l, r] of compPairs) {
+                    if (l === lIdx) { pRights.push(r); handledKeys.add(`${l},${r}`); }
+                }
+                const group = document.createElement('div');
+                group.className = 'matching-paired-group';
+                const spanEl = document.createElement('div');
+                spanEl.className = 'matching-item paired matching-paired-group-span';
+                spanEl.textContent = leftItemEls[lIdx].textContent;
+                spanEl.style.gridColumn = '1';
+                spanEl.style.gridRow = `1 / span ${pRights.length}`;
+                group.append(spanEl);
+                for (let rowNum = 1; rowNum <= pRights.length; rowNum++) {
+                    const rIdx = pRights[rowNum - 1];
+                    const unlinkBtn = document.createElement('button');
+                    unlinkBtn.type = 'button';
+                    unlinkBtn.className = 'matching-unlink-btn';
+                    unlinkBtn.setAttribute('aria-label', 'Verknüpfung trennen');
+                    unlinkBtn.style.gridColumn = '2';
+                    unlinkBtn.style.gridRow = String(rowNum);
+                    const lIdx_ = lIdx;
+                    const rIdx_ = rIdx;
+                    unlinkBtn.addEventListener('click', () => unlinkPair(lIdx_, rIdx_));
+                    const rightEl = document.createElement('div');
+                    rightEl.className = 'matching-item paired';
+                    rightEl.style.gridColumn = '3';
+                    rightEl.style.gridRow = String(rowNum);
+                    rightEl.textContent = shuffledRightItems[rIdx].text;
+                    group.append(unlinkBtn, rightEl);
+                }
+                matchingPairedSection.append(group);
+            }
+            // Right-grouped: unhandled pairs where this right has ≥2 remaining lefts
+            const rightUnhandled = new Map();
+            for (const [l, r] of compPairs) {
+                if (!handledKeys.has(`${l},${r}`)) {
+                    if (!rightUnhandled.has(r)) rightUnhandled.set(r, []);
+                    rightUnhandled.get(r).push(l);
+                }
+            }
+            for (const [rIdx, pLefts] of rightUnhandled) {
+                if (pLefts.length < 2) continue;
+                for (const lIdx of pLefts) handledKeys.add(`${lIdx},${rIdx}`);
+                const group = document.createElement('div');
+                group.className = 'matching-paired-group';
+                const spanEl = document.createElement('div');
+                spanEl.className = 'matching-item paired matching-paired-group-span';
+                spanEl.textContent = shuffledRightItems[rIdx].text;
+                spanEl.style.gridColumn = '3';
+                spanEl.style.gridRow = `1 / span ${pLefts.length}`;
+                group.append(spanEl);
+                for (let rowNum = 1; rowNum <= pLefts.length; rowNum++) {
+                    const lIdx = pLefts[rowNum - 1];
+                    const unlinkBtn = document.createElement('button');
+                    unlinkBtn.type = 'button';
+                    unlinkBtn.className = 'matching-unlink-btn';
+                    unlinkBtn.setAttribute('aria-label', 'Verknüpfung trennen');
+                    unlinkBtn.style.gridColumn = '2';
+                    unlinkBtn.style.gridRow = String(rowNum);
+                    const lIdx_ = lIdx;
+                    const rIdx_ = rIdx;
+                    unlinkBtn.addEventListener('click', () => unlinkPair(lIdx_, rIdx_));
+                    const leftEl = document.createElement('div');
+                    leftEl.className = 'matching-item paired';
+                    leftEl.style.gridColumn = '1';
+                    leftEl.style.gridRow = String(rowNum);
+                    leftEl.textContent = leftItemEls[lIdx].textContent;
+                    group.append(unlinkBtn, leftEl);
+                }
+                matchingPairedSection.append(group);
+            }
+            // Flat: remaining simple 1:1 pairs
+            for (const [l, r] of compPairs) {
+                if (handledKeys.has(`${l},${r}`)) continue;
+                const group = document.createElement('div');
+                group.className = 'matching-paired-group';
                 const leftEl = document.createElement('div');
                 leftEl.className = 'matching-item paired';
-                leftEl.textContent = leftItemEls[lIdx].textContent;
-
+                leftEl.style.gridColumn = '1';
+                leftEl.textContent = leftItemEls[l].textContent;
                 const unlinkBtn = document.createElement('button');
                 unlinkBtn.type = 'button';
                 unlinkBtn.className = 'matching-unlink-btn';
                 unlinkBtn.setAttribute('aria-label', 'Verknüpfung trennen');
-                const lIdx_ = lIdx;
-                const rIdx_ = rIdx;
-                unlinkBtn.addEventListener('click', () => unlinkPair(lIdx_, rIdx_));
-
-                group.append(leftEl, unlinkBtn);
+                unlinkBtn.style.gridColumn = '2';
+                const l_ = l;
+                const r_ = r;
+                unlinkBtn.addEventListener('click', () => unlinkPair(l_, r_));
+                const rightEl = document.createElement('div');
+                rightEl.className = 'matching-item paired';
+                rightEl.style.gridColumn = '3';
+                rightEl.textContent = shuffledRightItems[r].text;
+                group.append(leftEl, unlinkBtn, rightEl);
+                matchingPairedSection.append(group);
             }
-
-            // Right item appended last — explicitly placed in col 3, spanning all rows
-            const rightEl = document.createElement('div');
-            rightEl.className = 'matching-item paired matching-paired-group-right';
-            rightEl.textContent = shuffledRightItems[rIdx].text;
-            rightEl.style.gridColumn = '3';
-            rightEl.style.gridRow = `1 / span ${rowCount}`;
-            group.append(rightEl);
-
-            matchingPairedSection.append(group);
         }
     } else {
         // Standard matching: right column tiles + flat paired rows

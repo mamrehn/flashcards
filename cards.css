@@ -2066,8 +2066,8 @@ body {
     align-items: center;
 }
 
-/* Right item spans all rows via inline grid-row style; stretches to full group height */
-.matching-paired-group-right {
+/* Spanning item (left or right) stretches to fill full group height */
+.matching-paired-group-span {
     align-self: stretch;
     display: flex;
     align-items: center;
