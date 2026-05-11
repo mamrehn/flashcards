@@ -105,12 +105,6 @@ body {
     box-shadow: 0 1px 3px var(--shadow-color);
 }
 
-.deck-title {
-    font-weight: 500;
-    color: var(--primary);
-    cursor: pointer;
-}
-
 .delete-deck {
     color: var(--danger);
     background: none;
@@ -120,7 +114,7 @@ body {
     padding: 0.25rem 0.5rem;
 }
 
-.deck-checkbox,
+.topic-checkbox,
 .category-checkbox {
     width: 18px;
     height: 18px;
@@ -128,8 +122,8 @@ body {
     flex-shrink: 0;
 }
 
-/* Deck Folder Structure */
-.deck-folder {
+/* Topic Folder Structure */
+.topic-folder {
     background-color: var(--surface-color);
     margin-bottom: 0.5rem;
     border-radius: 6px;
@@ -137,7 +131,7 @@ body {
     overflow: hidden;
 }
 
-.deck-folder-header {
+.topic-header {
     display: flex;
     align-items: center;
     padding: 0.6rem 0.5rem;
@@ -146,7 +140,7 @@ body {
     user-select: none;
 }
 
-.deck-folder-header:hover {
+.topic-header:hover {
     background-color: var(--hover-bg, rgba(0, 0, 0, 0.04));
 }
 
@@ -159,7 +153,7 @@ body {
     text-align: center;
 }
 
-.deck-folder.expanded .deck-chevron {
+.topic-folder.expanded .deck-chevron {
     transform: rotate(90deg);
 }
 
@@ -168,53 +162,146 @@ body {
     flex-shrink: 0;
 }
 
-.deck-folder-header .deck-title {
+.topic-title-block {
     flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+}
+
+.topic-title {
     font-weight: 500;
     color: var(--primary);
-    cursor: pointer;
+    word-break: break-word;
 }
 
-.deck-card-count {
-    font-size: 1.05rem;
+.topic-subtitle {
+    font-size: 0.78rem;
+    color: var(--text-muted, #888);
+    margin-top: 0.1rem;
+}
+
+.topic-card-count {
+    font-size: 0.85rem;
     color: var(--text-muted, #888);
     margin-left: 0.25rem;
+    white-space: nowrap;
 }
 
-.deck-categories {
+.topic-categories {
     display: none;
     padding: 0.25rem 0.5rem 0.5rem 2.4rem;
     border-top: 1px solid var(--input-border);
     background-color: var(--bg-color);
 }
 
-.deck-folder.expanded .deck-categories {
+.topic-folder.expanded .topic-categories {
     display: block;
 }
 
-.category-item {
+.category-row {
     display: flex;
     align-items: center;
-    padding: 0.3rem 0;
+    padding: 0.35rem 0;
     gap: 0.4rem;
-    font-size: 1.05rem;
+    font-size: 1rem;
+    flex-wrap: wrap;
 }
 
-.category-item label {
+.category-label {
     cursor: pointer;
     color: var(--text-color);
     display: flex;
     align-items: center;
     gap: 0.3rem;
+    flex: 1;
+    min-width: 0;
 }
 
-.category-item .category-icon {
+.category-row .category-icon {
     font-size: 0.85rem;
 }
 
-.category-count {
-    font-size: 0.75rem;
+/* Type chips (MC / Text per category) */
+.type-chips {
+    display: inline-flex;
+    gap: 0.3rem;
+    flex-shrink: 0;
+}
+
+.type-chip {
+    font: inherit;
+    font-size: 0.78rem;
+    line-height: 1;
+    padding: 0.25rem 0.55rem;
+    border-radius: 999px;
+    border: 1px solid var(--input-border);
+    background-color: var(--surface-color);
     color: var(--text-muted, #888);
+    cursor: pointer;
+    user-select: none;
+    transition:
+        background-color 0.15s ease,
+        color 0.15s ease,
+        border-color 0.15s ease,
+        opacity 0.15s ease;
+}
+
+.type-chip:hover {
+    border-color: var(--primary);
+}
+
+.type-chip.selected {
+    color: #fff;
+    border-color: transparent;
+}
+
+.type-chip-mc.selected {
+    background-color: var(--primary);
+}
+
+.type-chip-text.selected {
+    background-color: var(--success, #2ecc71);
+}
+
+/* Global Type Filter Toolbar */
+.type-filter-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    flex-wrap: wrap;
+    margin: 0.5rem 0 0.75rem;
+}
+
+.type-filter-label {
+    font-size: 0.85rem;
+    color: var(--text-muted, #888);
+    margin-right: 0.25rem;
+}
+
+.type-filter-btn {
+    font: inherit;
+    font-size: 0.85rem;
+    padding: 0.3rem 0.7rem;
+    border-radius: 999px;
+    border: 1px solid var(--input-border);
+    background-color: var(--surface-color);
+    color: var(--text-color);
+    cursor: pointer;
+    transition:
+        background-color 0.15s ease,
+        color 0.15s ease,
+        border-color 0.15s ease;
+}
+
+.type-filter-btn:hover {
+    border-color: var(--primary);
+}
+
+.type-filter-btn.selected {
+    background-color: var(--primary);
+    color: #fff;
+    border-color: transparent;
 }
 
 /* Flip Card Animation Styles */
@@ -956,33 +1043,35 @@ body {
         height: calc(100dvh - 300px);
     }
 
-    .deck-folder-header {
+    .topic-header {
         padding: 0.7rem 0.5rem;
         gap: 0.35rem;
     }
 
-    .deck-folder-header .deck-title {
+    .topic-title {
         font-size: 1.05rem;
-        word-break: break-word;
-        min-width: 0;
     }
 
-    .deck-card-count {
-        font-size: 0.85rem;
-        white-space: nowrap;
+    .topic-card-count {
+        font-size: 0.8rem;
     }
 
-    .deck-categories {
+    .topic-categories {
         padding-left: 1.6rem;
         padding-right: 0.3rem;
     }
 
-    .category-item {
-        padding: 0.4rem 0;
+    .category-row {
+        padding: 0.5rem 0;
     }
 
-    .category-item label {
-        font-size: 1.05rem;
+    .category-label {
+        font-size: 1.02rem;
+        flex-basis: 100%;
+    }
+
+    .type-chips {
+        margin-left: 1.6rem;
     }
 }
 

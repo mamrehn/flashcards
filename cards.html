@@ -131,6 +131,40 @@
                             placeholder="🔍 Decks durchsuchen..."
                         />
                     </div>
+                    <div
+                        class="type-filter-toolbar"
+                        role="group"
+                        aria-label="Globaler Fragetyp-Filter"
+                    >
+                        <span class="type-filter-label">Fragetyp:</span>
+                        <button
+                            type="button"
+                            class="type-filter-btn selected"
+                            data-filter="all"
+                            aria-pressed="true"
+                            title="Multiple-Choice und Freitext"
+                        >
+                            Alle
+                        </button>
+                        <button
+                            type="button"
+                            class="type-filter-btn"
+                            data-filter="mc"
+                            aria-pressed="false"
+                            title="Nur Multiple-Choice-Fragen"
+                        >
+                            Nur MC
+                        </button>
+                        <button
+                            type="button"
+                            class="type-filter-btn"
+                            data-filter="text"
+                            aria-pressed="false"
+                            title="Nur Freitext-Fragen"
+                        >
+                            Nur Freitext
+                        </button>
+                    </div>
                     <div id="deck-selection-controls">
                         <button id="start-selected-decks" class="btn btn-primary" disabled>
                             Mit ausgewählten Decks starten

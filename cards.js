@@ -232,6 +232,9 @@ function initializeApp() {
     startSelectedDecksBtn.addEventListener('click', throttle(startSelectedDecks, 500));
     selectAllDecksBtn.addEventListener('click', debounce(selectAllDecks, 200));
     deselectAllDecksBtn.addEventListener('click', debounce(deselectAllDecks, 200));
+    for (const btn of document.querySelectorAll('.type-filter-btn')) {
+        btn.addEventListener('click', () => applyGlobalTypeFilter(btn.dataset.filter));
+    }
     studyModeSelect.addEventListener('change', throttle(handleStudyModeChange, 300));
     deckSearchInput.addEventListener('input', debounce(handleDeckSearch, 250));
     openSrManagerBtn.addEventListener('click', throttle(openSpacedRepetitionManager, 300));
@@ -720,6 +723,9 @@ async function handleZipUpload(event) {
         let errorCount = 0;
         const importedDeckNames = [];
 
+        // ZIP basename serves as a topic-grouping fallback when an inner JSON has no meta.name.
+        const zipBaseName = file.name.replace(/\.zip$/i, '');
+
         // Process each file in the ZIP
         const promises = [];
         for (const [relativePath, zipEntry] of Object.entries(zipContent.files)) {
@@ -747,7 +753,11 @@ async function handleZipUpload(event) {
 
                         // Save the deck with filename as deck name
                         const deckName = relativePath.split('/').pop().replace('.json', '');
-                        saveToLocalStorage(deckName, validCards, []);
+                        const meta =
+                            data.meta && typeof data.meta === 'object'
+                                ? data.meta
+                                : { name: zipBaseName };
+                        saveToLocalStorage(deckName, validCards, [], meta);
                         importedDeckNames.push(deckName);
                     } catch {
                         errorCount++;
@@ -847,7 +857,14 @@ async function handleLibraryImportDeepLink() {
                 .replace(/\.json$/i, '');
             // Preview: don't touch localStorage or savedDecks at all.
             if (!isPreview) {
-                saveToLocalStorage(deckName, validCards, []);
+                // Fall back to library manifest meta (or zip basename) when the inner JSON omits it,
+                // so all entries from the same library archive group into one topic.
+                const zipBaseName = deckMeta.filename.replace(/\.(zip|json)$/i, '');
+                const meta =
+                    (data && typeof data.meta === 'object' && data.meta) ||
+                    deckMeta.meta ||
+                    { name: zipBaseName };
+                saveToLocalStorage(deckName, validCards, [], meta);
             }
             importedDeckNames.push(deckName);
             for (const card of validCards) {
@@ -934,7 +951,8 @@ function processJsonData(data, fileName) {
     activeDecks = [deckName];
 
     updateAppTitle([deckName]);
-    saveToLocalStorage(deckName, validCards, []);
+    const meta = data && typeof data.meta === 'object' ? data.meta : null;
+    saveToLocalStorage(deckName, validCards, [], meta);
     displaySavedDecks('', [deckName]);
     initializeQuiz(validCards.map((card) => ({ ...card, sourceDeck: deckName })));
     fileInput.value = '';
@@ -1063,11 +1081,10 @@ function loadSavedDecks() {
  * @param {string} deckName - Name of the deck
  * @param {Array<object>} deckCards - Array of card objects
  * @param {Array<number>} incorrectIndices - Indices of incorrectly answered cards
+ * @param {object|null} [meta] - Optional deck metadata (name, subject, learningUnit, ...)
  */
-function saveToLocalStorage(deckName, deckCards, incorrectIndices = []) {
-    savedDecks[deckName] = {
-        cards: deckCards,
-    };
+function saveToLocalStorage(deckName, deckCards, incorrectIndices = [], meta = null) {
+    savedDecks[deckName] = meta ? { cards: deckCards, meta } : { cards: deckCards };
     try {
         localStorage.setItem('flashcardDecks', JSON.stringify(savedDecks));
     } catch (error) {
@@ -1103,45 +1120,112 @@ function updateIncorrectIndices() {
 // ============================================================================
 
 /**
- * Display all saved decks in the UI with checkboxes
+ * Classify a card as multiple-choice or free-text based on shape.
+ * @param {object} card
+ * @returns {'mc'|'text'}
  */
-/**
- * Extract unique categories from a deck's cards
- * @param {string} deckName - Name of the deck
- * @returns {Map<string, number>} Map of category name to card count
- */
-function extractCategories(deckName) {
-    const categories = new Map();
-    let uncategorizedCount = 0;
-    const deckCards = savedDecks[deckName].cards;
-
-    for (const card of deckCards) {
-        if (card.categories && card.categories.length > 0) {
-            for (const cat of card.categories) {
-                categories.set(cat, (categories.get(cat) || 0) + 1);
-            }
-        } else {
-            uncategorizedCount++;
-        }
-    }
-
-    if (uncategorizedCount > 0) {
-        categories.set('__uncategorized__', uncategorizedCount);
-    }
-
-    return categories;
+function cardType(card) {
+    return Array.isArray(card.options) && Array.isArray(card.correct) ? 'mc' : 'text';
 }
 
 /**
- *
- * @param searchTerm
- * @param preselectDeckNames
+ * Group savedDecks into topics. A topic gathers all JSONs that share the same
+ * meta.name (or, lacking meta, fall back to the deck name itself — so legacy
+ * imports without meta render as standalone single-deck topics).
+ * @returns {Map<string, {
+ *   key: string,
+ *   title: string,
+ *   subtitle: string,
+ *   decks: string[],
+ *   totalCards: number,
+ *   categories: Map<string, {mc: number, text: number}>,
+ * }>}
+ */
+function buildTopics() {
+    const topics = new Map();
+    for (const deckName of Object.keys(savedDecks)) {
+        const deck = savedDecks[deckName];
+        const meta = (deck && deck.meta) || {};
+        const key = (meta.name && String(meta.name).trim()) || deckName;
+        let topic = topics.get(key);
+        if (!topic) {
+            const subtitleParts = [meta.subject, meta.learningUnit].filter(Boolean);
+            topic = {
+                key,
+                title: key,
+                subtitle: subtitleParts.join(' · '),
+                decks: [],
+                totalCards: 0,
+                categories: new Map(),
+            };
+            topics.set(key, topic);
+        }
+        topic.decks.push(deckName);
+        for (const card of deck.cards || []) {
+            topic.totalCards++;
+            const type = cardType(card);
+            const cats =
+                card.categories && card.categories.length > 0
+                    ? card.categories
+                    : ['__uncategorized__'];
+            for (const cat of cats) {
+                let agg = topic.categories.get(cat);
+                if (!agg) {
+                    agg = { mc: 0, text: 0 };
+                    topic.categories.set(cat, agg);
+                }
+                agg[type]++;
+            }
+        }
+    }
+    return topics;
+}
+
+/**
+ * Build a category chip for a given type. Visual state lives in the DOM
+ * (`.selected`); selection logic reads it from there at start time.
+ * @param {'mc'|'text'} type
+ * @param {number} count
+ * @param {string} topicKey
+ * @param {string} catName
+ */
+function makeTypeChip(type, count, topicKey, catName) {
+    const chip = document.createElement('button');
+    chip.type = 'button';
+    chip.className = `type-chip type-chip-${type} selected`;
+    chip.dataset.type = type;
+    chip.dataset.topicKey = topicKey;
+    chip.dataset.category = catName;
+    chip.textContent = `${type === 'mc' ? 'MC' : 'Text'} ${count}`;
+    chip.title =
+        type === 'mc'
+            ? 'Multiple-Choice-Karten in dieser Kategorie ein-/ausblenden'
+            : 'Freitext-Karten in dieser Kategorie ein-/ausblenden';
+    chip.setAttribute('aria-pressed', 'true');
+    chip.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const nowSelected = !chip.classList.contains('selected');
+        chip.classList.toggle('selected', nowSelected);
+        chip.setAttribute('aria-pressed', String(nowSelected));
+        updateStartButtonState();
+    });
+    return chip;
+}
+
+/**
+ * Render the saved-deck list as topic accordions. Topics group JSONs by
+ * meta.name (with deck-name fallback for legacy imports). Inside each topic,
+ * categories are aggregated across all underlying decks; per-category
+ * MC and Text type chips toggle independently.
+ * @param {string} searchTerm - Filters topics by title, subtitle, deck, or category match.
+ * @param {string[]} preselectDeckNames - Deck names whose containing topic should start checked.
  */
 function displaySavedDecks(searchTerm = '', preselectDeckNames = []) {
     const savedDecksDiv = document.querySelector('#saved-decks');
     savedDecksDiv.innerHTML = '';
 
-    if (Object.keys(savedDecks).length === 0) {
+    const topics = buildTopics();
+    if (topics.size === 0) {
         const noDecksMessage = document.createElement('p');
         noDecksMessage.textContent = 'Keine gespeicherten Decks gefunden.';
         savedDecksDiv.append(noDecksMessage);
@@ -1150,22 +1234,23 @@ function displaySavedDecks(searchTerm = '', preselectDeckNames = []) {
     }
 
     const preselectSet = new Set(preselectDeckNames);
+    const lowerSearch = (searchTerm || '').trim().toLowerCase();
 
-    const lowerSearch = searchTerm.toLowerCase();
-
-    // Filter decks by search term (match deck name or category names)
-    const filteredDeckNames = Object.keys(savedDecks).filter((deckName) => {
-        if (!searchTerm) return true;
-        if (deckName.toLowerCase().includes(lowerSearch)) return true;
-        const categories = extractCategories(deckName);
-        for (const catName of categories.keys()) {
+    const matching = [...topics.values()].filter((t) => {
+        if (!lowerSearch) return true;
+        if (t.title.toLowerCase().includes(lowerSearch)) return true;
+        if (t.subtitle.toLowerCase().includes(lowerSearch)) return true;
+        for (const deck of t.decks) {
+            if (deck.toLowerCase().includes(lowerSearch)) return true;
+        }
+        for (const catName of t.categories.keys()) {
             if (catName !== '__uncategorized__' && catName.toLowerCase().includes(lowerSearch))
                 return true;
         }
         return false;
     });
 
-    if (filteredDeckNames.length === 0 && searchTerm) {
+    if (matching.length === 0 && lowerSearch) {
         const noResultsMessage = document.createElement('p');
         noResultsMessage.textContent = 'Keine Decks gefunden.';
         savedDecksDiv.append(noResultsMessage);
@@ -1173,134 +1258,134 @@ function displaySavedDecks(searchTerm = '', preselectDeckNames = []) {
         return;
     }
 
-    for (const deckName of filteredDeckNames) {
-        const categories = extractCategories(deckName);
-        const hasCategories =
-            categories.size > 0 && !(categories.size === 1 && categories.has('__uncategorized__'));
-        const totalCards = savedDecks[deckName].cards.length;
+    matching.sort((a, b) => a.title.localeCompare(b.title, 'de'));
 
+    for (const topic of matching) {
         const folder = document.createElement('div');
-        folder.className = 'deck-folder';
+        folder.className = 'topic-folder';
+        folder.dataset.topicKey = topic.key;
 
-        // --- Header row ---
         const header = document.createElement('div');
-        header.className = 'deck-folder-header';
+        header.className = 'topic-header';
 
         const checkbox = document.createElement('input');
         checkbox.type = 'checkbox';
-        checkbox.id = `deck-checkbox-${deckName}`;
-        checkbox.className = 'deck-checkbox';
-        checkbox.dataset.deckName = deckName;
-        if (preselectSet.has(deckName)) {
-            checkbox.checked = true;
-        }
+        checkbox.className = 'topic-checkbox';
+        checkbox.dataset.topicKey = topic.key;
+        const preselected = topic.decks.some((d) => preselectSet.has(d));
+        if (preselected) checkbox.checked = true;
         checkbox.addEventListener('click', (e) => e.stopPropagation());
         checkbox.addEventListener('change', () => {
-            onDeckCheckboxChange(deckName, checkbox.checked);
+            onTopicCheckboxChange(topic.key, checkbox.checked);
             updateStartButtonState();
         });
 
         const chevron = document.createElement('span');
         chevron.className = 'deck-chevron';
-        chevron.textContent = hasCategories ? '▶' : '';
+        chevron.textContent = '▶';
 
         const folderIcon = document.createElement('span');
         folderIcon.className = 'deck-folder-icon';
-        folderIcon.textContent = '📁';
+        folderIcon.textContent = '📚';
 
-        const deckTitle = document.createElement('span');
-        deckTitle.className = 'deck-title';
-        deckTitle.textContent = deckName;
+        const titleBlock = document.createElement('span');
+        titleBlock.className = 'topic-title-block';
+        const titleEl = document.createElement('span');
+        titleEl.className = 'topic-title';
+        titleEl.textContent = topic.title;
+        titleBlock.append(titleEl);
+        if (topic.subtitle) {
+            const subtitleEl = document.createElement('span');
+            subtitleEl.className = 'topic-subtitle';
+            subtitleEl.textContent = topic.subtitle;
+            titleBlock.append(subtitleEl);
+        }
 
         const cardCount = document.createElement('span');
-        cardCount.className = 'deck-card-count';
-        cardCount.textContent = `(${totalCards} Karten)`;
+        cardCount.className = 'topic-card-count';
+        cardCount.textContent = `${topic.totalCards} Karten`;
 
         const deleteButton = document.createElement('button');
         deleteButton.className = 'delete-deck';
         deleteButton.textContent = '×';
-        deleteButton.title = 'Deck löschen';
+        deleteButton.title =
+            topic.decks.length > 1 ? 'Topic löschen (alle Quellen)' : 'Deck löschen';
         deleteButton.addEventListener('click', (e) => {
             e.stopPropagation();
-            deleteSavedDeck(deckName);
+            deleteSavedTopic(topic);
         });
 
-        header.append(checkbox);
-        header.append(chevron);
-        header.append(folderIcon);
-        header.append(deckTitle);
-        header.append(cardCount);
-        header.append(deleteButton);
+        header.append(checkbox, chevron, folderIcon, titleBlock, cardCount, deleteButton);
         folder.append(header);
 
-        // Toggle expand/collapse on header click (but not on checkbox or delete)
-        if (hasCategories) {
-            header.addEventListener('click', (e) => {
-                if (e.target === checkbox || e.target === deleteButton) return;
-                folder.classList.toggle('expanded');
+        const catsContainer = document.createElement('div');
+        catsContainer.className = 'topic-categories';
+
+        const sortedCategories = [...topic.categories.entries()].toSorted((a, b) => {
+            if (a[0] === '__uncategorized__') return 1;
+            if (b[0] === '__uncategorized__') return -1;
+            return a[0].localeCompare(b[0], 'de');
+        });
+
+        for (const [catName, counts] of sortedCategories) {
+            const row = document.createElement('div');
+            row.className = 'category-row';
+            row.dataset.topicKey = topic.key;
+            row.dataset.category = catName;
+
+            const catCheckbox = document.createElement('input');
+            catCheckbox.type = 'checkbox';
+            catCheckbox.className = 'category-checkbox';
+            catCheckbox.dataset.topicKey = topic.key;
+            catCheckbox.dataset.category = catName;
+            catCheckbox.addEventListener('change', () => {
+                onCategoryCheckboxChange(topic.key);
+                updateStartButtonState();
             });
-        }
 
-        // --- Category list ---
-        if (hasCategories) {
-            const catContainer = document.createElement('div');
-            catContainer.className = 'deck-categories';
-
-            const sortedCategories = [...categories.entries()].toSorted((a, b) => {
-                if (a[0] === '__uncategorized__') return 1;
-                if (b[0] === '__uncategorized__') return -1;
-                return a[0].localeCompare(b[0], 'de');
-            });
-
-            for (const [catName, count] of sortedCategories) {
-                const catItem = document.createElement('div');
-                catItem.className = 'category-item';
-
-                const catCheckbox = document.createElement('input');
-                catCheckbox.type = 'checkbox';
-                catCheckbox.id = `cat-checkbox-${deckName}-${catName}`;
-                catCheckbox.className = 'category-checkbox';
-                catCheckbox.dataset.deckName = deckName;
-                catCheckbox.dataset.category = catName;
-                catCheckbox.addEventListener('change', () => {
-                    onCategoryCheckboxChange(deckName);
-                    updateStartButtonState();
-                });
-
-                const catLabel = document.createElement('label');
-                catLabel.htmlFor = catCheckbox.id;
-
-                const catIcon = document.createElement('span');
-                catIcon.className = 'category-icon';
-                catIcon.textContent = '🏷️';
-
-                const catText = document.createTextNode(
+            const labelEl = document.createElement('label');
+            labelEl.className = 'category-label';
+            const catIcon = document.createElement('span');
+            catIcon.className = 'category-icon';
+            catIcon.textContent = '🏷️';
+            labelEl.append(catIcon);
+            labelEl.append(
+                document.createTextNode(
                     catName === '__uncategorized__' ? ' Allgemein' : ` ${catName}`
-                );
+                )
+            );
 
-                const catCount = document.createElement('span');
-                catCount.className = 'category-count';
-                catCount.textContent = ` (${count})`;
-
-                catLabel.append(catIcon);
-                catLabel.append(catText);
-                catLabel.append(catCount);
-
-                catItem.append(catCheckbox);
-                catItem.append(catLabel);
-                catContainer.append(catItem);
+            const chips = document.createElement('span');
+            chips.className = 'type-chips';
+            if ((counts.mc || 0) > 0) {
+                chips.append(makeTypeChip('mc', counts.mc, topic.key, catName));
+            }
+            if ((counts.text || 0) > 0) {
+                chips.append(makeTypeChip('text', counts.text, topic.key, catName));
             }
 
-            folder.append(catContainer);
+            row.append(catCheckbox, labelEl, chips);
+            catsContainer.append(row);
         }
+
+        folder.append(catsContainer);
+
+        header.addEventListener('click', (e) => {
+            if (e.target === checkbox || e.target === deleteButton) return;
+            folder.classList.toggle('expanded');
+        });
 
         savedDecksDiv.append(folder);
     }
 
-    // Cascade preselection to category checkboxes (no-op for category-less decks)
-    for (const deckName of preselectSet) {
-        if (savedDecks[deckName]) {
-            onDeckCheckboxChange(deckName, true);
+    // Cascade preselection: topics whose decks were just imported start expanded and fully checked
+    for (const topic of matching) {
+        if (topic.decks.some((d) => preselectSet.has(d))) {
+            onTopicCheckboxChange(topic.key, true);
+            const folder = savedDecksDiv.querySelector(
+                `.topic-folder[data-topic-key="${CSS.escape(topic.key)}"]`
+            );
+            if (folder) folder.classList.add('expanded');
         }
     }
 
@@ -1308,14 +1393,15 @@ function displaySavedDecks(searchTerm = '', preselectDeckNames = []) {
 }
 
 /**
- * Handle deck-level checkbox change: check/uncheck all its category checkboxes
- * @param deckName
- * @param checked
+ * Topic-level checkbox toggles: cascades to all category checkboxes in the topic.
+ * Type chip selection is intentionally preserved across topic check/uncheck.
+ * @param {string} topicKey
+ * @param {boolean} checked
  */
-function onDeckCheckboxChange(deckName, checked) {
-    const escapedName = CSS.escape(deckName);
+function onTopicCheckboxChange(topicKey, checked) {
+    const escaped = CSS.escape(topicKey);
     const catCheckboxes = document.querySelectorAll(
-        `.category-checkbox[data-deck-name="${escapedName}"]`
+        `.category-checkbox[data-topic-key="${escaped}"]`
     );
     for (const cb of catCheckboxes) {
         cb.checked = checked;
@@ -1323,105 +1409,144 @@ function onDeckCheckboxChange(deckName, checked) {
 }
 
 /**
- * Handle category checkbox change: update parent deck checkbox state
- * @param deckName
+ * Category checkbox change: derives parent topic checkbox state (off / indeterminate / on).
+ * @param {string} topicKey
  */
-function onCategoryCheckboxChange(deckName) {
-    const escapedName = CSS.escape(deckName);
+function onCategoryCheckboxChange(topicKey) {
+    const escaped = CSS.escape(topicKey);
     const catCheckboxes = document.querySelectorAll(
-        `.category-checkbox[data-deck-name="${escapedName}"]`
+        `.category-checkbox[data-topic-key="${escaped}"]`
     );
     if (catCheckboxes.length === 0) return;
 
-    const deckCheckbox = document.querySelector(`#deck-checkbox-${CSS.escape(deckName)}`);
-    if (!deckCheckbox) return;
+    const topicCb = document.querySelector(`.topic-checkbox[data-topic-key="${escaped}"]`);
+    if (!topicCb) return;
 
     const checkedCount = [...catCheckboxes].filter((cb) => cb.checked).length;
     if (checkedCount === 0) {
-        deckCheckbox.checked = false;
-        deckCheckbox.indeterminate = false;
+        topicCb.checked = false;
+        topicCb.indeterminate = false;
     } else if (checkedCount === catCheckboxes.length) {
-        deckCheckbox.checked = true;
-        deckCheckbox.indeterminate = false;
+        topicCb.checked = true;
+        topicCb.indeterminate = false;
     } else {
-        deckCheckbox.checked = false;
-        deckCheckbox.indeterminate = true;
+        topicCb.checked = false;
+        topicCb.indeterminate = true;
     }
 }
 
 /**
- * Update the enabled state of the start button based on checkbox selections
+ * Apply a global type filter to every chip on the page.
+ * @param {'all'|'mc'|'text'} filter
+ */
+function applyGlobalTypeFilter(filter) {
+    const chips = document.querySelectorAll('.type-chip');
+    for (const chip of chips) {
+        const matches = filter === 'all' || chip.dataset.type === filter;
+        chip.classList.toggle('selected', matches);
+        chip.setAttribute('aria-pressed', String(matches));
+    }
+    for (const btn of document.querySelectorAll('.type-filter-btn')) {
+        const active = btn.dataset.filter === filter;
+        btn.classList.toggle('selected', active);
+        btn.setAttribute('aria-pressed', String(active));
+    }
+    updateStartButtonState();
+}
+
+/**
+ * Whether at least one (category, type) pair is selected anywhere.
+ * @returns {boolean}
+ */
+function hasAnyActiveSelection() {
+    for (const cb of document.querySelectorAll('.category-checkbox:checked')) {
+        const topicKey = cb.dataset.topicKey;
+        const cat = cb.dataset.category;
+        const chips = document.querySelectorAll(
+            `.type-chip[data-topic-key="${CSS.escape(topicKey)}"][data-category="${CSS.escape(cat)}"]`
+        );
+        // Category contributes if it has any selected chip (or no chips at all = degenerate, treat as active).
+        if (chips.length === 0) return true;
+        for (const chip of chips) {
+            if (chip.classList.contains('selected')) return true;
+        }
+    }
+    return false;
+}
+
+/**
+ * Update the enabled state of the start button based on the topic/category/type tree.
  */
 function updateStartButtonState() {
-    const deckChecked = document.querySelectorAll('.deck-checkbox:checked').length > 0;
-    const deckIndeterminate = [...document.querySelectorAll('.deck-checkbox')].some(
-        (cb) => cb.indeterminate
-    );
-    const catChecked = document.querySelectorAll('.category-checkbox:checked').length > 0;
-    startSelectedDecksBtn.disabled = !(deckChecked || deckIndeterminate || catChecked);
+    startSelectedDecksBtn.disabled = !hasAnyActiveSelection();
 }
 
 /**
- * Get selected categories per deck from the UI
- * @returns {Map<string, Set<string>|null>} Map of deckName → Set of selected categories (null = all cards)
+ * Read the current UI selection and produce a per-deck filter.
+ * The type allow-list is tracked **per category** (not per topic), so e.g.
+ * "MC of category A + Text of category B" filters precisely those cards.
+ * @returns {Map<string, Map<string, Set<'mc'|'text'>>>}
+ *   deckName → (catName → set of allowed types). Empty Map = nothing selected.
  */
-function getSelectedCategoriesPerDeck() {
-    const selection = new Map();
-
-    const deckCheckboxes = document.querySelectorAll('.deck-checkbox');
-    for (const deckCb of deckCheckboxes) {
-        const deckName = deckCb.dataset.deckName;
+function getSelectedFilters() {
+    const result = new Map();
+    const topics = buildTopics();
+    for (const topic of topics.values()) {
+        const escaped = CSS.escape(topic.key);
         const catCheckboxes = document.querySelectorAll(
-            `.category-checkbox[data-deck-name="${CSS.escape(deckName)}"]`
+            `.category-checkbox[data-topic-key="${escaped}"]`
         );
-
-        if (catCheckboxes.length === 0) {
-            // No categories in this deck — select all if deck is checked
-            if (deckCb.checked) {
-                selection.set(deckName, null);
+        const perCategory = new Map();
+        for (const catCb of catCheckboxes) {
+            if (!catCb.checked) continue;
+            const catName = catCb.dataset.category;
+            const chips = document.querySelectorAll(
+                `.type-chip[data-topic-key="${escaped}"][data-category="${CSS.escape(catName)}"]`
+            );
+            if (chips.length === 0) {
+                // Degenerate: category checked but no chips rendered — include both types.
+                perCategory.set(catName, new Set(['mc', 'text']));
+                continue;
             }
-        } else if (deckCb.checked && !deckCb.indeterminate) {
-            // Deck fully checked — all cards
-            selection.set(deckName, null);
-        } else {
-            // Check individual category selections
-            const selectedCats = new Set();
-            for (const catCb of catCheckboxes) {
-                if (catCb.checked) {
-                    selectedCats.add(catCb.dataset.category);
-                }
+            const types = new Set();
+            for (const chip of chips) {
+                if (chip.classList.contains('selected')) types.add(chip.dataset.type);
             }
-            if (selectedCats.size > 0) {
-                selection.set(deckName, selectedCats);
-            }
+            if (types.size === 0) continue;
+            perCategory.set(catName, types);
+        }
+        if (perCategory.size === 0) continue;
+        for (const deckName of topic.decks) {
+            result.set(deckName, perCategory);
         }
     }
-
-    return selection;
+    return result;
 }
 
 /**
- * Filter cards from a deck by selected categories
- * @param cards
- * @param selectedCategories
+ * Filter a deck's cards by a per-category type allow-list.
+ * A card passes iff at least one of its categories is selected AND that
+ * category's allow-list contains the card's type.
+ * @param {Array<object>} cards
+ * @param {Map<string, Set<'mc'|'text'>>} perCategory
  */
-function filterCardsByCategories(cards, selectedCategories) {
-    if (selectedCategories === null) return cards; // null = all cards
+function filterCards(cards, perCategory) {
+    if (!perCategory || perCategory.size === 0) return [];
     return cards.filter((card) => {
-        if (
-            selectedCategories.has('__uncategorized__') &&
-            (!card.categories || card.categories.length === 0)
-        )
-            return true;
-        if (card.categories && card.categories.length > 0) {
-            return card.categories.some((cat) => selectedCategories.has(cat));
-        }
-        return false;
+        const t = cardType(card);
+        const cardCats =
+            card.categories && card.categories.length > 0
+                ? card.categories
+                : ['__uncategorized__'];
+        return cardCats.some((c) => {
+            const allowed = perCategory.get(c);
+            return allowed && allowed.has(t);
+        });
     });
 }
 
 /**
- * Start quiz with selected decks
+ * Start quiz with the current selection (topics → categories → types).
  */
 function startSelectedDecks() {
     // Lesemodus: open book view instead of quiz
@@ -1430,20 +1555,18 @@ function startSelectedDecks() {
         return;
     }
 
-    const selectedPerDeck = getSelectedCategoriesPerDeck();
+    const selectedPerDeck = getSelectedFilters();
     if (selectedPerDeck.size === 0) return;
 
     const selectedDeckNames = [...selectedPerDeck.keys()];
     activeDecks = selectedDeckNames;
 
-    // Update the app title
     updateAppTitle(selectedDeckNames);
 
-    // Merge selected decks, filtered by categories
     let mergedCards = [];
-    for (const [deckName, selectedCats] of selectedPerDeck.entries()) {
+    for (const [deckName, filter] of selectedPerDeck.entries()) {
         if (savedDecks[deckName]) {
-            const filtered = filterCardsByCategories(savedDecks[deckName].cards, selectedCats);
+            const filtered = filterCards(savedDecks[deckName].cards, filter);
             const cardsWithSource = filtered.map((card) => ({
                 ...card,
                 sourceDeck: deckName,
@@ -1452,27 +1575,25 @@ function startSelectedDecks() {
         }
     }
 
-    // Initialize statistics tracking for each deck
+    if (mergedCards.length === 0) return;
+
     resetDeckStats(selectedDeckNames, selectedPerDeck);
 
-    // Initialize the quiz with merged cards
     initializeQuiz(mergedCards);
 }
 
 /**
  * Reset deck statistics for the given deck names
  * @param {Array<string>} deckNames - Names of decks to reset stats for
- * @param {Map<string, Set<string>|null>} [selectedPerDeck] - Category selections per deck
+ * @param {Map<string, {categories: Set<string>, types: Set<'mc'|'text'>}>} [selectedPerDeck] - Filters per deck
  */
 function resetDeckStats(deckNames, selectedPerDeck) {
     deckStats = {};
     for (const deckName of deckNames) {
-        let total = savedDecks[deckName].cards.length;
+        const allCards = savedDecks[deckName].cards;
+        let total = allCards.length;
         if (selectedPerDeck && selectedPerDeck.has(deckName)) {
-            const selectedCats = selectedPerDeck.get(deckName);
-            if (selectedCats !== null) {
-                total = filterCardsByCategories(savedDecks[deckName].cards, selectedCats).length;
-            }
+            total = filterCards(allCards, selectedPerDeck.get(deckName)).length;
         }
         deckStats[deckName] = {
             correct: 0,
@@ -1483,10 +1604,10 @@ function resetDeckStats(deckNames, selectedPerDeck) {
 }
 
 /**
- * Select all deck and category checkboxes
+ * Select all topic and category checkboxes (chips remain in their current state).
  */
 function selectAllDecks() {
-    for (const cb of document.querySelectorAll('.deck-checkbox')) {
+    for (const cb of document.querySelectorAll('.topic-checkbox')) {
         cb.checked = true;
         cb.indeterminate = false;
     }
@@ -1497,10 +1618,10 @@ function selectAllDecks() {
 }
 
 /**
- * Deselect all deck and category checkboxes
+ * Deselect all topic and category checkboxes (chips remain in their current state).
  */
 function deselectAllDecks() {
-    for (const cb of document.querySelectorAll('.deck-checkbox')) {
+    for (const cb of document.querySelectorAll('.topic-checkbox')) {
         cb.checked = false;
         cb.indeterminate = false;
     }
@@ -1529,6 +1650,38 @@ function deleteSavedDeck(deckName) {
 
         displaySavedDecks();
     }
+}
+
+/**
+ * Delete an entire topic (i.e. every saved deck that is grouped under it).
+ * For single-deck topics this is equivalent to `deleteSavedDeck`.
+ * @param {{title: string, decks: string[]}} topic
+ */
+function deleteSavedTopic(topic) {
+    if (!topic || !Array.isArray(topic.decks) || topic.decks.length === 0) return;
+    if (topic.decks.length === 1) {
+        deleteSavedDeck(topic.decks[0]);
+        return;
+    }
+    const sourceList = topic.decks.map((d) => `• ${d}`).join('\n');
+    const msg = `Möchtest du das Thema "${topic.title}" mit allen ${topic.decks.length} Quelldateien wirklich löschen?\n\n${sourceList}`;
+    if (!confirm(msg)) return;
+    let incorrectChanged = false;
+    for (const deckName of topic.decks) {
+        delete savedDecks[deckName];
+        if (previousIncorrectIndices[deckName]) {
+            delete previousIncorrectIndices[deckName];
+            incorrectChanged = true;
+        }
+    }
+    localStorage.setItem('flashcardDecks', JSON.stringify(savedDecks));
+    if (incorrectChanged) {
+        localStorage.setItem(
+            'flashcardIncorrectIndices',
+            JSON.stringify(previousIncorrectIndices)
+        );
+    }
+    displaySavedDecks();
 }
 
 // ============================================================================
@@ -3174,15 +3327,15 @@ function escapeAnkiField(text) {
  * Open book view for cards selected via deck/category checkboxes (Lesemodus)
  */
 function startBookViewFromDecks() {
-    const selectedPerDeck = getSelectedCategoriesPerDeck();
+    const selectedPerDeck = getSelectedFilters();
     if (selectedPerDeck.size === 0) return;
 
     const selectedDeckNames = [...selectedPerDeck.keys()];
 
     let allCards = [];
-    for (const [deckName, selectedCats] of selectedPerDeck.entries()) {
+    for (const [deckName, filter] of selectedPerDeck.entries()) {
         if (savedDecks[deckName]) {
-            const filtered = filterCardsByCategories(savedDecks[deckName].cards, selectedCats);
+            const filtered = filterCards(savedDecks[deckName].cards, filter);
             const cardsWithSource = filtered.map((card) => ({ ...card, sourceDeck: deckName }));
             allCards = [...allCards, ...cardsWithSource];
         }
