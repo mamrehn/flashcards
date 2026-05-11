@@ -76,6 +76,27 @@ let previousIncorrectIndices = {};
 /** @type {Array<number>} Selected option indices for multiple choice questions */
 let selectedOptionIndices = [];
 
+/** @type {Map<number, number>} Matching pairs: leftIndex → shuffledRightIndex */
+let matchingPairs = new Map();
+
+/** @type {Array<{original: number, text: string}>} Shuffled right column items for matching */
+let shuffledRightItems = [];
+
+/** @type {number|null} Currently selected left item index for matching (null if none) */
+let selectedLeftIndex = null;
+
+/** @type {HTMLElement[]} DOM element references for left column items, indexed by leftIndex */
+let leftItemEls = [];
+
+/** @type {HTMLElement[]} DOM element references for right column items, indexed by shuffledRightIndex */
+let rightItemEls = [];
+
+/** @type {number[]} Display order of unpaired left indices (append on unlink to move to bottom) */
+let unpairedLeftOrder = [];
+
+/** @type {number[]} Display order of unpaired right shuffled indices */
+let unpairedRightOrder = [];
+
 /** @type {{[deckName: string]: {correct: number, incorrect: number, total: number}}} Statistics per deck */
 let deckStats = {};
 
@@ -144,6 +165,13 @@ let bookViewTitle;
 let undoBtn;
 let exportBackupBtn;
 let srStatsDashboard;
+let matchingContainer;
+let matchingResultContainer;
+let matchingPairedSection = null;
+let matchingUnpairedSection = null;
+let matchingUnpairedLeftCol = null;
+let matchingUnpairedRightCol = null;
+let matchingProgressEl = null;
 
 /** @type {Array<object>} Undo stack for going back during quiz */
 let undoStack = [];
@@ -213,6 +241,8 @@ function initializeApp() {
     undoBtn = document.querySelector('#undo-btn');
     exportBackupBtn = document.querySelector('#export-backup-btn');
     srStatsDashboard = document.querySelector('#sr-stats-dashboard');
+    matchingContainer = document.querySelector('#matching-container');
+    matchingResultContainer = document.querySelector('#matching-result-container');
 
     // Set up event listeners with debouncing/throttling for performance
     fileInput.addEventListener('change', handleFileUpload);
@@ -1018,6 +1048,17 @@ function validateCards(cards) {
         if (card.question && card.answer) {
             return true;
         }
+        // Check association format (question + pairs)
+        if (
+            card.question &&
+            Array.isArray(card.pairs) &&
+            card.pairs.length >= 2 &&
+            card.pairs.every(
+                (p) => p && typeof p.left === 'string' && typeof p.right === 'string'
+            )
+        ) {
+            return true;
+        }
         // Check multiple choice format (question + options + correct answers)
         if (
             card.question &&
@@ -1122,11 +1163,12 @@ function updateIncorrectIndices() {
 // ============================================================================
 
 /**
- * Classify a card as multiple-choice or free-text based on shape.
+ * Classify a card as multiple-choice, free-text, or association based on shape.
  * @param {object} card
- * @returns {'mc'|'text'}
+ * @returns {'mc'|'text'|'association'}
  */
 function cardType(card) {
+    if (Array.isArray(card.pairs)) return 'association';
     return Array.isArray(card.options) && Array.isArray(card.correct) ? 'mc' : 'text';
 }
 
@@ -1140,7 +1182,7 @@ function cardType(card) {
  *   subtitle: string,
  *   decks: string[],
  *   totalCards: number,
- *   categories: Map<string, {mc: number, text: number}>,
+ *   categories: Map<string, {mc: number, text: number, association: number}>,
  * }>}
  */
 function buildTopics() {
@@ -1173,7 +1215,7 @@ function buildTopics() {
             for (const cat of cats) {
                 let agg = topic.categories.get(cat);
                 if (!agg) {
-                    agg = { mc: 0, text: 0 };
+                    agg = { mc: 0, text: 0, association: 0 };
                     topic.categories.set(cat, agg);
                 }
                 agg[type]++;
@@ -1198,11 +1240,20 @@ function makeTypeChip(type, count, topicKey, catName) {
     chip.dataset.type = type;
     chip.dataset.topicKey = topicKey;
     chip.dataset.category = catName;
-    chip.textContent = `${type === 'mc' ? 'MC' : 'Text'} ${count}`;
-    chip.title =
-        type === 'mc'
-            ? 'Multiple-Choice-Karten in dieser Kategorie ein-/ausblenden'
-            : 'Freitext-Karten in dieser Kategorie ein-/ausblenden';
+    let chipLabel;
+    let chipTitle;
+    if (type === 'mc') {
+        chipLabel = 'MC';
+        chipTitle = 'Multiple-Choice-Karten in dieser Kategorie ein-/ausblenden';
+    } else if (type === 'association') {
+        chipLabel = 'ZO';
+        chipTitle = 'Zuordnungsaufgaben in dieser Kategorie ein-/ausblenden';
+    } else {
+        chipLabel = 'Text';
+        chipTitle = 'Freitext-Karten in dieser Kategorie ein-/ausblenden';
+    }
+    chip.textContent = `${chipLabel} ${count}`;
+    chip.title = chipTitle;
     chip.setAttribute('aria-pressed', 'true');
     chip.addEventListener('click', (e) => {
         e.stopPropagation();
@@ -1372,6 +1423,9 @@ function displaySavedDecks(searchTerm = '', preselectDeckNames = []) {
             if ((counts.text || 0) > 0) {
                 chips.append(makeTypeChip('text', counts.text, topic.key, catName));
             }
+            if ((counts.association || 0) > 0) {
+                chips.append(makeTypeChip('association', counts.association, topic.key, catName));
+            }
 
             row.append(catCheckbox, labelEl, chips);
             catsContainer.append(row);
@@ -1523,7 +1577,7 @@ function getSelectedFilters() {
             );
             if (chips.length === 0) {
                 // Degenerate: category checked but no chips rendered — include both types.
-                perCategory.set(catName, new Set(['mc', 'text']));
+                perCategory.set(catName, new Set(['mc', 'text', 'association']));
                 continue;
             }
             const types = new Set();
@@ -1801,7 +1855,10 @@ function prioritizeIncorrectCards() {
                     (c.answer === card.answer ||
                         (Array.isArray(c.options) &&
                             Array.isArray(card.options) &&
-                            JSON.stringify(c.options) === JSON.stringify(card.options)))
+                            JSON.stringify(c.options) === JSON.stringify(card.options)) ||
+                        (Array.isArray(c.pairs) &&
+                            Array.isArray(card.pairs) &&
+                            JSON.stringify(c.pairs) === JSON.stringify(card.pairs)))
             );
 
             if (
@@ -1858,6 +1915,13 @@ function showCurrentCard() {
 
     isAnswered = false;
     selectedOptionIndices = []; // Reset selected options
+    matchingPairs = new Map();  // Reset matching state
+    selectedLeftIndex = null;
+    shuffledRightItems = [];
+    leftItemEls = [];
+    rightItemEls = [];
+    unpairedLeftOrder = [];
+    unpairedRightOrder = [];
     const card = cards[currentCardIndex];
 
     // Check if we're currently showing the back side
@@ -1918,6 +1982,97 @@ function syncOptionSelection(checkbox, optionItem, selectedOptionIndices, origin
     }
 }
 
+// ============================================================================
+// Association (Matching) Handlers
+// ============================================================================
+
+function renderMatchingPairs() {
+    const card = cards[currentCardIndex];
+    if (!card || !Array.isArray(card.pairs)) return;
+
+    // Clear all containers (items are moved, not destroyed — event listeners preserved)
+    matchingPairedSection.innerHTML = '';
+    matchingUnpairedLeftCol.innerHTML = '';
+    matchingUnpairedRightCol.innerHTML = '';
+
+    // Populate unpaired columns in their current display order
+    for (const lIdx of unpairedLeftOrder) {
+        const el = leftItemEls[lIdx];
+        el.className = 'matching-item';
+        if (lIdx === selectedLeftIndex) el.classList.add('selected');
+        matchingUnpairedLeftCol.append(el);
+    }
+    for (const rIdx of unpairedRightOrder) {
+        const el = rightItemEls[rIdx];
+        el.className = 'matching-item';
+        matchingUnpairedRightCol.append(el);
+    }
+
+    // Build paired rows (sorted by left index for visual stability)
+    const sortedPairs = [...matchingPairs.entries()].toSorted(([a], [b]) => a - b);
+    for (const [lIdx, rIdx] of sortedPairs) {
+        const row = document.createElement('div');
+        row.className = 'matching-pair-row';
+
+        const leftEl = leftItemEls[lIdx];
+        leftEl.className = 'matching-item paired';
+
+        const unlinkBtn = document.createElement('button');
+        unlinkBtn.type = 'button';
+        unlinkBtn.className = 'matching-unlink-btn';
+        unlinkBtn.setAttribute('aria-label', 'Verknüpfung trennen');
+        const lIdx_ = lIdx;
+        unlinkBtn.addEventListener('click', () => unlinkPair(lIdx_));
+
+        const rightEl = rightItemEls[rIdx];
+        rightEl.className = 'matching-item paired';
+
+        row.append(leftEl, unlinkBtn, rightEl);
+        matchingPairedSection.append(row);
+    }
+
+    // Show/hide unpaired section when all items are paired
+    const hasUnpaired = unpairedLeftOrder.length > 0 || unpairedRightOrder.length > 0;
+    if (matchingUnpairedSection) {
+        matchingUnpairedSection.classList.toggle('hidden', !hasUnpaired);
+    }
+
+    if (matchingProgressEl) {
+        matchingProgressEl.textContent = `${matchingPairs.size} von ${card.pairs.length} Paaren zugeordnet`;
+    }
+}
+
+function handleMatchingLeftClick(leftIndex) {
+    if (isAnswered) return;
+    if (matchingPairs.has(leftIndex)) return; // already paired — use unlink button
+    selectedLeftIndex = selectedLeftIndex === leftIndex ? null : leftIndex;
+    renderMatchingPairs();
+}
+
+function handleMatchingRightClick(shuffledRightIndex) {
+    if (isAnswered) return;
+    if (selectedLeftIndex === null) return;
+    // Ignore if this right item is already paired
+    if ([...matchingPairs.values()].includes(shuffledRightIndex)) return;
+    // Create pair: move both items out of unpaired lists
+    matchingPairs.set(selectedLeftIndex, shuffledRightIndex);
+    unpairedLeftOrder = unpairedLeftOrder.filter((i) => i !== selectedLeftIndex);
+    unpairedRightOrder = unpairedRightOrder.filter((k) => k !== shuffledRightIndex);
+    selectedLeftIndex = null;
+    renderMatchingPairs();
+}
+
+function unlinkPair(leftIndex) {
+    if (isAnswered) return;
+    const rIdx = matchingPairs.get(leftIndex);
+    if (rIdx === undefined) return;
+    matchingPairs.delete(leftIndex);
+    // Append to bottom of respective unpaired lists
+    unpairedLeftOrder.push(leftIndex);
+    unpairedRightOrder.push(rIdx);
+    renderMatchingPairs();
+}
+
 /**
  * Update the card content with new question data
  * @param {object} card - The card object to display
@@ -1930,10 +2085,130 @@ function updateCardContent(card) {
     // Show source deck info
     sourceDeckDisplay.textContent = `Quelle: ${card.sourceDeck}`;
 
-    // Check if current card is multiple choice or standard
-    const isMultipleChoice = Array.isArray(card.options) && card.options.length > 0;
+    // Check if current card is multiple choice, association, or standard
+    const isMatching = Array.isArray(card.pairs) && card.pairs.length > 0;
+    const isMultipleChoice = !isMatching && Array.isArray(card.options) && card.options.length > 0;
 
-    if (isMultipleChoice) {
+    if (isMatching) {
+        // Handle association / matching question
+        userAnswerInput.classList.add('hidden');
+        optionsContainer.classList.add('hidden');
+        showAnswerBtn.classList.remove('hidden');
+
+        // Reset matching state for this new card
+        matchingPairs = new Map();
+        selectedLeftIndex = null;
+        leftItemEls = [];
+        rightItemEls = [];
+        unpairedLeftOrder = [];
+        unpairedRightOrder = [];
+
+        // Build shuffled right-column items (Fisher-Yates)
+        shuffledRightItems = card.pairs.map((p, i) => ({ original: i, text: p.right }));
+        for (let i = shuffledRightItems.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [shuffledRightItems[i], shuffledRightItems[j]] = [
+                shuffledRightItems[j],
+                shuffledRightItems[i],
+            ];
+        }
+
+        // Initial ordering: left in original order, right in shuffled order
+        unpairedLeftOrder = card.pairs.map((_, i) => i);
+        unpairedRightOrder = shuffledRightItems.map((_, k) => k);
+
+        // Build matching UI skeleton
+        matchingContainer.innerHTML = '';
+
+        // Paired section (top — empty initially, grows as pairs are made)
+        matchingPairedSection = document.createElement('div');
+        matchingPairedSection.className = 'matching-paired-section';
+        matchingContainer.append(matchingPairedSection);
+
+        // Unpaired section (column headers + two-column grid)
+        matchingUnpairedSection = document.createElement('div');
+        matchingUnpairedSection.className = 'matching-unpaired-section';
+
+        const colHeaders = document.createElement('div');
+        colHeaders.className = 'matching-col-headers';
+        const leftHeader = document.createElement('div');
+        leftHeader.className = 'matching-col-header';
+        leftHeader.textContent = 'Begriffe';
+        const rightHeader = document.createElement('div');
+        rightHeader.className = 'matching-col-header';
+        rightHeader.textContent = 'Zuordnung';
+        colHeaders.append(leftHeader, rightHeader);
+        matchingUnpairedSection.append(colHeaders);
+
+        const unpairedCols = document.createElement('div');
+        unpairedCols.className = 'matching-unpaired-cols';
+
+        matchingUnpairedLeftCol = document.createElement('div');
+        matchingUnpairedLeftCol.className = 'matching-col';
+        matchingUnpairedLeftCol.id = 'matching-left-col';
+
+        matchingUnpairedRightCol = document.createElement('div');
+        matchingUnpairedRightCol.className = 'matching-col';
+        matchingUnpairedRightCol.id = 'matching-right-col';
+
+        unpairedCols.append(matchingUnpairedLeftCol, matchingUnpairedRightCol);
+        matchingUnpairedSection.append(unpairedCols);
+        matchingContainer.append(matchingUnpairedSection);
+
+        // Progress line
+        matchingProgressEl = document.createElement('div');
+        matchingProgressEl.className = 'matching-progress';
+        matchingProgressEl.id = 'matching-progress';
+        matchingContainer.append(matchingProgressEl);
+
+        // Pre-create left item elements (placed by renderMatchingPairs)
+        for (let i = 0; i < card.pairs.length; i++) {
+            const item = document.createElement('div');
+            item.className = 'matching-item';
+            item.dataset.leftIndex = i;
+            item.setAttribute('tabindex', '0');
+            item.setAttribute('role', 'button');
+            item.setAttribute('aria-label', `Begriff: ${card.pairs[i].left}`);
+            item.textContent = card.pairs[i].left;
+            item.addEventListener('click', () => handleMatchingLeftClick(i));
+            item.addEventListener('keydown', (e) => {
+                if (e.key === ' ' || e.key === 'Enter') {
+                    e.preventDefault();
+                    handleMatchingLeftClick(i);
+                }
+            });
+            leftItemEls.push(item);
+        }
+
+        // Pre-create right item elements (placed by renderMatchingPairs)
+        for (const [k, rightItem] of shuffledRightItems.entries()) {
+            const item = document.createElement('div');
+            item.className = 'matching-item';
+            item.dataset.rightShuffledIndex = k;
+            item.setAttribute('tabindex', '0');
+            item.setAttribute('role', 'button');
+            item.setAttribute('aria-label', `Zuordnung: ${rightItem.text}`);
+            item.textContent = rightItem.text;
+            item.addEventListener('click', () => handleMatchingRightClick(k));
+            item.addEventListener('keydown', (e) => {
+                if (e.key === ' ' || e.key === 'Enter') {
+                    e.preventDefault();
+                    handleMatchingRightClick(k);
+                }
+            });
+            rightItemEls.push(item);
+        }
+
+        // Place all items in initial positions
+        renderMatchingPairs();
+
+        matchingContainer.classList.remove('hidden');
+
+        // Back-side containers
+        standardAnswerContainer.classList.add('hidden');
+        mcCorrectAnswerContainer.classList.add('hidden');
+        matchingResultContainer.classList.add('hidden');
+    } else if (isMultipleChoice) {
         // Handle multiple choice question
         userAnswerInput.classList.add('hidden');
         optionsContainer.classList.remove('hidden');
@@ -2049,6 +2324,8 @@ function updateCardContent(card) {
     optionsContainerBack.classList.add('hidden');
     textExplanationContainer.classList.add('hidden');
     textExplanationContent.classList.add('hidden');
+    matchingResultContainer.classList.add('hidden');
+    if (!isMatching) matchingContainer.classList.add('hidden');
 
     // Reset explanation label and animation
     const explanationLabel = document.querySelector('.explanation-label');
@@ -2084,7 +2361,9 @@ function updateCardContent(card) {
 
     // Focus management: auto-focus the appropriate element
     setTimeout(() => {
-        if (!isMultipleChoice && !userAnswerInput.classList.contains('hidden')) {
+        if (isMatching) {
+            showAnswerBtn.focus({ preventScroll: true });
+        } else if (!isMultipleChoice && !userAnswerInput.classList.contains('hidden')) {
             userAnswerInput.focus({ preventScroll: true });
         } else if (isMultipleChoice) {
             showAnswerBtn.focus({ preventScroll: true });
@@ -2226,9 +2505,64 @@ function showAnswer() {
     undoBtn.disabled = false;
 
     const card = cards[currentCardIndex];
-    const isMultipleChoice = Array.isArray(card.options) && Array.isArray(card.correct);
+    const isMatching = Array.isArray(card.pairs) && card.pairs.length > 0;
+    const isMultipleChoice = !isMatching && Array.isArray(card.options) && Array.isArray(card.correct);
 
-    if (isMultipleChoice) {
+    if (isMatching) {
+        // Evaluate matching pairs
+        let correctPairCount = 0;
+        matchingResultContainer.innerHTML = '';
+
+        for (let i = 0; i < card.pairs.length; i++) {
+            const pairedShuffledIdx = matchingPairs.get(i);
+            const pairedOriginalIdx =
+                pairedShuffledIdx === undefined
+                    ? undefined
+                    : shuffledRightItems[pairedShuffledIdx]?.original;
+            const isCorrect = pairedOriginalIdx === i;
+            if (isCorrect) correctPairCount++;
+
+            const row = document.createElement('div');
+            row.className = `matching-result-pair ${isCorrect ? 'correct' : 'incorrect'}`;
+
+            const icon = document.createElement('span');
+            icon.className = 'matching-result-icon';
+            icon.textContent = isCorrect ? '✓' : '✗';
+
+            const textEl = document.createElement('span');
+            textEl.className = 'matching-result-text';
+            textEl.textContent = `${card.pairs[i].left} ↔ `;
+
+            const pairedText =
+                pairedShuffledIdx === undefined
+                    ? '(nicht zugeordnet)'
+                    : shuffledRightItems[pairedShuffledIdx]?.text;
+
+            const pairedSpan = document.createElement('span');
+            pairedSpan.textContent = pairedText;
+            textEl.append(pairedSpan);
+
+            row.append(icon, textEl);
+
+            if (!isCorrect) {
+                const correction = document.createElement('div');
+                correction.className = 'matching-correction';
+                correction.textContent = `Richtig: ${card.pairs[i].right}`;
+                row.append(correction);
+            }
+
+            matchingResultContainer.append(row);
+        }
+
+        matchingResultContainer.classList.remove('hidden');
+
+        const score = card.pairs.length > 0 ? correctPairCount / card.pairs.length : 0;
+        markAnswer(score);
+
+        markCorrectBtn.style.display = 'none';
+        markIncorrectBtn.style.display = 'none';
+        nextCardBtn.style.display = 'inline-block';
+    } else if (isMultipleChoice) {
         // For multiple choice questions
         // Clone options to back side for color-coded feedback
         optionsContainerBack.innerHTML = optionsContainer.innerHTML;
@@ -2411,7 +2745,10 @@ function markAnswer(scoreOrBool) {
                 (c.answer === card.answer ||
                     (Array.isArray(c.options) &&
                         Array.isArray(card.options) &&
-                        JSON.stringify(c.options) === JSON.stringify(card.options)))
+                        JSON.stringify(c.options) === JSON.stringify(card.options)) ||
+                    (Array.isArray(c.pairs) &&
+                        Array.isArray(card.pairs) &&
+                        JSON.stringify(c.pairs) === JSON.stringify(card.pairs)))
         );
 
         if (originalIndex !== -1) {
@@ -2718,7 +3055,10 @@ function isCardIncorrectFromPreviousSession(card) {
             (c.answer === card.answer ||
                 (Array.isArray(c.options) &&
                     Array.isArray(card.options) &&
-                    JSON.stringify(c.options) === JSON.stringify(card.options)))
+                    JSON.stringify(c.options) === JSON.stringify(card.options)) ||
+                (Array.isArray(c.pairs) &&
+                    Array.isArray(card.pairs) &&
+                    JSON.stringify(c.pairs) === JSON.stringify(card.pairs)))
     );
 
     return originalIndex !== -1 && previousIncorrectIndices[deckName].includes(originalIndex);
@@ -3171,6 +3511,12 @@ function openBookView(cardsToShow, title) {
                 if (card.explanations && card.explanations[String(j)]) {
                     html += `<div class="book-option-explanation">${sanitizeHTML(card.explanations[String(j)])}</div>`;
                 }
+            }
+            html += '</div>';
+        } else if (card.pairs && Array.isArray(card.pairs)) {
+            html += '<div class="book-card-pairs">';
+            for (const pair of card.pairs) {
+                html += `<div class="book-pair-row"><span class="book-pair-left">${sanitizeHTML(pair.left)}</span><span class="book-pair-arrow">↔</span><span class="book-pair-right">${sanitizeHTML(pair.right)}</span></div>`;
             }
             html += '</div>';
         } else {

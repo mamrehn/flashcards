@@ -264,6 +264,10 @@ body {
     background-color: var(--success, #2ecc71);
 }
 
+.type-chip-association.selected {
+    background-color: #8e44ad;
+}
+
 /* Global Type Filter Toolbar */
 .type-filter-toolbar {
     display: flex;
@@ -1863,6 +1867,281 @@ body {
     background-color: var(--bg-color);
     border-radius: 0 4px 4px 0;
     line-height: 1.4;
+}
+
+/* ============================================================================
+   Matching / Association Card Styles
+   ============================================================================ */
+
+.matching-container {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    margin-top: 0.5rem;
+    width: 100%;
+    overflow-y: auto;
+}
+
+/* --- Paired rows (top section) --- */
+
+.matching-paired-section {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+}
+
+.matching-pair-row {
+    display: grid;
+    grid-template-columns: 1fr auto 1fr;
+    align-items: center;
+    gap: 0;
+}
+
+/* --- Unlink connector button --- */
+
+.matching-unlink-btn {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 2.4rem;
+    flex-shrink: 0;
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 0.3rem 0;
+    color: transparent; /* × hidden until hover */
+}
+
+/* Horizontal connecting line */
+.matching-unlink-btn::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 50%;
+    transform: translateY(-50%);
+    height: 2px;
+    background-color: var(--input-border);
+    border-radius: 1px;
+    transition: background-color 0.15s ease;
+}
+
+/* × label floats over the line */
+.matching-unlink-btn::after {
+    content: '✕';
+    position: relative;
+    z-index: 1;
+    font-size: 0.72rem;
+    line-height: 1;
+    background-color: var(--surface-color);
+    padding: 0 0.18rem;
+    color: var(--text-muted, #888);
+    opacity: 0.45;
+    border-radius: 2px;
+    transition: opacity 0.15s ease, color 0.15s ease;
+}
+
+.matching-unlink-btn:hover::before {
+    background-color: var(--text-muted, #888);
+}
+
+.matching-unlink-btn:hover::after {
+    opacity: 1;
+    color: var(--text-color);
+}
+
+.matching-unlink-btn:focus-visible {
+    outline: 2px solid var(--primary);
+    outline-offset: 2px;
+    border-radius: 2px;
+}
+
+/* --- Unpaired section (column headers + two-column grid) --- */
+
+.matching-unpaired-section {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+}
+
+/* Separator between paired and unpaired sections */
+.matching-paired-section:not(:empty) + .matching-unpaired-section {
+    padding-top: 0.35rem;
+    border-top: 1px solid var(--input-border);
+    margin-top: 0.1rem;
+}
+
+.matching-col-headers {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.5rem;
+    padding: 0 0.25rem;
+}
+
+.matching-col-header {
+    font-size: 0.78rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--text-muted, #888);
+    text-align: center;
+}
+
+.matching-unpaired-cols {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.5rem;
+    align-items: start;
+}
+
+.matching-col {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+}
+
+/* --- Shared item styles --- */
+
+.matching-item {
+    padding: 0.55rem 0.75rem;
+    border-radius: 8px;
+    border: 2px solid var(--input-border);
+    background-color: var(--surface-color);
+    color: var(--text-color);
+    cursor: pointer;
+    user-select: none;
+    font-size: 0.92rem;
+    line-height: 1.35;
+    transition:
+        border-color 0.15s ease,
+        background-color 0.15s ease,
+        transform 0.1s ease;
+    text-align: center;
+}
+
+.matching-item:hover {
+    border-color: var(--primary);
+    transform: translateY(-1px);
+}
+
+.matching-item:focus-visible {
+    outline: 2px solid var(--primary);
+    outline-offset: 2px;
+}
+
+/* Selected (waiting to be paired) */
+.matching-item.selected {
+    border-color: var(--primary);
+    background-color: rgba(74, 111, 165, 0.13);
+    color: var(--primary);
+    font-weight: 600;
+}
+
+/* Paired state — subtle tint, non-interactive cursor */
+.matching-item.paired {
+    border-color: var(--primary);
+    background-color: rgba(74, 111, 165, 0.07);
+    cursor: default;
+    transform: none;
+}
+
+.matching-item.paired:hover {
+    border-color: var(--primary);
+    transform: none;
+}
+
+.matching-progress {
+    font-size: 0.82rem;
+    color: var(--text-muted, #888);
+    text-align: center;
+    padding-top: 0.25rem;
+}
+
+/* Matching result on card back */
+.matching-result-container {
+    margin: 0.5rem 0;
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+}
+
+.matching-result-pair {
+    display: flex;
+    align-items: baseline;
+    gap: 0.5rem;
+    padding: 0.4rem 0.6rem;
+    border-radius: 6px;
+    font-size: 0.92rem;
+    text-align: left;
+}
+
+.matching-result-pair.correct {
+    background-color: var(--success-bg, rgba(39, 174, 96, 0.1));
+    border-left: 3px solid var(--success, #28a745);
+}
+
+.matching-result-pair.incorrect {
+    background-color: var(--danger-bg, rgba(220, 53, 69, 0.1));
+    border-left: 3px solid var(--danger, #dc3545);
+}
+
+.matching-result-icon {
+    font-weight: 700;
+    flex-shrink: 0;
+    font-size: 1rem;
+}
+
+.matching-result-pair.correct .matching-result-icon {
+    color: var(--success, #28a745);
+}
+
+.matching-result-pair.incorrect .matching-result-icon {
+    color: var(--danger, #dc3545);
+}
+
+.matching-result-text {
+    line-height: 1.4;
+    flex: 1;
+    min-width: 0;
+}
+
+.matching-correction {
+    color: var(--text-muted, #888);
+    font-style: italic;
+    font-size: 0.88em;
+}
+
+/* Book view: matching pairs table */
+.book-card-pairs {
+    margin: 0.5rem 0;
+}
+
+.book-pair-row {
+    display: grid;
+    grid-template-columns: 1fr auto 1fr;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.3rem 0.5rem;
+    border-bottom: 1px solid var(--input-border);
+    font-size: 0.95rem;
+}
+
+.book-pair-row:last-child {
+    border-bottom: none;
+}
+
+.book-pair-left {
+    font-weight: 600;
+}
+
+.book-pair-arrow {
+    color: var(--text-muted, #888);
+}
+
+.book-pair-right {
+    color: var(--text-color);
 }
 
 .sr-bucket-book-btn {
