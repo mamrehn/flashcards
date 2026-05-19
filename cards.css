@@ -663,7 +663,7 @@ body {
 }
 
 .hidden {
-    display: none;
+    display: none !important;
 }
 
 #sample-json {
