@@ -795,7 +795,69 @@ function renderDetail(deck, importedMeta) {
         card.append(buildCategoryList(deck.categories, deck.categories.length));
     }
 
+    const longSection = buildLongDescription(deck.longDescription);
+    if (longSection) card.append(longSection);
+
     els.detailContent.append(card);
+}
+
+/**
+ * Render the deck's long-form Markdown description as a sanitized HTML
+ * fragment. Returns null when nothing to render or when marked/DOMPurify
+ * aren't loaded (CDN blocked, offline first load before SW caches).
+ *
+ * Threat model: longDescription comes from library.json which is built from
+ * deck-author content. Treat it as semi-trusted: parse Markdown with raw HTML
+ * disabled, then post-process with DOMPurify as defense-in-depth.
+ * @param {string | undefined} md
+ * @returns {HTMLElement | null}
+ */
+function buildLongDescription(md) {
+    if (typeof md !== 'string' || md.trim() === '') return null;
+    if (globalThis.marked === undefined || globalThis.DOMPurify === undefined) {
+        return null;
+    }
+    const wrap = document.createElement('section');
+    wrap.className = 'detail-long-description';
+    const heading = document.createElement('h3');
+    heading.className = 'detail-section-title';
+    heading.textContent = 'Themenüberblick';
+    wrap.append(heading);
+
+    const body = document.createElement('div');
+    body.className = 'detail-long-description-body';
+    const rawHtml = globalThis.marked.parse(md, { gfm: true, breaks: false, async: false });
+    // DOMPurify with default profile blocks <script>, javascript: URIs, event
+    // handlers, and other XSS vectors. Restrict to a markdown-typical tag set
+    // so even an unexpected parser output can't reach more exotic elements.
+    body.innerHTML = globalThis.DOMPurify.sanitize(rawHtml, {
+        ALLOWED_TAGS: [
+            'a',
+            'b',
+            'blockquote',
+            'br',
+            'code',
+            'em',
+            'h1',
+            'h2',
+            'h3',
+            'h4',
+            'h5',
+            'h6',
+            'hr',
+            'i',
+            'li',
+            'ol',
+            'p',
+            'pre',
+            'strong',
+            'ul',
+        ],
+        ALLOWED_ATTR: ['href', 'title'],
+        ALLOWED_URI_REGEXP: /^(?:https?:|mailto:|#|\/)/i,
+    });
+    wrap.append(body);
+    return wrap;
 }
 
 /**

@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-05-09T19:15:34.864Z",
+  "generatedAt": "2026-05-19T07:30:09.837Z",
   "deckCount": 7,
   "decks": [
     {
@@ -16,19 +16,23 @@
         "description": "MAC- und IPv4-Adressen, Aufteilung in Netz- und Hostanteil sowie Subnetting mit Subnetzmasken und CIDR-Notation.",
         "author": "Mario Amrehn"
       },
-      "version": "4cdbb68f336e",
-      "size": 8889,
+      "version": "c9b3a02a546b",
+      "size": 9422,
       "questionCount": 60,
       "invalidCount": 0,
       "types": {
         "text": 30,
-        "multipleChoice": 30
+        "multipleChoice": 30,
+        "matching": 0
       },
       "categories": [],
       "sourceFiles": [
         "FU-IT10_LS1_MAC_IP_Subnetting_MC.json",
-        "FU-IT10_LS1_MAC_IP_Subnetting_text.json"
-      ]
+        "FU-IT10_LS1_MAC_IP_Subnetting_text.json",
+        "longDescription.md",
+        "manifest.json"
+      ],
+      "longDescription": "*   Netzwerkschnittstellen\n    \n*   LAN Geschwindigkeiten\n    \n*   Vollduplex und halbduplex\n    \n*   Netzwerktypen\n    \n*   Aufbau und Funktion einer MAC-Adresse\n    \n*   Aufbau und Funktion einer IPv4-Adresse\n    \n*   Aufbau einer IPv6-Adresse\n    \n*   Grund für die Weiterentwicklung des IP Protokolls auf IPv6\n    \n*   IPv4 Subnetzmasken und deren Verwendung für logische Sub-Netze\n    \n*   Konsolenbefehl(e) um die eigene IP-Adresse und MAC-Adresse herauszufinden\n    \n*   Netzwerkklassen\n    \n*   Standardnetzwerkmasken\n    \n*   Private IPv4-Adressbereiche und deren Funktion\n    \n*   Netzteil und Hostteil einer IPv4-Adresse\n    \n*   Funktion eines Standardgateways\n    \n*   Funktion eines DNS Servers / Protokolls\n    \n*   Funktion eines DHCP Servers / Protokolls\n    \n*   VMs: Nutzen und Nachteile von Virtualisierung\n    \n*   VMs: Übersicht über Ressourcenverteilung und Anforderungen von Windows"
     },
     {
       "id": "fu-it10-ls2-nw-planung-lernkarten",
@@ -44,13 +48,14 @@
         "description": "Planung realer Netzwerke: Topologien, strukturierte Verkabelung, Verkabelungs- und Gebäudeplan, Netzwerkschrank, Kabelschirmung und Projektdokumentation.",
         "author": "Mario Amrehn"
       },
-      "version": "0b35071fd03e",
-      "size": 20812,
+      "version": "31259da210ab",
+      "size": 21818,
       "questionCount": 70,
       "invalidCount": 0,
       "types": {
         "text": 40,
-        "multipleChoice": 30
+        "multipleChoice": 30,
+        "matching": 0
       },
       "categories": [
         {
@@ -84,8 +89,11 @@
       ],
       "sourceFiles": [
         "LS2_Netzwerkplanung_Freitext.json",
-        "LS2_Netzwerkplanung_MC.json"
-      ]
+        "LS2_Netzwerkplanung_MC.json",
+        "longDescription.md",
+        "manifest.json"
+      ],
+      "longDescription": "**Logischer Netzwerkplan:**\n\n*   Aufbau und Bestandteile eines logischen Netzwerkplans\n    \n*   Standardisierte Symbole und Legenden\n    \n*   Netzwerkkonfigurationstabelle (Hostname, IP, Subnetzmaske, Gateway, DNS)\n    \n*   IP-Adressierungsschema und -strategie\n    \n\n**Verkabelungsplan und Gebäudeplan:**\n\n*   Aufbau eines Verkabelungsplans (Patchpanel, Port, Kabelkanal, Raum, Dose)\n    \n*   Notation im Verkabelungsplan (Wege)\n    \n*   Gebäudeplan mit Dosenstandorten und Kabelkanälen, Kabellängen und -anzahl\n    \n*   Revisionsvermerk im Plan\n    \n\n**Netzwerktopologien:**\n\n*   Stern-, Bus-, Ring-, Mesh- und Baumtopologie\n    \n*   Vor- und Nachteile der verschiedenen Topologien\n    \n*   Begründete Auswahl einer Topologie je Kunde\n    \n\n**Strukturierte Verkabelung:**\n\n*   Begriff und Vorteile der strukturierten Verkabelung\n    \n*   Primär-, Sekundär- und Tertiärverkabelung\n    \n*   Unterschied Verlegekabel/Installationskabel vs. Patchkabel\n    \n*   Passive vs. aktive Netzwerkkomponenten\n    \n\n**Kabel und Schirmung:**\n\n*   Kabelkategorien (Cat5e, Cat6, Cat6a, Cat7, Cat8) und deren Übertragungsgeschwindigkeiten und Maximallängen\n    \n*   Schirmungsarten (wie U/UTP, F/UTP, SF/UTP, S/FTP) und deren Bedeutung\n    \n\n**Netzwerkschrank:**\n\n*   Komponenten im Netzwerkschrank (Patchpanel, Switch, Router)\n    \n*   Zusammenspiel Patchpanel und Switch\n    \n*   Grob: Funktion und Aufbau eines Patchpanels / Doppeldose\n    \n\n**Projektdokumentation:**\n\n*   Deckblatt, Anschreiben, Projektbeschreibung\n    \n*   Stückliste mit passiven und aktiven Komponenten\n    \n*   Legende und Beschriftung in allen Plänen"
     },
     {
       "id": "fu-it10-ls3-switch-lernkarten",
@@ -101,13 +109,14 @@
         "description": "Funktionsweise von Switches: Ethernet-Frame, MAC-Adresstabelle (SAT), ARP und Switching-Verfahren (Store-and-Forward, Cut-Through).",
         "author": "Mario Amrehn"
       },
-      "version": "1988854988d1",
-      "size": 14546,
+      "version": "723a1be031b8",
+      "size": 15445,
       "questionCount": 49,
       "invalidCount": 0,
       "types": {
         "text": 23,
-        "multipleChoice": 26
+        "multipleChoice": 26,
+        "matching": 0
       },
       "categories": [
         {
@@ -133,8 +142,11 @@
       ],
       "sourceFiles": [
         "LS3_Switch_Freitext.json",
-        "LS3_Switch_MC.json"
-      ]
+        "LS3_Switch_MC.json",
+        "longDescription.md",
+        "manifest.json"
+      ],
+      "longDescription": "**Ethernet Frame:**\n\n*   Aufbau eines Ethernet II Frames (5 Felder nach SFD)\n    \n*   Destination MAC, Source MAC, EtherType, Payload, CRC/FCS – Funktionen und Größen in Bytes\n    \n*   Minimale und maximale Framegröße (64–1518 Bytes)\n    \n*   Datenübertragungseffizienz eines Frames (variable Payload Größe vs. Overhead durch Header)\n    \n\n**ARP (Address Resolution Protocol):**\n\n*   Funktion erklären: IP-Adresse → MAC-Adresse auflösen\n    \n*   ARP-Request (Broadcast) und ARP-Reply (Unicast)\n    \n*   ARP-Cache / ARP-Tabelle auf Endgeräten\n    \n*   Konsolenbefehle: arp -a, arp -d\n    \n*   Zusammenspiel der drei Zuordnungstabellen: DNS → ARP → SAT\n    \n\n**Switching-Verfahren:**\n\n*   Cut-Through\n    \n*   Store-and-Forward\n    \n*   Adaptive Cut-Through\n    \n\n**Source Address Table (SAT):**\n\n*   SAT / MAC-Adresstabelle / Forwarding Table (nur unterschiedliche Namen, selbes Konzept)\n    \n*   Funktion: Zuordnung MAC-Adresse → Port\n    \n*   Lernprozess aus Quell-MAC eingehender Frames\n    \n*   Flooding bei unbekannter Ziel-MAC\n    \n*   Aging-Mechanismus der SAT Einträge\n    \n*   Flooding vs. Broadcast\n    \n*   Unicast vs. Broadcast\n    \n\n**Switch-Leistungsmerkmale:**\n\n*   Switching Capacity berechnen\n    \n*   Non-blocking vs. Blocking Switch\n    \n*   Vollduplex vs. Halbduplex für Berechnung\n    \n\n**Switch-Typen und Funktionen:**\n\n*   Managed vs. Unmanaged Switch (Einsatzszenarien)\n    \n*   Power over Ethernet (PoE)\n    \n*   Switch vs. Hub (SAT vs. kein lernen, Prüfsumme checken)"
     },
     {
       "id": "fu-it10-ls4-wlan-flashcards",
@@ -150,18 +162,19 @@
         "description": "WLAN-Grundlagen, Standards (802.11n/ac/ax), Sicherheit, Authentifizierung und Schutzbedarf.",
         "author": "Mario Amrehn"
       },
-      "version": "dfbc58d9ceae",
-      "size": 19661,
-      "questionCount": 69,
+      "version": "ce1f8505b0a4",
+      "size": 19021,
+      "questionCount": 59,
       "invalidCount": 0,
       "types": {
-        "text": 34,
-        "multipleChoice": 35
+        "text": 29,
+        "multipleChoice": 28,
+        "matching": 2
       },
       "categories": [
         {
           "name": "Schutzbedarf",
-          "count": 11
+          "count": 10
         },
         {
           "name": "Risiken und Schutzmaßnahmen",
@@ -172,28 +185,24 @@
           "count": 9
         },
         {
-          "name": "WLAN Standards",
-          "count": 9
-        },
-        {
           "name": "Frequenz und Kanäle",
-          "count": 8
+          "count": 7
         },
         {
           "name": "Authentifizierung",
           "count": 6
         },
         {
-          "name": "WLAN Grundlagen",
-          "count": 6
+          "name": "WLAN Standards",
+          "count": 5
         },
         {
           "name": "SSID und Sicherheit",
           "count": 4
         },
         {
-          "name": "Praxis und Auswertung",
-          "count": 3
+          "name": "WLAN Grundlagen",
+          "count": 4
         },
         {
           "name": "Konfiguration und Praxis",
@@ -202,12 +211,20 @@
         {
           "name": "Sichere Datenübertragung",
           "count": 2
+        },
+        {
+          "name": "Praxis und Auswertung",
+          "count": 1
         }
       ],
       "sourceFiles": [
         "LS4_WLAN_Freitext.json",
-        "LS4_WLAN_MC.json"
-      ]
+        "LS4_WLAN_MC.json",
+        "LS4_WLAN_Zuordnung.json",
+        "longDescription.md",
+        "manifest.json"
+      ],
+      "longDescription": "**Frequenzbänder und Kanäle:**\n\n*   2,4-GHz- vs. 5-GHz-Band (Vor- und Nachteile)\n    \n*   13 Kanäle im 2,4-GHz-Band in Deutschland\n    \n*   Nicht überlappende Kanäle (1, 6, 11) und (1, 5, 9, 13)\n    \n*   Kanalbandbreite und Abstand der Kanäle\n    \n\n**Sichere Datenübertragung:**\n\n*   Authentifizierung und Verschlüsselung (Details siehe unten)\n    \n*   VLAN-Trennung von Kunden- und Mitarbeiter-WLAN\n    \n*   Hidden SSID als unwirksame Sicherheitsmaßnahme\n    \n*   Sendeleistung – Begrenzung auf das nötige Minimum\n    \n\n**WLAN-Sicherheitsstandards:**\n\n*   WEP – Schwächen, gilt als unsicher\n    \n*   Verbesserungen von WPA3 gegenüber WPA2\n    \n\n**Authentifizierung im WLAN:**\n\n*   WPA2-Personal (PSK) – typischer Anwendungsfall\n    \n*   WPA2-Enterprise mit RADIUS-Server\n    \n*   Captive Portal für Kunden-/Gast-WLAN\n    \n*   Offenes WLAN\n    \n*   WPS (Wi-Fi Protected Setup) – Risiken, im Unternehmen deaktivieren\n    \n*   MAC-Adressfilterung als unwirksame Schutzmaßnahme\n    \n\n**Schutzbedarf (BSI):**\n\n*   Drei Schutzbedarfskategorien (normal, hoch, sehr hoch)\n    \n*   Faktoren und Beispiele für die Einstufung\n    \n\n**Risiken und Schutzmaßnahmen:**\n\n*   Typische WLAN-Sicherheitsrisiken im Unternehmen (z. B. öffentlich ausgehängtes Passwort)\n    \n*   Bestandteile eines sicheren Kunden-WLAN-Konzepts"
     },
     {
       "id": "itt11-ls1-3-1-5-ls2-4-cps",
@@ -223,13 +240,14 @@
         "description": "Vertikale Kommunikation, Automatisierungspyramide, SCADA, Kommunikationsmodelle, MQTT und OPC UA.",
         "author": "Mario Amrehn"
       },
-      "version": "748fdfc24c46",
-      "size": 22812,
+      "version": "8510e358a9fe",
+      "size": 22868,
       "questionCount": 122,
       "invalidCount": 0,
       "types": {
         "text": 55,
-        "multipleChoice": 67
+        "multipleChoice": 67,
+        "matching": 0
       },
       "categories": [
         {
@@ -307,7 +325,8 @@
       ],
       "sourceFiles": [
         "ITT11_LS1.3-1.5_LS2.4_CPS_Freitext.json",
-        "ITT11_LS1.3-1.5_LS2.4_CPS_MC.json"
+        "ITT11_LS1.3-1.5_LS2.4_CPS_MC.json",
+        "manifest.json"
       ]
     },
     {
@@ -324,13 +343,14 @@
         "description": "Cyber-physische Systeme und IoT/Industrie 4.0 mit Grundlagen zu Linux-Kommandozeile und Python-Programmierung.",
         "author": "Mario Amrehn"
       },
-      "version": "ef6127d7aa9d",
-      "size": 21807,
+      "version": "c669d461986a",
+      "size": 21935,
       "questionCount": 63,
       "invalidCount": 0,
       "types": {
         "text": 21,
-        "multipleChoice": 42
+        "multipleChoice": 42,
+        "matching": 0
       },
       "categories": [
         {
@@ -368,7 +388,8 @@
       ],
       "sourceFiles": [
         "ITT11_LS1_CPS_Freitext.json",
-        "ITT11_LS1_CPS_Linux_Python_MC.json"
+        "ITT11_LS1_CPS_Linux_Python_MC.json",
+        "manifest.json"
       ]
     },
     {
@@ -381,18 +402,19 @@
         "description": "Beispiel-Deck zur Demonstration des Bibliotheks-Formats. Vermischt Geografie, Mathematik und Naturwissenschaft.",
         "author": "Flashcards Demo"
       },
-      "version": "864ca455d0b3",
-      "size": 1698,
-      "questionCount": 5,
+      "version": "49699538170a",
+      "size": 2412,
+      "questionCount": 7,
       "invalidCount": 0,
       "types": {
         "text": 3,
-        "multipleChoice": 2
+        "multipleChoice": 2,
+        "matching": 2
       },
       "categories": [
         {
           "name": "Geografie",
-          "count": 2
+          "count": 4
         },
         {
           "name": "Naturwissenschaft",

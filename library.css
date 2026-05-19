@@ -567,6 +567,83 @@ body {
     letter-spacing: 0.04em;
 }
 
+.detail-long-description {
+    margin: 1.25rem 0 0 0;
+    padding-top: 1rem;
+    border-top: 1px solid var(--border-color, #e4e7e5);
+}
+
+.detail-long-description-body {
+    font-size: 0.92rem;
+    line-height: 1.55;
+    color: var(--text-color, #2a2f2c);
+}
+
+.detail-long-description-body h1,
+.detail-long-description-body h2,
+.detail-long-description-body h3,
+.detail-long-description-body h4 {
+    font-size: 0.95rem;
+    margin: 0.9rem 0 0.3rem 0;
+    color: var(--lib-secondary, #1f4d38);
+}
+
+.detail-long-description-body h1:first-child,
+.detail-long-description-body h2:first-child,
+.detail-long-description-body h3:first-child,
+.detail-long-description-body h4:first-child,
+.detail-long-description-body p:first-child {
+    margin-top: 0;
+}
+
+.detail-long-description-body p {
+    margin: 0.5rem 0;
+}
+
+.detail-long-description-body ul,
+.detail-long-description-body ol {
+    margin: 0.4rem 0 0.6rem 1.2rem;
+    padding: 0;
+}
+
+.detail-long-description-body li {
+    margin: 0.15rem 0;
+}
+
+.detail-long-description-body code {
+    background-color: var(--lib-chip-bg, #f5f7f5);
+    border: 1px solid var(--lib-chip-border, #cfd6d1);
+    border-radius: 3px;
+    padding: 0 0.25em;
+    font-size: 0.88em;
+}
+
+.detail-long-description-body pre {
+    background-color: var(--lib-chip-bg, #f5f7f5);
+    border: 1px solid var(--lib-chip-border, #cfd6d1);
+    border-radius: 4px;
+    padding: 0.6rem 0.8rem;
+    overflow-x: auto;
+    font-size: 0.88em;
+}
+
+.detail-long-description-body pre code {
+    background: transparent;
+    border: 0;
+    padding: 0;
+}
+
+.detail-long-description-body blockquote {
+    margin: 0.6rem 0;
+    padding: 0.2rem 0.8rem;
+    border-left: 3px solid var(--lib-accent, #4f8c70);
+    color: var(--text-muted, #6c7570);
+}
+
+.detail-long-description-body a {
+    color: var(--lib-primary, #2d6b4f);
+}
+
 .detail-author {
     font-size: 0.85rem;
     color: var(--text-muted, #6c7570);

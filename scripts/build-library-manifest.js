@@ -104,15 +104,19 @@ function readMeta(data) {
 }
 
 /**
- * Read a deck file (ZIP or standalone JSON) and return a list of
- * { name, content } entries containing the JSON payloads inside.
+ * Read a deck file (ZIP or standalone JSON) and return all relevant entries
+ * as { name, content } pairs. Includes both .json (card files / manifest) and
+ * .md (long-description) entries; non-zip deck files are returned as a single
+ * standalone JSON entry.
  * @param filePath
  * @param buf
  */
 async function readDeckEntries(filePath, buf) {
     if (filePath.toLowerCase().endsWith('.zip')) {
         const zip = await JSZip.loadAsync(buf);
-        const entries = Object.values(zip.files).filter((e) => !e.dir && e.name.endsWith('.json'));
+        const entries = Object.values(zip.files).filter(
+            (e) => !e.dir && (e.name.endsWith('.json') || e.name.toLowerCase().endsWith('.md'))
+        );
         const out = [];
         for (const entry of entries) {
             out.push({ name: entry.name, content: await entry.async('string') });
@@ -138,9 +142,49 @@ async function processDeckFile(filePath) {
     const categoryCounts = new Map();
     const sourceFiles = [];
     let meta = null;
+    let longDescription = null;
+    let longDescriptionFromManifest = false;
 
     const entries = await readDeckEntries(filePath, buf);
+
+    // Pass 1: pick up manifest.json (canonical meta + optional inline long
+    // description) and longDescription.md (the markdown body). Order in zip is
+    // not guaranteed, so resolve these before the card loop so the meta source
+    // is unambiguous regardless of file iteration order.
     for (const entry of entries) {
+        const base = entry.name.split('/').pop();
+        if (base === 'manifest.json') {
+            try {
+                const m = JSON.parse(entry.content);
+                if (m && typeof m === 'object') {
+                    const cleaned = readMeta(m);
+                    if (cleaned) meta = cleaned;
+                    if (typeof m.longDescription === 'string' && m.longDescription.trim() !== '') {
+                        longDescription = m.longDescription;
+                        longDescriptionFromManifest = true;
+                    }
+                }
+            } catch {
+                // malformed manifest — fall through to card-file fallback
+            }
+        } else if (
+            base.toLowerCase() === 'longdescription.md' &&
+            !longDescriptionFromManifest &&
+            entry.content.trim() !== ''
+        ) {
+            longDescription = entry.content;
+        }
+    }
+
+    // Pass 2: count cards / collect categories. Also pick up a fallback meta
+    // from the first card JSON when no manifest.json was present (back-compat
+    // with pre-manifest decks and single-JSON deck files).
+    for (const entry of entries) {
+        const base = entry.name.split('/').pop();
+        if (base === 'manifest.json' || base.toLowerCase().endsWith('.md')) {
+            sourceFiles.push(entry.name);
+            continue;
+        }
         sourceFiles.push(entry.name);
         let data;
         try {
@@ -150,9 +194,6 @@ async function processDeckFile(filePath) {
         }
         if (!data || !Array.isArray(data.cards)) continue;
 
-        // First JSON file with a meta block wins for the deck-level metadata.
-        // Multi-JSON ZIPs typically share subject/grade/unit; per-card detail
-        // lives in the cards themselves. Standalone JSON decks have a single entry.
         if (!meta) {
             const m = readMeta(data);
             if (m) meta = m;
@@ -184,7 +225,7 @@ async function processDeckFile(filePath) {
         .map(([name, count]) => ({ name, count }))
         .toSorted((a, b) => b.count - a.count || a.name.localeCompare(b.name, 'de'));
 
-    return {
+    const result = {
         id,
         filename,
         title: (meta && meta.name) || baseName,
@@ -197,6 +238,8 @@ async function processDeckFile(filePath) {
         categories,
         sourceFiles: sourceFiles.toSorted(),
     };
+    if (longDescription) result.longDescription = longDescription;
+    return result;
 }
 
 /**

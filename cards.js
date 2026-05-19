@@ -779,45 +779,63 @@ async function handleZipUpload(event) {
         // ZIP basename serves as a topic-grouping fallback when an inner JSON has no meta.name.
         const zipBaseName = file.name.replace(/\.zip$/i, '');
 
-        // Process each file in the ZIP
+        // Pre-pass: if the zip carries a manifest.json, use its meta as the
+        // canonical deck-level metadata for every inner card file. Card JSONs
+        // produced by the build pipeline no longer carry inline meta; the
+        // ZIP-level manifest is the single source of truth.
+        let manifestMeta = null;
+        for (const [relPath, zipEntry] of Object.entries(zipContent.files)) {
+            if (!zipEntry.dir && relPath.split('/').pop() === 'manifest.json') {
+                try {
+                    const parsed = sanitizeParsedJSON(JSON.parse(await zipEntry.async('string')));
+                    if (parsed && typeof parsed.meta === 'object' && parsed.meta) {
+                        manifestMeta = parsed.meta;
+                    }
+                } catch {
+                    // ignore — fall back to per-file meta below
+                }
+                break;
+            }
+        }
+
+        // Process each card JSON in the ZIP
         const promises = [];
         for (const [relativePath, zipEntry] of Object.entries(zipContent.files)) {
-            if (!zipEntry.dir && relativePath.endsWith('.json')) {
-                const promise = zipEntry.async('string').then((content) => {
-                    try {
-                        const data = sanitizeParsedJSON(JSON.parse(content));
+            if (zipEntry.dir) continue;
+            const base = relativePath.split('/').pop();
+            if (!relativePath.endsWith('.json') || base === 'manifest.json') continue;
+            const promise = zipEntry.async('string').then((content) => {
+                try {
+                    const data = sanitizeParsedJSON(JSON.parse(content));
 
-                        if (
-                            !data.cards ||
-                            !Array.isArray(data.cards) ||
-                            data.cards.length === 0
-                        ) {
-                            errorCount++;
-                            return;
-                        }
-
-                        // Check card validity
-                        const validCards = validateCards(data.cards);
-
-                        if (validCards.length === 0) {
-                            errorCount++;
-                            return;
-                        }
-
-                        // Save the deck with filename as deck name
-                        const deckName = relativePath.split('/').pop().replace('.json', '');
-                        const meta =
-                            data.meta && typeof data.meta === 'object'
-                                ? data.meta
-                                : { name: zipBaseName };
-                        saveToLocalStorage(deckName, validCards, [], meta);
-                        importedDeckNames.push(deckName);
-                    } catch {
+                    if (!data.cards || !Array.isArray(data.cards) || data.cards.length === 0) {
                         errorCount++;
+                        return;
                     }
-                });
-                promises.push(promise);
-            }
+
+                    // Check card validity
+                    const validCards = validateCards(data.cards);
+
+                    if (validCards.length === 0) {
+                        errorCount++;
+                        return;
+                    }
+
+                    // Save the deck with filename as deck name
+                    const deckName = base.replace('.json', '');
+                    // Resolution order: inline meta on the card file (legacy
+                    // back-compat) → zip-level manifest.json → zip basename.
+                    const meta =
+                        (data.meta && typeof data.meta === 'object' && data.meta) ||
+                        manifestMeta ||
+                        { name: zipBaseName };
+                    saveToLocalStorage(deckName, validCards, [], meta);
+                    importedDeckNames.push(deckName);
+                } catch {
+                    errorCount++;
+                }
+            });
+            promises.push(promise);
         }
 
         await Promise.all(promises);
