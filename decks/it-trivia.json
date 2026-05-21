@@ -1,0 +1,362 @@
+{
+  "meta": {
+    "name": "IT-Trivia: Mythen & Meilensteine",
+    "subject": "IT-Wissen",
+    "description": "Fakten, hartnäckige Mythen und IT Anekdoten.",
+    "author": "Flashcards Demo"
+  },
+  "cards": [
+    {
+      "question": "Warum bezeichnen wir einen Programmfehler in der IT umgangssprachlich als 'Bug'?",
+      "options": [
+        "Weil früher Käfer oft die Lochkarten von Großrechnern angefressen haben",
+        "Weil Grace Hopper 1947 eine echte Motte in einem Relais fand und ins Logbuch klebte",
+        "Weil der Begriff aus der Genetik geklaut und auf Code übertragen wurde",
+        "Als Abkürzung für 'Basic User Glitch'"
+      ],
+      "correct": [
+        1
+      ],
+      "explanations": {
+        "0": "Falsch: Zwar gab es damals viele Insekten in den warmen Serverräumen, aber die fraßen keine Lochkarten.",
+        "1": "Richtig: Grace Hopper fand 1947 eine echte Motte in einem Relais des Mark II Computers und klebte sie ins Logbuch mit dem Vermerk 'First actual case of bug being found'. Den Begriff 'bug' für technische Fehler gab es übrigens schon vorher - Thomas Edison nutzte ihn bereits 1878.",
+        "2": "Falsch: Genetik und IT überschneiden sich hier nicht.",
+        "3": "Falsch: Netter Versuch, aber das ist ein klassisches Backronym (nachträglich erfundene Abkürzung)."
+      },
+      "categories": [
+        "IT-Historie",
+        "Fun Facts"
+      ]
+    },
+    {
+      "question": "Was besagt der offizielle, wenn auch nicht ganz ernst gemeinte HTTP-Statuscode 418?",
+      "options": [
+        "I'm a teapot (Ich bin eine Teekanne)",
+        "Payment Required (Zahlung erforderlich)",
+        "Enhance Your Calm (Reg dich ab)",
+        "Too Many Requests (Zu viele Anfragen)"
+      ],
+      "correct": [
+        0
+      ],
+      "explanations": {
+        "0": "Richtig: 1998 als Aprilscherz (RFC 2324, 'Hyper Text Coffee Pot Control Protocol') eingeführt. Eine 'Save 418'-Kampagne hat den Code 2017 vor der offiziellen Streichung gerettet, weshalb Node.js, Go und viele andere Frameworks ihn bis heute als Easter Egg unterstützen.",
+        "1": "Falsch: Das ist Statuscode 402, der eigentlich mal für Mikropayment gedacht war.",
+        "2": "Falsch: Das ist der inoffizielle Status 420 (ursprünglich von Twitter genutzt).",
+        "3": "Falsch: Das ist der ganz reale Statuscode 429 für Rate Limiting."
+      },
+      "categories": [
+        "Internet",
+        "Protokolle"
+      ]
+    },
+    {
+      "question": "Was wurde mit der allerersten Webcam der Welt 1991 an der Universität Cambridge überwacht?",
+      "options": [
+        "Der teure Großrechner im Keller",
+        "Der Haupteingang des Campus",
+        "Eine einfache Kaffeemaschine",
+        "Das britische Wetter"
+      ],
+      "correct": [
+        2
+      ],
+      "explanations": {
+        "0": "Falsch: Serverräume zu überwachen kam erst später in Mode.",
+        "1": "Falsch: Es ging nicht um Security, sondern um Bequemlichkeit.",
+        "2": "Richtig: Die Forscher des Trojan Room waren es leid, drei Stockwerke zu laufen, nur um eine leere Kaffeekanne vorzufinden. Das Bild der Kanne wurde mit etwa 3 Bildern pro Minute im lokalen Netz verteilt - 1993 ging der Stream ins Web und gilt als erste Webcam-Übertragung überhaupt.",
+        "3": "Falsch: Dafür hätte ein Blick aus dem Fenster gereicht."
+      },
+      "categories": [
+        "Hardware",
+        "Internet"
+      ]
+    },
+    {
+      "question": "Woher stammt der Name des allgegenwärtigen Funkstandards 'Bluetooth'?",
+      "options": [
+        "Von den blauen LEDs der ersten Empfänger-Chips",
+        "Von einem dänisch-norwegischen Wikingerkönig",
+        "Von einer Zahnpasta-Marke des Erfinders",
+        "Ein Codename des US-Militärs für Kurzstreckenfunk"
+      ],
+      "correct": [
+        1
+      ],
+      "explanations": {
+        "0": "Falsch: Blaue LEDs waren in den 90ern brandneu und extrem teuer (der Erfinder Shuji Nakamura bekam dafür 2014 den Physik-Nobelpreis).",
+        "1": "Richtig: Harald Blauzahn ('Bluetooth') vereinte im 10. Jahrhundert verfeindete dänische und norwegische Stämme. Intel-Ingenieur Jim Kardach las gerade ein Buch über ihn und schlug den Codenamen vor - die Technik sollte dasselbe mit PCs und Handys tun. Das Logo besteht aus seinen Runen-Initialen Hagall (ᚼ) und Bjarkan (ᛒ).",
+        "2": "Falsch: ITler und Zahnhygiene sind manchmal zwei Welten.",
+        "3": "Falsch: Es war eine zivile skandinavische Erfindung (Ericsson, Nokia u. a.)."
+      },
+      "categories": [
+        "Netzwerk",
+        "Fun Facts"
+      ]
+    },
+    {
+      "question": "Was beschreibt der berühmte Aprilscherz-Standard RFC 1149 der IETF aus dem Jahr 1990?",
+      "options": [
+        "IP over Avian Carriers (Datenübertragung per Brieftaube)",
+        "Telepathisches TCP/IP für das Metaversum",
+        "Internet-Routing über Abwasserrohre",
+        "WLAN für smarte Toaster"
+      ],
+      "correct": [
+        0
+      ],
+      "explanations": {
+        "0": "Richtig: Es beschreibt die Übertragung von IP-Paketen per Brieftaube. 2001 testete eine norwegische Linux-Gruppe das wirklich mit Pings: 9 Pakete an 5 km entfernte Tauben gebunden, 4 kamen an (55% Packet Loss), Latenz ca. 3000-6000 Sekunden.",
+        "1": "Falsch: Soweit war man 1990 noch lange nicht.",
+        "2": "Falsch: Rohre sind zwar Metaphern für das Internet, aber keine physischen Router.",
+        "3": "Falsch: IoT-Toaster kamen erst Jahre später als Witz auf."
+      },
+      "categories": [
+        "Netzwerk",
+        "Protokolle"
+      ]
+    },
+    {
+      "question": "Warum entschied sich Linus Torvalds ausgerechnet für einen molligen Pinguin ('Tux') als Linux-Maskottchen?",
+      "options": [
+        "Weil er Pinguine in seiner Heimat Finnland liebte",
+        "Weil 'Tux' ein Akronym für sein Betriebssystem ist",
+        "Weil er bei einem Zoobesuch in Australien von einem Zwergpinguin gebissen wurde",
+        "Weil Pinguine absolute Kälte mögen, genau wie Server"
+      ],
+      "correct": [
+        2
+      ],
+      "explanations": {
+        "0": "Falsch: In Finnland gibt es in freier Wildbahn keine Pinguine.",
+        "1": "Falsch: 'Tux' steht inoffiziell für (T)orvalds (U)ni(X) - es war aber nicht der Auslöser für die Pinguin-Wahl.",
+        "2": "Richtig: Er wurde 1993 im National Zoo in Canberra von einem Zwergpinguin gezwickt. Er meinte danach scherzhaft, er sei mit 'Pinguinitis' infiziert worden. Das eigentliche Logo zeichnete Larry Ewing 1996 in GIMP.",
+        "3": "Falsch: Klingt logisch für Rechenzentren, war aber nicht der Auslöser."
+      },
+      "categories": [
+        "Betriebssysteme",
+        "Community"
+      ]
+    },
+    {
+      "question": "Wo nahm die deutsche 'Bielefeld-Verschwörung' (Bielefeld existiert gar nicht) 1994 ihren Anfang?",
+      "options": [
+        "Im deutschen Usenet (in der Newsgroup de.talk.bizarre)",
+        "In einem Chatraum auf AOL",
+        "In einer frühen Ausgabe der Hacker-Zeitschrift 'Die Datenschleuder' (CCC)",
+        "Als Kettenbrief per E-Mail"
+      ],
+      "correct": [
+        0
+      ],
+      "explanations": {
+        "0": "Richtig: Der Informatikstudent Achim Held postete den Text am 16. Mai 1994 ins Usenet, nachdem ihm auf einer Studentenparty in Kiel aufgefallen war, dass niemand jemanden aus Bielefeld kannte. 2019 griff sogar die Stadt selbst den Scherz auf und lobte eine Million Euro für den Beweis ihrer Nicht-Existenz aus.",
+        "1": "Falsch: Das Usenet war damals der wichtigere Treffpunkt für deutsche Techies.",
+        "2": "Falsch: Der Chaos Computer Club hatte damit nichts zu tun.",
+        "3": "Falsch: Kettenmails kamen erst etwas später für die breite Masse."
+      },
+      "categories": [
+        "Internet",
+        "Fun Facts"
+      ]
+    },
+    {
+      "question": "Stell dir vor, du hast 2020 dein chaotisch zusammengehacktes, verbuggtes Berufsschul-Code-Projekt auf GitHub 'public' gestellt. Was ist 2020 damit passiert?",
+      "options": [
+        "Es wurde von der IHK als Negativbeispiel für künftige Prüfungen archiviert",
+        "GitHub hat es aus Qualitätsgründen automatisch gelöscht",
+        "Es wurde auf Spezialfilm gepresst und für 1000 Jahre in einem arktischen Bunker auf Spitzbergen eingefroren",
+        "Ein Start-up hat es geklaut und ist damit an die Börse gegangen"
+      ],
+      "correct": [
+        2
+      ],
+      "explanations": {
+        "0": "Falsch: Die IHK hat mit deinem GitHub-Profil nichts zu tun.",
+        "1": "Falsch: GitHub akzeptiert (leider) jeden Code.",
+        "2": "Richtig: Für das 'GitHub Arctic Code Vault'-Projekt wurden am 2. Februar 2020 alle aktiven öffentlichen Repositories auf 'piqlFilm' (silberhalogenidbeschichteter Mikrofilm) gepresst und ins Svalbard-Archiv 250 m tief im Permafrost eingelagert. Zukünftige Alien-Archäologen werden deinen Spaghetti-Code finden und weinen.",
+        "3": "Falsch: So gut war dein Code dann wahrscheinlich doch nicht."
+      },
+      "categories": [
+        "Softwareentwicklung",
+        "Fun Facts"
+      ]
+    },
+    {
+      "question": "Warum musste der Computerhersteller Compaq in den 90ern eine eigene Support-Notiz zur 'Any-Key'-Taste erstellen?",
+      "options": [
+        "Weil die Taste durch zu hartes Drücken oft abbrach",
+        "Weil zahlreiche Kunden den Support anriefen und fragten, wo sich diese 'Any'-Taste auf der Tastatur befände",
+        "Weil die Aufforderung 'Press any key' den PC häufig abstürzen ließ",
+        "Um die Taste als kostenpflichtiges Zubehör zu verkaufen"
+      ],
+      "correct": [
+        1
+      ],
+      "explanations": {
+        "0": "Falsch: Man kann eine Taste, die es nicht gibt, nicht abbrechen.",
+        "1": "Richtig: Bei der DOS-Aufforderung 'Press Any Key To Continue' suchten unbedarfte Erstnutzer nach einer Taste mit der Aufschrift 'ANY'. Compaq empfahl Entwicklern in einer technischen Notiz, stattdessen 'Press Return to continue' zu schreiben.",
+        "2": "Falsch: Der PC stürzte nicht ab, der User war nur überfordert.",
+        "3": "Falsch: Wäre ein gutes Geschäftsmodell, war aber nicht der Grund."
+      },
+      "categories": [
+        "Hardware",
+        "IT-Historie"
+      ]
+    },
+    {
+      "question": "Warum spielt man im Google Chrome-Browser bei einem Internetausfall ausgerechnet mit einem kleinen T-Rex?",
+      "options": [
+        "Weil der Chefentwickler des Browsers ein großer Jurassic Park-Fan war",
+        "Als Metapher dafür, dass man ohne Internetanschluss quasi zurück in der 'Steinzeit' feststeckt",
+        "Weil 'Rex' eine alte interne Google-Bezeichnung für defekte Router ist",
+        "Es war das einzige ruckelfreie 8-Bit-Asset, das das Team zufällig auf der Platte hatte"
+      ],
+      "correct": [
+        1
+      ],
+      "explanations": {
+        "0": "Falsch: Dinosaurier mögen viele, aber es gab einen tieferen Sinn.",
+        "1": "Richtig: Laut den Designern Sebastien Gabriel und Edward Jung ist der T-Rex ein Witz darüber, dass man ohne Internet in der prähistorischen Zeit gefangen ist. Das Spiel 'Dino Run' erschien 2014 - intern heißt es 'Project Bolan' nach T. Rex-Sänger Marc Bolan.",
+        "2": "Falsch: So einen Codenamen gab es nicht.",
+        "3": "Falsch: Das Spiel wurde bewusst in diesem Retro-Stil als Easter Egg entworfen."
+      },
+      "categories": [
+        "Software",
+        "Fun Facts"
+      ]
+    },
+        {
+      "question": "Wie hieß die Suchmaschine Google ursprünglich, als Larry Page und Sergey Brin sie 1996 in Stanford entwickelten?",
+      "options": [
+        "FindIt",
+        "WebCrawler",
+        "BackRub",
+        "SearchMonkey"
+      ],
+      "correct": [
+        2
+      ],
+      "explanations": {
+        "0": "Falsch: FindIt ist generisch, war aber nicht der Name.",
+        "1": "Falsch: WebCrawler war eine andere frühe Suchmaschine von 1994.",
+        "2": "Richtig: Sie nannten ihr Projekt 'BackRub' (Rückenmassage), weil das System Backlinks analysierte, um die Wichtigkeit einer Website zu bewerten. Der Name 'Google' (vom Mathebegriff 'Googol' = 10^100) kam erst 1997.",
+        "3": "Falsch: Das war Yahoo! SearchMonkey Jahre später."
+      },
+      "categories": [
+        "Internet",
+        "IT-Historie"
+      ]
+    },
+    {
+      "question": "Welcher Cheat-Code, der heute auf vielen Webseiten Easter Eggs auslöst, ist als 'Konami Code' bekannt?",
+      "options": [
+        "Hoch, Hoch, Runter, Runter, Links, Rechts, Links, Rechts, B, A",
+        "A, B, C, A, B, B, C",
+        "Links, Rechts, Oben, Unten, Leertaste",
+        "STRG + ALT + ENTF"
+      ],
+      "correct": [
+        0
+      ],
+      "explanations": {
+        "0": "Richtig: Der Code (im Mehrspielermodus oft mit 'Select, Start' abgeschlossen) stammt aus 'Gradius' (1986) für das NES, wurde aber mit 'Contra' weltberühmt. Erfinder Kazuhisa Hashimoto wollte beim Testen die Spiele einfacher machen und vergaß den Cheat im finalen Code - so wurde er DAS Nerd-Symbol schlechthin.",
+        "1": "Falsch: Frei erfunden. Der bekannte Mortal-Kombat-Bluttrick auf dem Sega Genesis ist übrigens 'A B A C A B B' (eine Anspielung auf das Genesis-Album 'Abacab').",
+        "2": "Falsch: Frei erfunden.",
+        "3": "Falsch: Das ist der Affengriff (Three-Finger-Salute) zum Neustart von Windows."
+      },
+      "categories": [
+        "Fun Facts",
+        "Software"
+      ]
+    },
+    {
+      "question": "Wie viel Arbeitsspeicher (RAM) hatte der Apollo Guidance Computer, der 1969 die Menschheit erfolgreich auf den Mond brachte?",
+      "options": [
+        "4 Megabyte",
+        "512 Kilobyte",
+        "4 Kilobyte",
+        "16 Megabyte"
+      ],
+      "correct": [
+        2
+      ],
+      "explanations": {
+        "0": "Falsch: 4 MB waren in den 60er Jahren unbezahlbar, riesig und zu schwer für ein Raumschiff.",
+        "1": "Falsch: Viel zu viel für die damalige Technik.",
+        "2": "Richtig: Er hatte 2048 16-bit-Wörter RAM (Magnetic Core Memory), also rund 4 Kilobyte, plus 36 KB ROM (handgewobenes 'Core Rope Memory'). Ein moderner USB-C-Lade-Adapter hat heute mehr Rechenleistung als die gesamte NASA 1969 zur Verfügung hatte.",
+        "3": "Falsch: Komplett überdimensioniert für 1969."
+      },
+      "categories": [
+        "Hardware",
+        "IT-Historie"
+      ]
+    },
+    {
+      "question": "An welchem Tag startete OpenAI ChatGPT als kostenlose Web-Demo und löste damit den weltweiten KI-Hype aus?",
+      "options": [
+        "30. November 2022",
+        "1. Januar 2024",
+        "14. Februar 2021",
+        "9. April 2020"
+      ],
+      "correct": [
+        0
+      ],
+      "explanations": {
+        "0": "Richtig: Am 30. November 2022 startete ChatGPT (basierend auf GPT-3.5). Nach nur 5 Tagen knackte der Dienst 1 Million Nutzer - schneller als Facebook, Instagram oder Spotify das je geschafft haben - und nach 2 Monaten 100 Millionen. CEO Sam Altman bezeichnete den Launch intern als 'low-key research preview'.",
+        "1": "Falsch: Zu spät - da war der KI-Hype längst voll im Gange.",
+        "2": "Falsch: Zu früh - GPT-3 war da gerade erst raus.",
+        "3": "Falsch: 2020 gab es zwar GPT-3 (über API), aber keine öffentliche Chat-Oberfläche."
+      },
+      "categories": [
+        "KI",
+        "IT-Historie"
+      ]
+    },
+    {
+      "question": "Wonach benannte Guido van Rossum 1991 seine neu entwickelte Programmiersprache 'Python'?",
+      "options": [
+        "Nach der Würgeschlange, weil sie 'Code zusammendrücken' soll",
+        "Nach der britischen Komikertruppe 'Monty Python's Flying Circus'",
+        "Als Akronym für 'Practical Yet Tidy Hybrid Object Notation'",
+        "Nach einem Mathematiker namens Edgar Python"
+      ],
+      "correct": [
+        1
+      ],
+      "explanations": {
+        "0": "Falsch: Die Schlange im Logo (und das Maskottchen) kamen erst später hinzu.",
+        "1": "Richtig: Van Rossum war beim Schreiben des Interpreters in BBC-Stimmung und brauchte einen 'kurzen, einprägsamen, leicht respektlosen' Namen. Deshalb tauchen in der offiziellen Doku bis heute 'spam', 'eggs', 'parrot' und 'Brian' als Beispielwerte auf - alles Monty-Python-Referenzen.",
+        "2": "Falsch: Klingt nach typischem Backronym, ist aber frei erfunden.",
+        "3": "Falsch: Einen solchen Mathematiker gibt es nicht."
+      },
+      "categories": [
+        "Softwareentwicklung",
+        "Fun Facts"
+      ]
+    },
+    {
+      "question": "Wie lange brauchte Brendan Eich bei Netscape 1995 angeblich, um den ersten Prototyp von JavaScript zu entwickeln?",
+      "options": [
+        "10 Tage",
+        "6 Monate",
+        "3 Jahre",
+        "1 Stunde"
+      ],
+      "correct": [
+        0
+      ],
+      "explanations": {
+        "0": "Richtig: Eich hatte im Mai 1995 etwa 10 Tage Zeit, um eine Sprache für den Netscape Navigator zu basteln. Daraus erklären sich viele berühmt-berüchtigte Quirks wie '0 == \"\"' (true), 'NaN !== NaN' und 'typeof null === \"object\"'. Ursprünglich hieß sie 'Mocha', dann 'LiveScript' - umbenannt in 'JavaScript', um vom Java-Hype zu profitieren (sonst hat sie mit Java aber so gut wie nichts zu tun).",
+        "1": "Falsch: Hätte er gerne gehabt, hatte er aber nicht.",
+        "2": "Falsch: Selbst die offizielle ECMAScript-Standardisierung dauerte weniger lang.",
+        "3": "Falsch: Selbst Eich war kein Magier - eine Stunde reicht nicht für eine ganze Sprache."
+      },
+      "categories": [
+        "Softwareentwicklung",
+        "IT-Historie"
+      ]
+    }
+  ]
+}
