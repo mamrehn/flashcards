@@ -45,11 +45,13 @@ const MAX_RECONNECT_ATTEMPTS = 30;
 // Application-level keepalive interval (ms). The server pings every 30 s at the
 // WebSocket protocol level and the browser auto-pongs, but some intermediate
 // proxies (carrier NAT, corporate firewalls) only see app-layer frames as
-// "activity" and drop the TCP socket after ~60 s of silence. Sending a tiny
-// non-JSON frame every 25 s keeps the path warm. The server's message handler
-// JSON.parse-throws on it and returns silently — no log spam, no logic.
+// "activity" and drop the TCP socket after ~60 s of silence. We send a small
+// JSON frame every 25 s to keep the path warm. The payload must parse as JSON
+// (or the server replies with an "Ungültiges Nachrichtenformat" error toast);
+// using an unknown `type` makes the server's switch fall through to its
+// default branch, which just console.warns and otherwise no-ops.
 const KEEPALIVE_INTERVAL_MS = 25_000;
-const KEEPALIVE_PAYLOAD = '__poll_keepalive__';
+const KEEPALIVE_PAYLOAD = JSON.stringify({ type: 'poll_keepalive' });
 
 /* ============================================================================
  * Tiny helpers
