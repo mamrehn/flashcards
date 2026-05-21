@@ -42,6 +42,14 @@ const MAX_DURATION_SEC = 80;
 const SESSION_STORAGE_KEY = 'poll_active_session';
 const PICKS_STORAGE_KEY = 'poll_last_picks';
 const MAX_RECONNECT_ATTEMPTS = 30;
+// Application-level keepalive interval (ms). The server pings every 30 s at the
+// WebSocket protocol level and the browser auto-pongs, but some intermediate
+// proxies (carrier NAT, corporate firewalls) only see app-layer frames as
+// "activity" and drop the TCP socket after ~60 s of silence. Sending a tiny
+// non-JSON frame every 25 s keeps the path warm. The server's message handler
+// JSON.parse-throws on it and returns silently — no log spam, no logic.
+const KEEPALIVE_INTERVAL_MS = 25_000;
+const KEEPALIVE_PAYLOAD = '__poll_keepalive__';
 
 /* ============================================================================
  * Tiny helpers
@@ -152,6 +160,34 @@ function reconnectBackoffMs(attempt) {
     if (attempt === 2) return 2000;
     if (attempt === 3) return 4000;
     return 10_000;
+}
+
+/**
+ * Start a keepalive interval that fires `KEEPALIVE_PAYLOAD` over the given WS
+ * every `KEEPALIVE_INTERVAL_MS`. The payload is non-JSON so the server's
+ * JSON.parse fails silently and no business logic runs. Returns the interval
+ * id so the caller can cancel it on close.
+ * @param {WebSocket} ws
+ * @returns {number}
+ */
+function startKeepalive(ws) {
+    return setInterval(() => {
+        if (!ws || ws.readyState !== WebSocket.OPEN) return;
+        try {
+            ws.send(KEEPALIVE_PAYLOAD);
+        } catch (error) {
+            logger.error('Keepalive send failed:', error);
+        }
+    }, KEEPALIVE_INTERVAL_MS);
+}
+
+/**
+ * @param {number|null} id
+ * @returns {null}
+ */
+function stopKeepalive(id) {
+    if (id !== null) clearInterval(id);
+    return null;
 }
 
 /**
@@ -278,6 +314,7 @@ let hostRoomId = null;
 let hostSessionId = null;
 let hostWsReconnectAttempts = 0;
 let hostSuppressReconnect = false;
+let hostKeepaliveInterval = null;
 // players keyed by sessionId; value: { name, isConnected }
 const hostPlayers = new Map();
 // During an active poll: snapshot of the broadcast question payload + answers.
@@ -297,6 +334,7 @@ let playerSessionId = null;
 let playerName = null;
 let playerWsReconnectAttempts = 0;
 let playerSuppressReconnect = false;
+let playerKeepaliveInterval = null;
 let playerCurrentMeta = null;
 let playerDisplayOptions = []; // options[1..N] (sliced)
 let playerOptionIndexBase = 1; // index of the first displayable option in raw options
@@ -523,8 +561,12 @@ function attachHostWsHandlers(ws) {
         handleHostMessage(msg);
     });
 
+    hostKeepaliveInterval = stopKeepalive(hostKeepaliveInterval);
+    hostKeepaliveInterval = startKeepalive(ws);
+
     ws.addEventListener('close', () => {
         logger.log('Host WS closed');
+        hostKeepaliveInterval = stopKeepalive(hostKeepaliveInterval);
         if (hostSuppressReconnect) return;
         if (hostRoomId && hostWsReconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
             hostWsReconnectAttempts++;
@@ -1176,6 +1218,7 @@ function hardResetHost() {
         clearInterval(hostTimerInterval);
         hostTimerInterval = null;
     }
+    hostKeepaliveInterval = stopKeepalive(hostKeepaliveInterval);
     if (hostWs) {
         try {
             hostWs.close();
@@ -1301,8 +1344,12 @@ function attachPlayerWsHandlers(ws) {
         handlePlayerMessage(msg);
     });
 
+    playerKeepaliveInterval = stopKeepalive(playerKeepaliveInterval);
+    playerKeepaliveInterval = startKeepalive(ws);
+
     ws.addEventListener('close', () => {
         logger.log('Player WS closed');
+        playerKeepaliveInterval = stopKeepalive(playerKeepaliveInterval);
         if (playerSuppressReconnect) return;
         if (
             playerRoomCode &&
@@ -1692,6 +1739,7 @@ function stopPlayerTimer() {
 function hardResetPlayer() {
     playerSuppressReconnect = true;
     stopPlayerTimer();
+    playerKeepaliveInterval = stopKeepalive(playerKeepaliveInterval);
     if (playerWs) {
         try {
             playerWs.close();
@@ -1812,4 +1860,22 @@ document.addEventListener('DOMContentLoaded', () => {
     if (initialParams.get('room')) {
         openPlayerJoin();
     }
+
+    // When a backgrounded tab comes back to foreground, setInterval-based
+    // keepalives may have been throttled (browsers commonly clamp to 1/min
+    // in hidden tabs) — long enough for a proxy idle timeout to bite.
+    // Fire an immediate keepalive on each foreground transition to refresh
+    // the path before the 25 s tick.
+    document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState !== 'visible') return;
+        for (const ws of [hostWs, playerWs]) {
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                try {
+                    ws.send(KEEPALIVE_PAYLOAD);
+                } catch {
+                    /* swallow — close handler will reconnect if the path is dead */
+                }
+            }
+        }
+    });
 });
