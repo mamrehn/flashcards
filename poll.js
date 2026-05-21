@@ -347,6 +347,33 @@ let playerCurrentQuestionKey = ''; // stable identifier for "this question"
 // Composer state for fixed source
 const composerFixedOptions = ['', ''];
 
+// Built-in question suggestions for the host — class-rep-style "Wer …" awards.
+// All are source: "players" polls (voting for someone in the room). The host
+// can always type their own question instead; suggestions are unobtrusive.
+const POLL_SUGGESTIONS = [
+    { title: 'Mebis-Sherpa',                       question: 'Mebis-Sherpa: Wer hat die eigene Gruppe durch die tiefsten Mebis-Kapitel gecarried und alle mit Lösungen versorgt?' },
+    { title: 'Koffein-Reaktor',                    question: 'Koffein-Reaktor: Wer besteht nach drei Jahren eigentlich zu 80 % aus Energydrinks und Mate statt aus Wasser?' },
+    { title: 'Linux-Prediger*in',                  question: 'Linux-Prediger*in: Wer lässt keine Gelegenheit aus zu betonen, dass Windows Müll ist und Arch das einzig Wahre ist? (I use Arch, btw)' },
+    { title: 'Git-Poet*in',                        question: 'Git-Poet*in: Wer schreibt die wildesten Commit-Messages? (z. B. "update", "fix", "asdasd", "jetzt gehts")' },
+    { title: 'Stealth-Gamer*in',                   question: 'Stealth-Gamer*in: Wer hat im Unterricht völlig unbemerkt hunderte Stunden in Games versenkt?' },
+    { title: 'Zukünftige*r Start-up-Milliardär*in', question: 'Zukünftige*r Start-up-Milliardär*in: Wer gründet als Erstes ein Start-up für ein überkomplexes Gadget, das absolut niemand braucht?' },
+    { title: 'Chief Hydration Officer (CHO)',      question: 'Chief Hydration Officer (CHO): Wer hat heldenhaft die Klasse am Wasserspender versorgt und vor dem Dehydrieren bewahrt?' },
+    { title: 'ChatGPT-Magier*in',                  question: 'ChatGPT-Magier*in: Wer hat die gesamte schulische Existenz aus perfekten Prompts zusammengeklebt – und es hat funktioniert?' },
+    { title: 'Bullshit-Bingo-Legende',             question: 'Bullshit-Bingo-Legende: Schlecht gelernt, perfekt verkauft: Wer referiert souverän über Themen, die erst 5 Minuten vorher gegoogelt wurden?' },
+    { title: 'Heimliche*r 1st-Level-Support',      question: 'Heimliche*r 1st-Level-Support: Wer ist die unfreiwillige Dauer-Hotline für die ByCS- und WLAN-Probleme der kompletten Klasse?' },
+    { title: 'Berichtsheft-Pedant*in',             question: 'Berichtsheft-Pedant*in: Wer führt das Berichtsheft wie ein Git-Repo – mit fix:-Einträgen und einem Branch pro Quartal?' },
+    { title: 'IHK-Stoiker*in',                     question: 'IHK-Stoiker*in: Wer hat in der Abschlussprüfung eiskalt vier Sekunden vor Abgabe das letzte Kreuz gesetzt?' },
+    { title: 'Hardware-Jünger*in',                 question: 'Hardware-Jünger*in: Wer investiert das allererste richtige Gehalt sofort in eine RTX 5090?' },
+    { title: 'Meme-Beauftragte*r',                 question: 'Meme-Beauftragte*r: Wer postet im Klassenchat deutlich mehr Memes und :wq-Jokes als ernsthafte Nachrichten?' },
+    { title: 'Open-Source-Philanthrop*in',         question: 'Open-Source-Philanthrop*in: Wer hat während des Unterrichts heimlich Bug-Bounties gesammelt oder Pull Requests eingereicht?' },
+];
+
+// Indices already used in this session (consumed when the host actually starts
+// a vote with the suggested question). Suggestions are picked at random from
+// the unused set so each appears at most once until the session ends.
+const usedSuggestionIndices = new Set();
+let currentSuggestionIdx = null;
+
 /* ============================================================================
  * DOM references — populated on DOMContentLoaded.
  * ============================================================================ */
@@ -387,6 +414,11 @@ function collectDom() {
 
         // Composer
         composerQuestion: document.querySelector('#composer-question'),
+        suggestionBox: document.querySelector('#suggestion-box'),
+        suggestionTitle: document.querySelector('#suggestion-title'),
+        suggestionText: document.querySelector('#suggestion-text'),
+        applySuggestionBtn: document.querySelector('#apply-suggestion-btn'),
+        cycleSuggestionBtn: document.querySelector('#cycle-suggestion-btn'),
         sourceRadios: document.querySelectorAll('input[name="poll-source"]'),
         fixedOptionsSection: document.querySelector('#fixed-options-section'),
         composerOptionsList: document.querySelector('#composer-options'),
@@ -785,7 +817,74 @@ function openComposer() {
     // on people in the room); preserve choice on subsequent openings.
     renderComposerOptionsList();
     updateFixedSectionVisibility();
+    if (currentSuggestionIdx === null) pickNextSuggestion();
+    renderSuggestionBox();
     dom.composerQuestion.focus();
+}
+
+/**
+ * Pick a random unused suggestion. Sets currentSuggestionIdx to null if no
+ * suggestions remain. When `excludeCurrent` is true, the currently-shown
+ * suggestion is also excluded so the "another suggestion" button actually
+ * cycles to a different one (rather than possibly re-rolling the same).
+ * @param {boolean} [excludeCurrent]
+ */
+function pickNextSuggestion(excludeCurrent = false) {
+    const candidates = [];
+    for (let i = 0; i < POLL_SUGGESTIONS.length; i++) {
+        if (usedSuggestionIndices.has(i)) continue;
+        if (excludeCurrent && i === currentSuggestionIdx) continue;
+        candidates.push(i);
+    }
+    if (candidates.length === 0) {
+        // Fall back to the current one if cycling found no alternatives —
+        // beats clearing the box mid-session.
+        if (!excludeCurrent || currentSuggestionIdx === null) {
+            currentSuggestionIdx = null;
+        }
+        return;
+    }
+    const pick = candidates[Math.floor(Math.random() * candidates.length)];
+    currentSuggestionIdx = pick;
+}
+
+/**
+ * Render the suggestion box. Hidden entirely when no unused suggestions
+ * remain — the host can still type a custom question, but nothing nags them.
+ */
+function renderSuggestionBox() {
+    if (!dom.suggestionBox) return;
+    if (currentSuggestionIdx === null) {
+        dom.suggestionBox.classList.add('hidden');
+        return;
+    }
+    const s = POLL_SUGGESTIONS[currentSuggestionIdx];
+    dom.suggestionBox.classList.remove('hidden');
+    dom.suggestionTitle.textContent = s.title;
+    dom.suggestionText.textContent = s.question;
+}
+
+/**
+ * Fill the composer with the currently-shown suggestion. Always sets
+ * source=players because every built-in suggestion is a "Wer …" question.
+ */
+function applyCurrentSuggestion() {
+    if (currentSuggestionIdx === null) return;
+    const s = POLL_SUGGESTIONS[currentSuggestionIdx];
+    dom.composerQuestion.value = s.question;
+    for (const r of dom.sourceRadios) {
+        r.checked = r.value === 'players';
+    }
+    updateFixedSectionVisibility();
+    dom.composerQuestion.focus();
+}
+
+/**
+ * Roll to a different unused suggestion. No-op when only one is left.
+ */
+function cycleSuggestion() {
+    pickNextSuggestion(true);
+    renderSuggestionBox();
 }
 
 /**
@@ -985,6 +1084,17 @@ function startVote() {
     hostAnswers.clear();
 
     hostWs.send(JSON.stringify(payload));
+
+    // Consume the suggestion only if the host actually started a vote whose
+    // question text still matches the suggestion. If they edited it, treat it
+    // as a custom question and leave the suggestion available for next time.
+    if (
+        currentSuggestionIdx !== null &&
+        POLL_SUGGESTIONS[currentSuggestionIdx].question === question
+    ) {
+        usedSuggestionIndices.add(currentSuggestionIdx);
+        currentSuggestionIdx = null;
+    }
 
     showOnly(
         ['host-lobby', 'host-composer', 'host-voting', 'host-reveal'],
@@ -1190,11 +1300,11 @@ function nextQuestion() {
     hostActivePoll = null;
     hostPollEnding = false;
     hostAnswers.clear();
-    // Keep the composer fields so the host can iterate quickly.
-    showOnly(
-        ['host-lobby', 'host-composer', 'host-voting', 'host-reveal'],
-        'host-composer'
-    );
+    // Clear the just-used question text so the next suggestion can shine
+    // through cleanly. picksPerVoter / revealCount / duration stay so the
+    // host can iterate quickly with the same parameters.
+    dom.composerQuestion.value = '';
+    openComposer();
 }
 
 /**
@@ -1233,6 +1343,8 @@ function hardResetHost() {
     hostPollEnding = false;
     hostPlayers.clear();
     hostAnswers.clear();
+    usedSuggestionIndices.clear();
+    currentSuggestionIdx = null;
     clearActiveSession();
     showTopView('role-selection');
     refreshReconnectButtons();
@@ -1807,6 +1919,12 @@ document.addEventListener('DOMContentLoaded', () => {
         r.addEventListener('change', updateFixedSectionVisibility);
     }
     dom.addOptionBtn.addEventListener('click', addComposerOption);
+    if (dom.applySuggestionBtn) {
+        dom.applySuggestionBtn.addEventListener('click', applyCurrentSuggestion);
+    }
+    if (dom.cycleSuggestionBtn) {
+        dom.cycleSuggestionBtn.addEventListener('click', cycleSuggestion);
+    }
     dom.composerRevealAll.addEventListener('change', () => {
         dom.composerReveal.disabled = dom.composerRevealAll.checked;
     });

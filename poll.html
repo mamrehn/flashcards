@@ -78,6 +78,33 @@
                         rows="2"
                     ></textarea>
 
+                    <div id="suggestion-box" class="suggestion-box hidden">
+                        <span class="suggestion-marker" aria-hidden="true">💡</span>
+                        <div class="suggestion-body">
+                            <div class="suggestion-headline">
+                                <span class="suggestion-eyebrow">Vorschlag</span>
+                                <span class="suggestion-title-pill" id="suggestion-title"></span>
+                            </div>
+                            <p class="suggestion-text" id="suggestion-text"></p>
+                            <div class="suggestion-actions">
+                                <button
+                                    type="button"
+                                    id="apply-suggestion-btn"
+                                    class="suggestion-link"
+                                >
+                                    Übernehmen
+                                </button>
+                                <button
+                                    type="button"
+                                    id="cycle-suggestion-btn"
+                                    class="suggestion-link suggestion-link-muted"
+                                >
+                                    Anderer Vorschlag
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
                     <fieldset class="composer-fieldset">
                         <legend>Antwortquelle</legend>
                         <label class="radio-label">
