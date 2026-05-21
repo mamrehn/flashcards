@@ -1,0 +1,743 @@
+/* ============================================================================
+   Poll app — standalone live polling / voting tool.
+   Uses theme.css variables for dark-mode support.
+   Mirrors quiz.css visual language (violet primary, accent magenta) so the
+   apps feel kindred, but lives in its own file per the no-touch-quiz rule.
+   ============================================================================ */
+
+:root {
+    --primary-color: #6b42a6;
+    --secondary-color: #46178f;
+    --accent-color: #ff3366;
+    --light-color: var(--surface-secondary);
+    --dark-color: #343a40;
+    --primary-rgb: 107, 66, 166;
+    --podium-gold: #f5b800;
+    --podium-silver: #b0b8c0;
+    --podium-bronze: #c47b3b;
+    --quiz-surface: #f2e9ff;
+    --quiz-surface-alt: #f5f0ff;
+    --quiz-hover: #ece0ff;
+}
+
+[data-theme='dark'] {
+    --quiz-surface: #2a2238;
+    --quiz-surface-alt: #261f33;
+    --quiz-hover: #322747;
+}
+
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+}
+
+body {
+    background-color: var(--surface-secondary);
+    color: var(--text-color);
+    font-size: 18px;
+    line-height: 1.5;
+}
+
+a {
+    color: var(--primary-color);
+    text-decoration: underline;
+    text-decoration-thickness: 1px;
+    text-underline-offset: 2px;
+    font-weight: 500;
+}
+
+a:hover,
+a:focus-visible {
+    color: var(--secondary-color);
+}
+
+#join-link,
+#join-link-modal {
+    color: var(--primary-color);
+    word-break: break-all;
+}
+
+h1 {
+    font-size: 1.8rem;
+}
+h2 {
+    font-size: 1.5rem;
+    color: var(--primary-color);
+    margin-bottom: 0.5rem;
+}
+h3 {
+    font-size: 1.25rem;
+    color: var(--primary-color);
+    margin: 0.5rem 0;
+}
+h4 {
+    font-size: 1.05rem;
+    color: var(--primary-color);
+    margin: 0.5rem 0 0.25rem;
+}
+
+.container {
+    width: 95%;
+    max-width: 1100px;
+    margin: 0.5rem auto;
+    padding: 0.5rem;
+}
+
+header {
+    background-color: var(--surface-color);
+    color: var(--primary-color);
+    padding: 0.5rem 1rem;
+    text-align: center;
+    border-radius: 8px;
+    margin-bottom: 0.75rem;
+    box-shadow: 0 2px 4px var(--shadow-color);
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+}
+
+header h1 {
+    color: var(--primary-color);
+    margin: 0;
+    flex: 1;
+}
+
+.back-link {
+    color: var(--primary-color);
+    text-decoration: none;
+    font-size: 1.5rem;
+    font-weight: 500;
+    line-height: 1;
+    padding: 0.25rem 0.5rem;
+    border-radius: 4px;
+    transition: background-color 0.2s;
+    flex-shrink: 0;
+}
+
+.back-link:hover {
+    background-color: rgba(128, 128, 128, 0.15);
+}
+
+.view {
+    display: none;
+}
+
+.active {
+    display: block;
+}
+
+.hidden {
+    display: none !important;
+}
+
+.card {
+    background-color: var(--surface-color);
+    border-radius: 8px;
+    padding: 0.75rem 1rem;
+    box-shadow: 0 2px 4px var(--shadow-color);
+    margin-bottom: 0.75rem;
+}
+
+input,
+select,
+textarea {
+    width: 100%;
+    padding: 0.5rem 0.75rem;
+    margin: 0.3rem 0;
+    border: 1px solid var(--input-border);
+    border-radius: 4px;
+    font-size: 1em;
+    background-color: var(--input-bg);
+    color: var(--text-color);
+    font-family: inherit;
+}
+
+textarea {
+    resize: vertical;
+    min-height: 2.5rem;
+}
+
+input:focus,
+select:focus,
+textarea:focus {
+    outline: none;
+    border-color: var(--primary-color);
+    box-shadow: 0 0 0 0.15rem rgba(var(--primary-rgb), 0.25);
+}
+
+.btn {
+    background-color: var(--primary-color);
+    color: white;
+    border: none;
+    padding: 0.5rem 1rem;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 1.05rem;
+    font-weight: 500;
+    transition: background-color 0.2s;
+    margin: 0.3rem 0.3rem 0.3rem 0;
+}
+
+@media (hover: hover) {
+    .btn:hover:not(:disabled) {
+        background-color: var(--secondary-color);
+    }
+}
+
+.btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.btn-accent {
+    background-color: var(--accent-color);
+}
+
+@media (hover: hover) {
+    .btn-accent:hover:not(:disabled) {
+        background-color: #e02858;
+    }
+}
+
+.btn-reconnect {
+    background-color: transparent;
+    color: var(--secondary-color);
+    border: 2px solid var(--secondary-color);
+    font-size: 0.95em;
+}
+
+@media (hover: hover) {
+    .btn-reconnect:hover:not(:disabled) {
+        background-color: var(--secondary-color);
+        color: white;
+    }
+}
+
+.role-hint {
+    color: var(--text-muted);
+    font-size: 0.95em;
+    margin-top: 0.75rem;
+    max-width: 60ch;
+}
+
+/* -------- Lobby: QR + player list -------- */
+
+#qr-container {
+    margin: 0.5rem 0;
+}
+
+#qrcode {
+    display: inline-block;
+    padding: 0.5rem;
+    background: white;
+    border-radius: 6px;
+    margin: 0.5rem 0;
+}
+
+#qrcode img {
+    display: block;
+}
+
+.players-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+    margin: 0.5rem 0;
+}
+
+.player-chip {
+    background-color: var(--quiz-surface);
+    border: 1px solid var(--border-color);
+    color: var(--text-color);
+    padding: 0.3rem 0.7rem;
+    border-radius: 999px;
+    font-size: 0.95em;
+}
+
+.player-chip.disconnected {
+    opacity: 0.5;
+    text-decoration: line-through;
+}
+
+/* -------- Composer -------- */
+
+.composer-fieldset {
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    padding: 0.5rem 0.75rem;
+    margin: 0.75rem 0;
+}
+
+.composer-fieldset legend {
+    font-weight: 600;
+    padding: 0 0.4rem;
+    color: var(--primary-color);
+}
+
+.radio-label,
+.checkbox-label {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    margin: 0.2rem 0.75rem 0.2rem 0;
+    cursor: pointer;
+}
+
+.radio-label input,
+.checkbox-label input {
+    width: auto;
+    margin: 0;
+}
+
+.composer-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem;
+    margin: 0.5rem 0;
+}
+
+.composer-row > label {
+    flex: 1 1 auto;
+    min-width: 200px;
+}
+
+.duration-input {
+    width: 90px;
+    flex: 0 0 auto;
+}
+
+.composer-help {
+    color: var(--text-muted);
+    font-weight: 400;
+    font-size: 0.9em;
+}
+
+#composer-options .composer-option-row {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    margin: 0.25rem 0;
+}
+
+#composer-options .composer-option-row input {
+    flex: 1;
+    margin: 0;
+}
+
+.composer-option-remove {
+    background: transparent;
+    border: 1px solid var(--input-border);
+    color: var(--text-muted);
+    width: 2rem;
+    height: 2rem;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 1.2em;
+    line-height: 1;
+}
+
+.composer-option-remove:hover {
+    background-color: var(--wrong-color, #dc3545);
+    color: white;
+}
+
+.composer-actions {
+    margin-top: 1rem;
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+}
+
+/* -------- Timer bar (shared with host + player) -------- */
+
+.timer-bar-container {
+    width: 100%;
+    height: 8px;
+    background-color: var(--progress-track, #e9ecef);
+    border-radius: 4px;
+    overflow: hidden;
+    margin: 0.5rem 0;
+}
+
+.timer-bar {
+    height: 100%;
+    width: 100%;
+    background-color: var(--accent-color);
+    transition: width 0.1s linear;
+}
+
+/* -------- Host live-options list during voting -------- */
+
+.host-options-list {
+    margin-top: 0.5rem;
+    padding: 0;
+    list-style: none;
+}
+
+.host-options-list li {
+    background-color: var(--quiz-surface-alt);
+    border: 1px solid var(--border-color);
+    border-left: 4px solid var(--primary-color);
+    padding: 0.5rem 0.8rem;
+    margin-bottom: 0.35rem;
+    border-radius: 6px;
+    font-size: 1.1em;
+    display: flex;
+    justify-content: space-between;
+    gap: 0.5rem;
+}
+
+.host-options-list .live-count {
+    color: var(--text-muted);
+    font-size: 0.9em;
+}
+
+/* -------- Player rank picker -------- */
+
+.player-hint {
+    color: var(--text-muted);
+    font-size: 0.95em;
+    margin: 0.4rem 0;
+}
+
+#rank-list-wrapper,
+#rank-options-wrapper {
+    margin: 0.75rem 0;
+}
+
+.rank-list {
+    list-style: none;
+    padding: 0;
+    counter-reset: rank;
+    min-height: 2.5rem;
+    border: 2px dashed var(--input-border);
+    border-radius: 8px;
+    padding: 0.5rem;
+    background-color: var(--surface-secondary);
+}
+
+.rank-list li {
+    background-color: var(--primary-color);
+    color: white;
+    padding: 0.5rem 0.8rem 0.5rem 2.6rem;
+    margin: 0.25rem 0;
+    border-radius: 6px;
+    position: relative;
+    cursor: pointer;
+    font-size: 1.05em;
+    transition: background-color 0.15s;
+}
+
+.rank-list li::before {
+    counter-increment: rank;
+    content: counter(rank) '.';
+    position: absolute;
+    left: 0.8rem;
+    top: 50%;
+    transform: translateY(-50%);
+    font-weight: 700;
+    font-size: 1.1em;
+}
+
+/* When the host configured picksPerVoter=1, the player ranks exactly one
+   option — the leading "1." adds no information. Hide it and reclaim the
+   left-pad space for the option label. */
+.rank-list.single-pick li {
+    padding-left: 0.8rem;
+}
+
+.rank-list.single-pick li::before {
+    content: '';
+}
+
+@media (hover: hover) {
+    .rank-list li:hover {
+        background-color: var(--secondary-color);
+    }
+}
+
+.rank-list li.rank-empty {
+    background-color: transparent;
+    color: var(--text-muted);
+    padding: 0.4rem 0.8rem;
+    font-style: italic;
+    cursor: default;
+}
+
+.rank-list li.rank-empty::before {
+    content: '';
+}
+
+.rank-options {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+    gap: 0.4rem;
+}
+
+.rank-options button {
+    background-color: var(--quiz-surface-alt);
+    border: 2px solid var(--input-border);
+    color: var(--text-color);
+    padding: 0.6rem 0.8rem;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 1em;
+    transition: all 0.15s;
+    text-align: center;
+    word-break: break-word;
+    font-family: inherit;
+}
+
+@media (hover: hover) {
+    .rank-options button:hover:not(:disabled) {
+        background-color: var(--quiz-hover);
+        border-color: var(--primary-color);
+    }
+}
+
+.rank-options button.picked {
+    opacity: 0.45;
+    cursor: default;
+    border-style: dashed;
+}
+
+.rank-options button:disabled {
+    cursor: not-allowed;
+}
+
+/* -------- Podium reveal (shared host + player) -------- */
+
+.podium-list {
+    list-style: none;
+    padding: 0;
+    margin: 0.75rem 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+}
+
+.podium-list li {
+    display: grid;
+    grid-template-columns: 2.4rem 1fr auto;
+    align-items: center;
+    gap: 0.6rem;
+    padding: 0.6rem 0.9rem;
+    background-color: var(--quiz-surface-alt);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    position: relative;
+    overflow: hidden;
+}
+
+/* Explicit rank number written by JS — uses competition ranking (1, 1, 3, …)
+   so ties share a rank instead of getting fake unique positions. */
+.podium-rank {
+    font-weight: 700;
+    font-size: 1.4em;
+    color: var(--primary-color);
+    text-align: center;
+}
+
+/* When the host configured revealCount=1, the leading "1." is just noise —
+   drop the column entirely so the winner name takes full width. Ties still
+   show every winner; they just all appear without a number. */
+.podium-list.single-result li {
+    grid-template-columns: 1fr auto;
+}
+
+.podium-list.single-result .podium-rank {
+    display: none;
+}
+
+.podium-list li.rank-1 {
+    border-left: 6px solid var(--podium-gold);
+    background: linear-gradient(
+        90deg,
+        rgba(245, 184, 0, 0.18) 0%,
+        var(--quiz-surface-alt) 60%
+    );
+}
+
+.podium-list li.rank-2 {
+    border-left: 6px solid var(--podium-silver);
+}
+
+.podium-list li.rank-3 {
+    border-left: 6px solid var(--podium-bronze);
+}
+
+.podium-name {
+    font-weight: 600;
+    font-size: 1.1em;
+    word-break: break-word;
+}
+
+.podium-score {
+    color: var(--text-muted);
+    font-variant-numeric: tabular-nums;
+    font-size: 0.95em;
+    white-space: nowrap;
+}
+
+.reveal-meta {
+    color: var(--text-muted);
+    font-size: 0.95em;
+    margin-top: 0.5rem;
+}
+
+/* Reveal-screen action structure: the high-frequency primary action ("Nächste
+   Frage") lives in its own row. The rare destructive action ("Sitzung
+   beenden") is pushed far to the right and visually downgraded to a quiet
+   text-link so a misclick on the primary CTA can't accidentally tear down
+   the room. Hover/focus reveals the red affordance — visible only when the
+   host is deliberately heading there. */
+.reveal-primary-actions {
+    margin-top: 1rem;
+    display: flex;
+    justify-content: center;
+}
+
+.reveal-danger-zone {
+    margin-top: 1.5rem;
+    padding-top: 0.5rem;
+    border-top: 1px solid var(--border-color);
+    display: flex;
+    justify-content: flex-end;
+}
+
+.session-end-link {
+    background: transparent;
+    border: none;
+    color: var(--text-muted);
+    font-size: 0.85em;
+    padding: 0.35rem 0.5rem;
+    border-radius: 4px;
+    cursor: pointer;
+    text-decoration: underline;
+    text-decoration-thickness: 1px;
+    text-underline-offset: 2px;
+    transition: color 0.15s;
+    font-family: inherit;
+}
+
+.session-end-link:hover,
+.session-end-link:focus-visible {
+    color: var(--wrong-color, #dc3545);
+    outline: none;
+}
+
+/* -------- Player picks echo (after submit / on reveal) -------- */
+
+.picks-echo {
+    margin: 0.75rem 0;
+}
+
+.picks-echo h4 {
+    margin-bottom: 0.25rem;
+}
+
+.picks-echo ol {
+    padding-left: 1.5rem;
+    color: var(--text-color);
+}
+
+.picks-echo li {
+    padding: 0.15rem 0;
+}
+
+/* -------- Toast notification (mirrored from quiz.css idiom) -------- */
+
+.toast-notification {
+    position: fixed;
+    top: 1rem;
+    left: 50%;
+    transform: translateX(-50%) translateY(-100%);
+    background-color: var(--primary-color);
+    color: white;
+    padding: 0.6rem 1rem;
+    border-radius: 6px;
+    box-shadow: 0 4px 12px var(--shadow-color);
+    z-index: 10000;
+    opacity: 0;
+    transition: transform 0.3s ease, opacity 0.3s ease;
+    max-width: 90%;
+    text-align: center;
+}
+
+.toast-notification.show {
+    transform: translateX(-50%) translateY(0);
+    opacity: 1;
+}
+
+.toast-notification.toast-error {
+    background-color: var(--wrong-color, #dc3545);
+}
+
+.toast-notification.toast-info {
+    background-color: var(--primary-color);
+}
+
+/* -------- QR modal -------- */
+
+.qr-modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: rgba(0, 0, 0, 0.7);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 9000;
+    padding: 1rem;
+}
+
+.qr-modal-content {
+    background-color: var(--surface-color);
+    color: var(--text-color);
+    padding: 1.5rem;
+    border-radius: 12px;
+    text-align: center;
+    max-width: 95%;
+    max-height: 95vh;
+    overflow: auto;
+    position: relative;
+}
+
+.qr-modal-close {
+    position: absolute;
+    top: 0.5rem;
+    right: 0.75rem;
+    background: transparent;
+    border: none;
+    font-size: 1.8rem;
+    cursor: pointer;
+    color: var(--text-color);
+    line-height: 1;
+}
+
+#large-qrcode {
+    display: inline-block;
+    padding: 0.75rem;
+    background: white;
+    border-radius: 8px;
+    margin: 0.75rem 0;
+}
+
+/* -------- Responsive tweaks -------- */
+
+@media (max-width: 600px) {
+    h1 {
+        font-size: 1.4rem;
+    }
+    h2 {
+        font-size: 1.25rem;
+    }
+    .rank-options {
+        grid-template-columns: 1fr 1fr;
+    }
+}

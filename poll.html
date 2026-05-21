@@ -1,0 +1,285 @@
+<!doctype html>
+<html lang="de">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <meta
+            http-equiv="Content-Security-Policy"
+            content="default-src 'self'; script-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com; style-src 'self' 'unsafe-inline'; connect-src 'self' wss://qlash-server.fly.dev; img-src 'self' data:; font-src 'self'; base-uri 'self'; form-action 'self';"
+        />
+        <meta name="referrer" content="no-referrer" />
+        <title>Umfrage</title>
+        <script
+            src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"
+            integrity="sha512-CNgIRecGo7nphbeZ04Sc13ka07paqdeTu0WR1IM4kNcpmBAUSHSQX0FslNhTDadL4O5SAGapGt4FodqL8My0mA=="
+            crossorigin="anonymous"
+            referrerpolicy="no-referrer"
+        ></script>
+        <link rel="stylesheet" href="theme.css" />
+        <script src="theme.js"></script>
+        <script src="logger.js"></script>
+        <script src="sanitize.js"></script>
+        <link rel="stylesheet" href="poll.css" />
+    </head>
+
+    <body>
+        <div class="container">
+            <header>
+                <a href="index.html" class="back-link" title="Zur Startseite">←</a>
+                <h1>Umfrage</h1>
+            </header>
+
+            <div id="role-selection" class="view active card">
+                <h2>Wähle deine Rolle</h2>
+                <button id="host-btn" class="btn">Umfrage hosten</button>
+                <button id="player-btn" class="btn">Umfrage beitreten</button>
+                <button id="reconnect-host-btn" class="btn btn-reconnect hidden">
+                    Erneut als Host verbinden
+                </button>
+                <button id="reconnect-player-btn" class="btn btn-reconnect hidden">
+                    Erneut zur Umfrage verbinden
+                </button>
+                <p class="role-hint">
+                    Live-Abstimmungen für die Gruppe: Klassensprecherwahl,
+                    Wandertagsziel, oder eine spontane Stimmungsumfrage.
+                    Keine Punkte, kein Richtig/Falsch — nur Ergebnisse.
+                </p>
+            </div>
+
+            <div id="host-view" class="view card">
+                <section id="host-lobby">
+                    <h2>Lobby</h2>
+                    <div id="qr-container">
+                        <h3>QR-Code scannen oder URL eingeben, um beizutreten:</h3>
+                        <div id="qrcode" style="cursor: pointer"></div>
+                        <p>URL: <a id="join-link" href="#" target="_blank"></a></p>
+                        <p>
+                            Code:
+                            <span
+                                id="room-id"
+                                style="font-size: 1.4em; font-weight: bold; letter-spacing: 0.1em"
+                            ></span>
+                        </p>
+                        <p>Verbundene Spieler: <span id="player-count">0</span></p>
+                        <div class="players-list" id="players-list"></div>
+                    </div>
+                    <button id="show-composer-btn" class="btn btn-accent">
+                        Frage erstellen
+                    </button>
+                </section>
+
+                <section id="host-composer" class="hidden">
+                    <h2>Neue Umfrage</h2>
+                    <label for="composer-question">Frage:</label>
+                    <textarea
+                        id="composer-question"
+                        maxlength="3000"
+                        placeholder="z. B. Wer soll Klassensprecher werden?"
+                        rows="2"
+                    ></textarea>
+
+                    <fieldset class="composer-fieldset">
+                        <legend>Antwortquelle</legend>
+                        <label class="radio-label">
+                            <input
+                                type="radio"
+                                name="poll-source"
+                                value="players"
+                                checked
+                            />
+                            Spielernamen (aktuelle Lobby)
+                        </label>
+                        <label class="radio-label">
+                            <input type="radio" name="poll-source" value="fixed" />
+                            Eigene Optionen
+                        </label>
+                    </fieldset>
+
+                    <div id="fixed-options-section" class="hidden">
+                        <label>Optionen:</label>
+                        <div id="composer-options"></div>
+                        <button id="add-option-btn" type="button" class="btn">
+                            Option hinzufügen
+                        </button>
+                    </div>
+
+                    <div class="composer-row">
+                        <label for="composer-picks">
+                            picksPerVoter
+                            <span class="composer-help">
+                                — wie viele Auswahlen jede Person trifft (Rangfolge zählt)
+                            </span>
+                            :
+                        </label>
+                        <input
+                            type="number"
+                            id="composer-picks"
+                            min="1"
+                            max="20"
+                            value="1"
+                            class="duration-input"
+                        />
+                    </div>
+
+                    <div class="composer-row">
+                        <label for="composer-reveal">
+                            revealCount
+                            <span class="composer-help">
+                                — wie viele Ergebnisse das Podium anzeigt
+                            </span>
+                            :
+                        </label>
+                        <input
+                            type="number"
+                            id="composer-reveal"
+                            min="1"
+                            max="20"
+                            value="3"
+                            class="duration-input"
+                        />
+                        <label class="checkbox-label">
+                            <input type="checkbox" id="composer-reveal-all" />
+                            Alle anzeigen
+                        </label>
+                    </div>
+
+                    <div class="composer-row">
+                        <label for="composer-duration">Dauer (Sekunden, max 80):</label>
+                        <input
+                            type="number"
+                            id="composer-duration"
+                            min="5"
+                            max="80"
+                            value="45"
+                            class="duration-input"
+                        />
+                    </div>
+
+                    <div class="composer-actions">
+                        <button id="start-vote-btn" class="btn btn-accent">
+                            Umfrage starten
+                        </button>
+                        <button id="back-to-lobby-btn" type="button" class="btn btn-reconnect">
+                            Zurück zur Lobby
+                        </button>
+                    </div>
+                </section>
+
+                <section id="host-voting" class="hidden">
+                    <h2>Umfrage läuft…</h2>
+                    <h3 id="host-question-display"></h3>
+                    <div class="timer-bar-container">
+                        <div class="timer-bar" id="host-timer-bar"></div>
+                    </div>
+                    <p>
+                        Antworten:
+                        <span id="host-answers-count">0</span> /
+                        <span id="host-total-players">0</span>
+                    </p>
+                    <ul id="host-live-options" class="host-options-list"></ul>
+                    <button id="end-vote-btn" class="btn btn-accent">
+                        Umfrage jetzt beenden
+                    </button>
+                </section>
+
+                <section id="host-reveal" class="hidden">
+                    <h2>Ergebnis</h2>
+                    <h3 id="host-reveal-question"></h3>
+                    <ol id="host-podium-list" class="podium-list"></ol>
+                    <p id="host-reveal-meta" class="reveal-meta"></p>
+                    <div class="reveal-primary-actions">
+                        <button id="next-question-btn" class="btn btn-accent">
+                            Nächste Frage
+                        </button>
+                    </div>
+                    <div class="reveal-danger-zone">
+                        <button id="end-session-btn" type="button" class="session-end-link">
+                            Sitzung beenden
+                        </button>
+                    </div>
+                </section>
+            </div>
+
+            <div id="player-view" class="view card">
+                <div id="join-form">
+                    <h2>Umfrage beitreten</h2>
+                    <input
+                        type="text"
+                        id="room-code-input"
+                        placeholder="Code eingeben oder QR scannen"
+                    />
+                    <input
+                        type="text"
+                        id="player-name-input"
+                        placeholder="Dein Name"
+                    />
+                    <button id="join-btn" class="btn">Beitreten</button>
+                </div>
+
+                <div id="player-waiting" class="hidden">
+                    <h2>Bereit</h2>
+                    <p id="player-waiting-status">
+                        Du bist drin — wir warten auf die nächste Umfrage.
+                    </p>
+                    <p class="player-hint" id="player-name-display"></p>
+                </div>
+
+                <div id="player-vote" class="hidden">
+                    <h3 id="player-question-text"></h3>
+                    <div class="timer-bar-container">
+                        <div class="timer-bar" id="player-timer-bar"></div>
+                    </div>
+                    <p id="player-vote-hint" class="player-hint"></p>
+
+                    <div id="rank-list-wrapper">
+                        <h4>Deine Rangfolge:</h4>
+                        <ol id="rank-list" class="rank-list">
+                            <li class="rank-empty">Tippe unten eine Option an.</li>
+                        </ol>
+                    </div>
+
+                    <div id="rank-options-wrapper">
+                        <h4>Optionen:</h4>
+                        <div id="rank-options" class="rank-options"></div>
+                    </div>
+
+                    <button id="submit-vote-btn" class="btn btn-accent" disabled>
+                        Stimme abgeben
+                    </button>
+                </div>
+
+                <div id="player-submitted" class="hidden">
+                    <h2>Deine Stimme ist abgegeben</h2>
+                    <p>Warten auf die Auswertung…</p>
+                    <div id="submitted-picks-echo" class="picks-echo"></div>
+                </div>
+
+                <div id="player-reveal" class="hidden">
+                    <h2>Ergebnis</h2>
+                    <h3 id="player-reveal-question"></h3>
+                    <ol id="player-podium-list" class="podium-list"></ol>
+                    <div id="player-picks-echo" class="picks-echo"></div>
+                    <p id="player-reveal-status">Warten auf nächste Umfrage…</p>
+                </div>
+            </div>
+        </div>
+
+        <div id="qr-modal-overlay" class="qr-modal-overlay hidden">
+            <div id="qr-modal-content" class="qr-modal-content">
+                <button id="qr-modal-close" class="qr-modal-close">&times;</button>
+                <h3>Zum Beitreten scannen oder URL eingeben</h3>
+                <div id="large-qrcode"></div>
+                <p>URL: <a id="join-link-modal" href="#" target="_blank"></a></p>
+                <p>
+                    Code:
+                    <span
+                        id="modal-room-id"
+                        style="font-size: 1.4em; font-weight: bold; letter-spacing: 0.1em"
+                    ></span>
+                </p>
+            </div>
+        </div>
+
+        <script src="poll.js"></script>
+    </body>
+</html>
