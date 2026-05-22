@@ -48,16 +48,22 @@ const PICKS_STORAGE_KEY = 'poll_last_picks';
 // that's been gone longer than this is no longer recoverable anyway.
 const SESSION_TTL_MS = 24 * 60 * 60 * 1000;
 const MAX_RECONNECT_ATTEMPTS = 30;
-// Application-level keepalive interval (ms). The server pings every 30 s at the
-// WebSocket protocol level and the browser auto-pongs, but some intermediate
-// proxies (carrier NAT, corporate firewalls) only see app-layer frames as
-// "activity" and drop the TCP socket after ~60 s of silence. We send a small
-// JSON frame every 25 s to keep the path warm. The payload must parse as JSON
-// (or the server replies with an "Ungültiges Nachrichtenformat" error toast);
-// using an unknown `type` makes the server's switch fall through to its
-// default branch, which just console.warns and otherwise no-ops.
-const KEEPALIVE_INTERVAL_MS = 25_000;
-const KEEPALIVE_PAYLOAD = JSON.stringify({ type: 'poll_keepalive' });
+// Application-level heartbeat. The server pings every 30 s at the WebSocket
+// protocol level and the browser auto-pongs, but (a) some intermediate proxies
+// (carrier NAT, corporate firewalls) only see app-layer frames as "activity"
+// and drop the TCP socket after ~60 s of silence, and (b) if the server's
+// network silently goes dark without closing the TCP connection, the browser
+// may keep the socket in OPEN state for many seconds before noticing.
+//
+// We send a `{type:'heartbeat'}` every 25 s; the server replies with
+// `{type:'heartbeat_ack'}`. A watchdog on the client side checks how long ago
+// we last heard *anything* from the server (heartbeat ack, game message, etc.)
+// — if > HEARTBEAT_TIMEOUT_MS, we force-close the socket and let the unified
+// reconnect logic take over.
+const HEARTBEAT_INTERVAL_MS = 25_000;
+const HEARTBEAT_TIMEOUT_MS = 60_000;
+const HEARTBEAT_WATCHDOG_INTERVAL_MS = 10_000;
+const HEARTBEAT_PAYLOAD = JSON.stringify({ type: 'heartbeat' });
 
 /* ============================================================================
  * Tiny helpers
@@ -177,30 +183,77 @@ function reconnectBackoffMs(attempt) {
 }
 
 /**
- * Start a keepalive interval that fires `KEEPALIVE_PAYLOAD` over the given WS
- * every `KEEPALIVE_INTERVAL_MS`. The payload is non-JSON so the server's
- * JSON.parse fails silently and no business logic runs. Returns the interval
- * id so the caller can cancel it on close.
+ * Start the bidirectional heartbeat for a WebSocket. Returns a state object
+ * containing both intervals plus last-seen / last-sent timestamps. Pass the
+ * state to `stopHeartbeat` when the socket closes.
+ *
+ * `ws.send` is wrapped so that *any* outbound traffic (submit_answer,
+ * start_question, etc.) updates `lastSendTime`. The heartbeat tick then skips
+ * itself if we already sent something within the past `HEARTBEAT_INTERVAL_MS`
+ * — pointless to chase a fresh submit_answer with a heartbeat ping.
+ *
+ * `state.lastMsgTime` is updated externally (by the message-handler attached
+ * in attachXWsHandlers) on every received frame, so an active stream of
+ * server-pushed messages (questions, results) keeps the watchdog quiet
+ * without a redundant heartbeat round-trip.
  * @param {WebSocket} ws
- * @returns {number}
+ * @returns {{sendInterval:number, watchdog:number, lastMsgTime:number, lastSendTime:number}}
  */
-function startKeepalive(ws) {
-    return setInterval(() => {
+function startHeartbeat(ws) {
+    const now = Date.now();
+    const state = { lastMsgTime: now, lastSendTime: now };
+
+    // Wrap ws.send so every outbound frame bumps lastSendTime. Shadowing the
+    // prototype method via an own property is contained to this socket;
+    // nothing else in the app reaches into WebSocket.prototype.send.
+    const originalSend = ws.send.bind(ws);
+    ws.send = (...args) => {
+        state.lastSendTime = Date.now();
+        return originalSend(...args);
+    };
+
+    state.sendInterval = setInterval(() => {
         if (!ws || ws.readyState !== WebSocket.OPEN) return;
+        // Skip the heartbeat if we already sent *something* within the
+        // interval window — there's no point pinging right after a real
+        // message. The wrapped send above updates lastSendTime for every
+        // ws.send call site, so this covers submit_answer, start_question,
+        // music votes, the lot.
+        if (Date.now() - state.lastSendTime < HEARTBEAT_INTERVAL_MS) return;
         try {
-            ws.send(KEEPALIVE_PAYLOAD);
+            ws.send(HEARTBEAT_PAYLOAD);
         } catch (error) {
-            logger.error('Keepalive send failed:', error);
+            logger.error('Heartbeat send failed:', error);
         }
-    }, KEEPALIVE_INTERVAL_MS);
+    }, HEARTBEAT_INTERVAL_MS);
+
+    state.watchdog = setInterval(() => {
+        if (!ws || ws.readyState !== WebSocket.OPEN) return;
+        const silentMs = Date.now() - state.lastMsgTime;
+        if (silentMs > HEARTBEAT_TIMEOUT_MS) {
+            logger.warn(
+                `No server activity for ${Math.round(silentMs / 1000)}s — forcing reconnect.`
+            );
+            try {
+                ws.close();
+            } catch {
+                /* close already in progress */
+            }
+        }
+    }, HEARTBEAT_WATCHDOG_INTERVAL_MS);
+
+    return state;
 }
 
 /**
- * @param {number|null} id
+ * @param {{sendInterval:number, watchdog:number}|null} state
  * @returns {null}
  */
-function stopKeepalive(id) {
-    if (id !== null) clearInterval(id);
+function stopHeartbeat(state) {
+    if (state) {
+        clearInterval(state.sendInterval);
+        clearInterval(state.watchdog);
+    }
     return null;
 }
 
@@ -336,7 +389,7 @@ let hostSuppressReconnect = false;
 // Prevents the close handler, the `online` event, and a manual button click
 // from racing into multiple parallel WebSocket connections.
 let hostReconnecting = false;
-let hostKeepaliveInterval = null;
+let hostHeartbeat = null;
 // players keyed by sessionId; value: { name, isConnected }
 const hostPlayers = new Map();
 // During an active poll: snapshot of the broadcast question payload + answers.
@@ -358,7 +411,7 @@ let playerWsReconnectAttempts = 0;
 let playerSuppressReconnect = false;
 // See hostReconnecting — same purpose.
 let playerReconnecting = false;
-let playerKeepaliveInterval = null;
+let playerHeartbeat = null;
 let playerCurrentMeta = null;
 let playerDisplayOptions = []; // options[1..N] (sliced)
 let playerOptionIndexBase = 1; // index of the first displayable option in raw options
@@ -596,6 +649,9 @@ function initHostReconnect(info) {
  */
 function attachHostWsHandlers(ws) {
     ws.addEventListener('message', (ev) => {
+        // Any incoming frame (heartbeat_ack or real game message) counts as
+        // server liveness — keeps the watchdog quiet.
+        if (hostHeartbeat) hostHeartbeat.lastMsgTime = Date.now();
         let msg;
         try {
             msg = JSON.parse(ev.data);
@@ -605,8 +661,8 @@ function attachHostWsHandlers(ws) {
         handleHostMessage(msg);
     });
 
-    hostKeepaliveInterval = stopKeepalive(hostKeepaliveInterval);
-    hostKeepaliveInterval = startKeepalive(ws);
+    hostHeartbeat = stopHeartbeat(hostHeartbeat);
+    hostHeartbeat = startHeartbeat(ws);
 
     ws.addEventListener('close', () => {
         // Ignore stale close events from a previous WS instance we've
@@ -616,7 +672,7 @@ function attachHostWsHandlers(ws) {
         // reconnect on top.
         if (ws !== hostWs) return;
         logger.log('Host WS closed');
-        hostKeepaliveInterval = stopKeepalive(hostKeepaliveInterval);
+        hostHeartbeat = stopHeartbeat(hostHeartbeat);
         reconnectHostWs();
     });
 
@@ -1446,7 +1502,7 @@ function hardResetHost() {
         clearInterval(hostTimerInterval);
         hostTimerInterval = null;
     }
-    hostKeepaliveInterval = stopKeepalive(hostKeepaliveInterval);
+    hostHeartbeat = stopHeartbeat(hostHeartbeat);
     if (hostWs) {
         try {
             hostWs.close();
@@ -1550,6 +1606,7 @@ function initPlayerReconnect(info) {
  */
 function attachPlayerWsHandlers(ws) {
     ws.addEventListener('message', (ev) => {
+        if (playerHeartbeat) playerHeartbeat.lastMsgTime = Date.now();
         let msg;
         try {
             msg = JSON.parse(ev.data);
@@ -1559,15 +1616,15 @@ function attachPlayerWsHandlers(ws) {
         handlePlayerMessage(msg);
     });
 
-    playerKeepaliveInterval = stopKeepalive(playerKeepaliveInterval);
-    playerKeepaliveInterval = startKeepalive(ws);
+    playerHeartbeat = stopHeartbeat(playerHeartbeat);
+    playerHeartbeat = startHeartbeat(ws);
 
     ws.addEventListener('close', () => {
         // Ignore stale close events from a previous WS instance we've
         // already replaced — see the matching comment on the host side.
         if (ws !== playerWs) return;
         logger.log('Player WS closed');
-        playerKeepaliveInterval = stopKeepalive(playerKeepaliveInterval);
+        playerHeartbeat = stopHeartbeat(playerHeartbeat);
         reconnectPlayerWs();
     });
 
@@ -1965,7 +2022,7 @@ function stopPlayerTimer() {
 function hardResetPlayer() {
     playerSuppressReconnect = true;
     stopPlayerTimer();
-    playerKeepaliveInterval = stopKeepalive(playerKeepaliveInterval);
+    playerHeartbeat = stopHeartbeat(playerHeartbeat);
     if (playerWs) {
         try {
             playerWs.close();
@@ -2107,7 +2164,7 @@ document.addEventListener('DOMContentLoaded', () => {
         for (const ws of [hostWs, playerWs]) {
             if (ws && ws.readyState === WebSocket.OPEN) {
                 try {
-                    ws.send(KEEPALIVE_PAYLOAD);
+                    ws.send(HEARTBEAT_PAYLOAD);
                 } catch {
                     /* swallow — close handler will reconnect if the path is dead */
                 }

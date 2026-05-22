@@ -243,7 +243,23 @@ wss.on('connection', (ws) => {
             return;
         }
 
+        // Any incoming app-level message is proof the client is alive —
+        // counts the same as a WS-protocol pong for the heartbeat. Without
+        // this, a client sending submit_answer / start_question every second
+        // could still be terminated for "missed pongs" if their browser
+        // happened to throttle the auto-pong.
+        ws.isAlive = true;
+        ws.missedPongs = 0;
+
         switch (msg.type) {
+            case 'heartbeat': {
+                // Application-level heartbeat. The client uses our ack to
+                // confirm the server is still responsive (separate from the
+                // WS-protocol ping/pong, which the browser handles
+                // automatically and we never see at app level).
+                send(ws, { type: 'heartbeat_ack' });
+                break;
+            }
             case 'create_room': {
                 handleCreateRoom(ws);
                 break;
