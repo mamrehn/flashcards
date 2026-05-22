@@ -312,6 +312,10 @@ wss.on('connection', (ws) => {
                 handleSetLobbyMusic(ws, msg);
                 break;
             }
+            case 'append_option': {
+                handleAppendOption(ws, msg);
+                break;
+            }
             default: {
                 console.warn(`Unknown message type: ${msg.type}`);
                 break;
@@ -659,11 +663,22 @@ function handleJoin(ws, msg) {
             return;
         }
 
-        // New player
+        // New player. Seed their starting score with the average of all
+        // existing players' scores so a late-joiner who comes in after a few
+        // quiz questions can still credibly compete (a player who joined at
+        // question 5 of 10 starting at 0 has no realistic shot otherwise).
+        // For polls this field is unused in game logic — Borda totals are
+        // tracked per-option, not per-player — so the seeding is harmless.
+        let initialScore = 0;
+        if (room.players.size > 0) {
+            let sum = 0;
+            for (const p of room.players.values()) sum += p.score;
+            initialScore = Math.round(sum / room.players.size);
+        }
         sessionId = generateSessionId();
         const name = sanitizeName(msg.playerName);
         const avatar = sanitizeAvatar(msg.avatar);
-        player = { name, avatar, score: 0, ws, isConnected: true };
+        player = { name, avatar, score: initialScore, ws, isConnected: true };
         room.players.set(sessionId, player);
 
         ws.sessionId = sessionId;
@@ -673,7 +688,7 @@ function handleJoin(ws, msg) {
         send(ws, {
             type: 'joined',
             sessionId,
-            score: 0,
+            score: initialScore,
             playerName: name,
             avatar,
             isReconnect: false,
@@ -716,6 +731,7 @@ function handleJoin(ws, msg) {
                 sessionId,
                 name,
                 avatar,
+                score: initialScore,
                 playerCount: getConnectedPlayerCount(room),
             });
         }
@@ -982,6 +998,40 @@ function handleSetLobbyMusic(ws, msg) {
 
     room.lobbyMusic = msg.theme;
     broadcastToPlayers(room, { type: 'lobby_music', theme: room.lobbyMusic });
+}
+
+/**
+ * Append a single option to the active question's option list and broadcast
+ * the new option to all connected players. Used by polls in `source:
+ * 'players'` mode when a late-joiner arrives during an active vote — their
+ * name is added to the options so other voters can rank them too. Existing
+ * submitted ballots are unaffected because we only append (never insert or
+ * reorder), so previously-submitted indices remain valid.
+ * @param ws
+ * @param msg
+ */
+function handleAppendOption(ws, msg) {
+    const room = rooms.get(ws.roomId);
+    if (!room || ws.sessionId !== room.hostSessionId) return;
+    if (typeof msg.option !== 'string' || msg.option.length === 0 || msg.option.length > 500) {
+        send(ws, { type: 'error', message: 'Ungültige Option.' });
+        return;
+    }
+    if (!room.activeQuestion || !Array.isArray(room.activeQuestion.options)) {
+        send(ws, { type: 'error', message: 'Keine aktive Frage.' });
+        return;
+    }
+    if (room.activeQuestion.options.length >= MAX_OPTIONS_PER_QUESTION) {
+        send(ws, {
+            type: 'error',
+            message: `Maximale Anzahl Optionen (${MAX_OPTIONS_PER_QUESTION}) erreicht.`,
+        });
+        return;
+    }
+    // Mutate the snapshot so a player who reconnects mid-vote gets the
+    // current option list, not the stale original.
+    room.activeQuestion.options.push(msg.option);
+    broadcastToPlayers(room, { type: 'option_appended', option: msg.option });
 }
 
 /**

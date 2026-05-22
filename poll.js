@@ -746,7 +746,14 @@ function handleHostPlayerUpdate(msg) {
     switch (msg.type) {
     case 'player_joined': {
         hostPlayers.set(msg.sessionId, { name: msg.name, isConnected: true });
-    
+        // If a poll is in progress and it's voting on people in the room,
+        // append the new joiner's name to the options so others can rank
+        // them too. Appending (never inserting) keeps previously-submitted
+        // indices valid.
+        if (hostActivePoll && hostActivePoll.source === 'players' && !hostPollEnding) {
+            appendPlayerToActivePoll(msg.name, msg.sessionId);
+        }
+
     break;
     }
     case 'player_reconnected': {
@@ -757,7 +764,15 @@ function handleHostPlayerUpdate(msg) {
         } else {
             hostPlayers.set(msg.sessionId, { name: msg.name, isConnected: true });
         }
-    
+        // The reconnecting player may not be in the poll's options yet —
+        // they could have been disconnected at vote-start, or originally
+        // joined during a host outage and thus never propagated to our
+        // local poll state. appendPlayerToActivePoll's optionPlayerIds
+        // check makes this idempotent if they're already represented.
+        if (hostActivePoll && hostActivePoll.source === 'players' && !hostPollEnding) {
+            appendPlayerToActivePoll(msg.name, msg.sessionId);
+        }
+
     break;
     }
     case 'player_left': {
@@ -775,6 +790,57 @@ function handleHostPlayerUpdate(msg) {
         refreshHostVotingProgress();
         maybeAutoEndVote();
     }
+}
+
+/**
+ * Append a name to the active `source: 'players'` poll's option list, both
+ * locally (so the host's voting view shows it) and via `append_option` to the
+ * server (which broadcasts to all connected players so they can rank the new
+ * person too). De-duplicates against existing options with a "(2)", "(3)" …
+ * suffix the same way the initial snapshot does.
+ *
+ * Idempotent by sessionId: if the session already has an entry in
+ * `hostActivePoll.optionPlayerIds`, this is a no-op. That lets us call it
+ * safely from `player_joined`, `player_reconnected` (which can fire
+ * repeatedly across a flaky session), and the `host_reconnected` reconcile
+ * path — they're all "make sure this player has an option" callers.
+ * @param {string} rawName
+ * @param {string|null} sessionId — null only for non-player sources, where
+ *   this function shouldn't be called anyway.
+ */
+function appendPlayerToActivePoll(rawName, sessionId) {
+    if (!hostActivePoll) return;
+    if (sessionId && hostActivePoll.optionPlayerIds && hostActivePoll.optionPlayerIds.has(sessionId)) {
+        return;
+    }
+    if (!hostWs || hostWs.readyState !== WebSocket.OPEN) return;
+
+    const taken = new Set(hostActivePoll.realOptions);
+    const baseName = (rawName || 'Spieler').trim() || 'Spieler';
+    let label = baseName;
+    let suffix = 2;
+    while (taken.has(label)) {
+        label = `${baseName} (${suffix++})`;
+    }
+
+    // Mirror the server-side ceiling (MAX_OPTIONS_PER_QUESTION = 250 incl.
+    // the meta sentinel at slot 0). Beyond this the server would reject the
+    // append_option and the host UI would diverge from reality.
+    if (hostActivePoll.options.length >= MAX_REAL_OPTIONS + 1) {
+        showMessage(
+            `Maximale Anzahl Optionen erreicht — ${label} wird in diesem Durchgang nicht zur Wahl gestellt.`,
+            'info'
+        );
+        return;
+    }
+
+    hostActivePoll.realOptions.push(label);
+    hostActivePoll.options.push(label);
+    if (sessionId && hostActivePoll.optionPlayerIds) {
+        hostActivePoll.optionPlayerIds.add(sessionId);
+    }
+    hostWs.send(JSON.stringify({ type: 'append_option', option: label }));
+    renderHostVotingView();
 }
 
 /**
@@ -864,6 +930,18 @@ function handleHostMessage(msg) {
                             ranks: [...p.currentAnswer],
                             name: p.name || 'Spieler',
                         });
+                    }
+                    // A player who joined during the host's outage was
+                    // never appended to the active poll's options.
+                    // appendPlayerToActivePoll's optionPlayerIds check
+                    // makes this idempotent for sessions we already knew.
+                    if (
+                        p.isConnected &&
+                        hostActivePoll &&
+                        hostActivePoll.source === 'players' &&
+                        !hostPollEnding
+                    ) {
+                        appendPlayerToActivePoll(p.name, p.sessionId);
                     }
                 }
                 // Drop any local entries the server no longer knows about
@@ -1117,51 +1195,54 @@ function addComposerOption() {
 /**
  * Build a unique, display-friendly snapshot of currently-connected players for
  * source: "players". Duplicate names get " (2)" / " (3)" suffixes so the host
- * can disambiguate when computing Borda.
- * @returns {string[]}
+ * can disambiguate when computing Borda. Each entry also carries its
+ * sessionId so the caller can track which sessions are already represented
+ * in the poll's option list (used to keep `appendPlayerToActivePoll`
+ * idempotent across player_joined / player_reconnected / host_reconnected
+ * reconcile).
+ * @returns {Array<{label:string, sessionId:string}>}
  */
 function snapshotPlayerOptions() {
     const taken = new Map();
     const result = [];
-    const connected = [...hostPlayers.values()].filter((p) => p.isConnected);
-    for (const p of connected) {
+    for (const [sid, p] of hostPlayers.entries()) {
+        if (!p.isConnected) continue;
         const baseName = (p.name || 'Spieler').trim() || 'Spieler';
         const seen = taken.get(baseName) || 0;
         const label = seen === 0 ? baseName : `${baseName} (${seen + 1})`;
         taken.set(baseName, seen + 1);
-        result.push(label);
+        result.push({ label, sessionId: sid });
+        if (result.length >= MAX_REAL_OPTIONS) break;
     }
-    // Defensive cap. The server validates the same ceiling, so exceeding it
-    // would cause the start_question payload to be rejected silently before
-    // this fix — slicing here makes the host's local validation match.
-    return result.slice(0, MAX_REAL_OPTIONS);
+    return result;
 }
 
 /**
  * @param {'players'|'fixed'} source
- * @returns {string[]|null} the real options, or null on validation failure.
+ * @returns {Array<{label:string, sessionId:string|null}>|null} entries, or
+ *   null on validation failure. Fixed-source entries carry a null sessionId.
  */
 function collectRealOptions(source) {
     if (source === 'players') {
-        const opts = snapshotPlayerOptions();
-        if (opts.length < 2) {
+        const entries = snapshotPlayerOptions();
+        if (entries.length < 2) {
             showMessage(
                 'Mindestens 2 verbundene Spieler nötig, um über sie abzustimmen.',
                 'error'
             );
             return null;
         }
-        return opts;
+        return entries;
     }
-    const opts = composerFixedOptions
+    const labels = composerFixedOptions
         .map((s) => (s || '').trim())
         .filter((s) => s.length > 0)
         .slice(0, MAX_REAL_OPTIONS);
-    if (opts.length < 2) {
+    if (labels.length < 2) {
         showMessage('Mindestens 2 Optionen sind nötig.', 'error');
         return null;
     }
-    return opts;
+    return labels.map((label) => ({ label, sessionId: null }));
 }
 
 /**
@@ -1207,8 +1288,9 @@ function startVote() {
     }
 
     const source = currentSourceValue();
-    const realOptions = collectRealOptions(source);
-    if (!realOptions) return;
+    const entries = collectRealOptions(source);
+    if (!entries) return;
+    const realOptions = entries.map((e) => e.label);
 
     const { picks, revealCount, duration } = readComposerNumericInputs(realOptions.length);
 
@@ -1247,10 +1329,22 @@ function startVote() {
         return;
     }
 
+    // For source='players', track which sessions are represented in the
+    // option list. Used by `appendPlayerToActivePoll` to stay idempotent
+    // across player_joined / player_reconnected / host_reconnected reconcile,
+    // and to detect reconnecting players who weren't in the original
+    // snapshot (e.g. they were disconnected when the poll started, or
+    // joined while the host's WS was briefly offline).
+    const optionPlayerIds = new Set();
+    for (const e of entries) {
+        if (e.sessionId) optionPlayerIds.add(e.sessionId);
+    }
+
     hostActivePoll = {
         question,
         options, // full array including meta sentinel at [0]
         realOptions,
+        optionPlayerIds,
         picksPerVoter: picks,
         revealCount,
         source,
@@ -1724,6 +1818,10 @@ function handlePlayerMessage(msg) {
             onQuestionReceived(msg);
             break;
         }
+        case 'option_appended': {
+            onOptionAppended(msg);
+            break;
+        }
         case 'result': {
             onResultReceived(msg);
             break;
@@ -1792,6 +1890,26 @@ function onQuestionReceived(msg) {
             ? Math.max(0, msg.remaining)
             : Number(msg.duration) || 45;
     startPlayerTimer(remaining);
+}
+
+/**
+ * Server broadcast that the host added a new option to the active poll
+ * (typically: a late-joiner's name in a `source: 'players'` poll). Append
+ * to our local display list and re-render the rank picker if we're still
+ * voting. Previously-submitted ballots aren't affected — their indices
+ * point at the same options as before since we only append, never insert.
+ * @param {object} msg
+ */
+function onOptionAppended(msg) {
+    if (typeof msg.option !== 'string' || !msg.option) return;
+    if (!Array.isArray(playerDisplayOptions)) return;
+    playerDisplayOptions.push(msg.option);
+    // Re-render only if the player is currently in the voting view.
+    // Submitted view: their picks are already in; new option is irrelevant.
+    // Reveal view: too late, results are computed.
+    if (dom.playerVote && !dom.playerVote.classList.contains('hidden')) {
+        renderRankPicker();
+    }
 }
 
 /**

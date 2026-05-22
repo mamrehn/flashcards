@@ -1606,11 +1606,19 @@ async function initializeHostFeatures(reconnectInfo) {
             case 'player_joined': {
                 const joinedName =
                     sanitizePlayerName(msg.name) || `Spieler ${msg.sessionId.slice(0, 4)}`;
+                // Server seeds a late-joiner's score with the average of
+                // existing players' scores so they have a credible shot at
+                // winning. Use that value here — falling back to 0 keeps the
+                // old behaviour for an old server that doesn't send `score`.
+                const seededScore =
+                    typeof msg.score === 'number' && Number.isFinite(msg.score) && msg.score >= 0
+                        ? msg.score
+                        : 0;
                 quizState.players[msg.sessionId] = {
                     id: msg.sessionId,
                     name: joinedName,
                     avatar: typeof msg.avatar === 'string' ? msg.avatar : '',
-                    score: 0,
+                    score: seededScore,
                     currentAnswer: [],
                     answerTime: null,
                     isConnected: true,
