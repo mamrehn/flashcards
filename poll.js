@@ -457,6 +457,7 @@ function collectDom() {
         playerTimerBar: document.querySelector('#player-timer-bar'),
         playerVoteHint: document.querySelector('#player-vote-hint'),
         rankList: document.querySelector('#rank-list'),
+        rankListEmpty: document.querySelector('#rank-list-empty'),
         rankOptions: document.querySelector('#rank-options'),
         submitVoteBtn: document.querySelector('#submit-vote-btn'),
         submittedPicksEcho: document.querySelector('#submitted-picks-echo'),
@@ -1647,11 +1648,9 @@ function renderRankPicker() {
         playerCurrentMeta && playerCurrentMeta.picksPerVoter === 1
     );
     if (playerSelectedRanks.length === 0) {
-        const li = document.createElement('li');
-        li.className = 'rank-empty';
-        li.textContent = 'Tippe unten eine Option an, um sie zu wählen.';
-        dom.rankList.append(li);
+        if (dom.rankListEmpty) dom.rankListEmpty.hidden = false;
     } else {
+        if (dom.rankListEmpty) dom.rankListEmpty.hidden = true;
         for (const [rank, rawIdx] of playerSelectedRanks.entries()) {
             const li = document.createElement('li');
             const realIdx = rawIdx - playerOptionIndexBase;

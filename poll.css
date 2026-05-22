@@ -548,16 +548,11 @@ textarea:focus {
     }
 }
 
-.rank-list li.rank-empty {
-    background-color: transparent;
+.rank-list-empty {
     color: var(--text-muted);
-    padding: 0.4rem 0.8rem;
     font-style: italic;
-    cursor: default;
-}
-
-.rank-list li.rank-empty::before {
-    content: '';
+    font-size: 0.95em;
+    margin: 0.4rem 0.2rem 0;
 }
 
 .rank-options {
