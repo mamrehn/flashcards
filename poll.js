@@ -777,10 +777,11 @@ function renderHostLobby() {
     dom.roomIdEl.textContent = displayCode;
     if (dom.modalRoomIdSpan) dom.modalRoomIdSpan.textContent = displayCode;
     const url = buildJoinUrl(hostRoomId);
-    dom.joinLink.textContent = url;
+    const shortUrl = 'bycs.link/wer-hat';
+    dom.joinLink.textContent = shortUrl;
     dom.joinLink.href = url;
     if (dom.joinLinkModal) {
-        dom.joinLinkModal.textContent = url;
+        dom.joinLinkModal.textContent = shortUrl;
         dom.joinLinkModal.href = url;
     }
     renderQrCode(url);
