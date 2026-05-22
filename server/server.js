@@ -179,6 +179,10 @@ const httpServer = http.createServer((req, res) => {
 
 const MAX_PLAYERS_PER_ROOM = 240;
 const RATE_LIMIT_PER_SECOND = 20;
+// Per-question options ceiling. Quiz questions use ~4 options; polls in
+// "source: players" mode encode every connected name as an option (plus a
+// metadata sentinel in slot 0), so this must cover MAX_PLAYERS_PER_ROOM + 1.
+const MAX_OPTIONS_PER_QUESTION = 250;
 
 const ROOM_MAX_AGE_MS = 2 * 60 * 60 * 1000; // 2 hours
 
@@ -208,8 +212,10 @@ httpServer.on('upgrade', (req, socket, head) => {
 
 wss.on('connection', (ws) => {
     ws.isAlive = true;
+    ws.missedPongs = 0;
     ws.on('pong', () => {
         ws.isAlive = true;
+        ws.missedPongs = 0;
     });
 
     // Rate limiting: track messages per second
@@ -403,16 +409,24 @@ function handleReconnectHost(ws, msg) {
     ws.sessionId = msg.sessionId;
     ws.role = 'host';
 
-    // Send current room state back to host
+    // Send current room state back to host. Includes per-player answer state
+    // so a host whose WS briefly dropped during voting can rebuild its local
+    // `hostAnswers` map — otherwise submissions made during the host's blip
+    // are server-recorded but invisible to the host, and the auto-end check
+    // ("all connected players have voted") stalls forever.
     const playerList = [];
     for (const [sid, p] of room.players) {
-        // Only send what's necessary
         playerList.push({
             sessionId: sid,
             name: p.name,
             avatar: p.avatar || '',
             score: p.score,
             isConnected: p.isConnected,
+            hasAnswered: !!p.hasAnswered,
+            currentAnswer:
+                p.hasAnswered && Array.isArray(p.currentAnswer)
+                    ? [...p.currentAnswer]
+                    : null,
         });
     }
 
@@ -425,6 +439,7 @@ function handleReconnectHost(ws, msg) {
         musicLocked: !!room.musicLocked,
         musicWinner: room.musicWinner || null,
         lobbyMusic: room.lobbyMusic || LOBBY_MUSIC_DEFAULT,
+        phase: room.phase || 'lobby',
     });
     console.log(`Host reconnected to room ${roomId}`);
 }
@@ -651,7 +666,33 @@ function handleJoin(ws, msg) {
             musicLocked: !!room.musicLocked,
             musicWinner: room.musicWinner || null,
             lobbyMusic: room.lobbyMusic || LOBBY_MUSIC_DEFAULT,
+            phase: room.phase || 'lobby',
         });
+
+        // Replay current quiz state so a player who joined *after* the host
+        // started a question still gets to see and answer it. Previously
+        // late-joiners landed on the waiting view and the host's "all voted"
+        // auto-end logic stalled because their non-voting presence kept the
+        // count short of complete.
+        if (room.phase === 'question' && room.activeQuestion) {
+            const elapsedSec = room.questionStartTime
+                ? (Date.now() - room.questionStartTime) / 1000
+                : 0;
+            const remaining = Math.max(0, room.activeQuestion.duration - elapsedSec);
+            send(ws, {
+                ...room.activeQuestion,
+                remaining,
+            });
+        } else if (room.phase === 'final' && room.finalSnapshot) {
+            send(ws, {
+                type: 'result',
+                correct: room.finalSnapshot.correct,
+                isFinal: true,
+                questionIndex: room.finalSnapshot.questionIndex,
+                leaderboard: room.finalSnapshot.leaderboard,
+                playerScore: 0,
+            });
+        }
 
         if (room.hostWs && room.hostWs.readyState === 1) {
             send(room.hostWs, {
@@ -718,10 +759,24 @@ function handleStartQuestion(ws, msg) {
     const room = rooms.get(ws.roomId);
     if (!room || ws.sessionId !== room.hostSessionId) return;
 
-    // Validate question and options content size
-    if (typeof msg.question !== 'string' || msg.question.length > 4000) return;
-    if (!Array.isArray(msg.options) || msg.options.length > 20) return;
-    if (msg.options.some((o) => typeof o !== 'string' || o.length > 500)) return;
+    // Validate question and options content size. Reply with an error rather
+    // than silently dropping so the host UI can show a useful message instead
+    // of advancing into a "voting" state nobody else sees.
+    if (typeof msg.question !== 'string' || msg.question.length > 4000) {
+        send(ws, { type: 'error', message: 'Frage ist zu lang oder ungültig.' });
+        return;
+    }
+    if (!Array.isArray(msg.options) || msg.options.length > MAX_OPTIONS_PER_QUESTION) {
+        send(ws, {
+            type: 'error',
+            message: `Zu viele Optionen (max. ${MAX_OPTIONS_PER_QUESTION}).`,
+        });
+        return;
+    }
+    if (msg.options.some((o) => typeof o !== 'string' || o.length > 500)) {
+        send(ws, { type: 'error', message: 'Eine Option ist zu lang oder ungültig.' });
+        return;
+    }
 
     // Validate relay fields
     const questionIndex =
@@ -961,11 +1016,18 @@ function handleDisconnect(ws) {
 
 // --- Heartbeat: detect dead connections ---
 
+// Heartbeat: ping every 30s, but only terminate after 2 consecutive misses
+// (~60s grace). Mobile browsers commonly throttle backgrounded WebSocket
+// traffic, so a single missed pong is too aggressive — players were getting
+// terminated mid-session whenever their phone briefly slept.
 const heartbeatInterval = setInterval(() => {
     for (const ws of wss.clients) {
         if (!ws.isAlive) {
-            ws.terminate();
-            continue;
+            ws.missedPongs = (ws.missedPongs || 0) + 1;
+            if (ws.missedPongs >= 2) {
+                ws.terminate();
+                continue;
+            }
         }
         ws.isAlive = false;
         ws.ping();

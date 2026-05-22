@@ -34,8 +34,10 @@ const WS_URL = HAS_RUNTIME_WS_URL ? globalThis.WS_URL : FALLBACK_WS_URL;
 // First options[] slot carries this prefixed JSON; server's per-option 500-char
 // validation gives us plenty of headroom for {picksPerVoter, revealCount, source}.
 const POLL_META_PREFIX = '__POLL_META__:';
-// Server caps options.length at 20. Slot 0 is metadata, so 19 real options max.
-const MAX_REAL_OPTIONS = 19;
+// Server caps options.length at MAX_OPTIONS_PER_QUESTION (250). Slot 0 is the
+// metadata sentinel, leaving 249 real options — comfortably above
+// MAX_PLAYERS_PER_ROOM (240) so a full-room Klassensprecher poll fits.
+const MAX_REAL_OPTIONS = 240;
 const MAX_PICKS_PER_VOTER = 20;
 const MIN_DURATION_SEC = 5;
 const MAX_DURATION_SEC = 80;
@@ -732,12 +734,59 @@ function handleHostMessage(msg) {
         case 'room_created': {
             hostRoomId = msg.roomId;
             hostSessionId = msg.sessionId;
+            hostWsReconnectAttempts = 0;
             saveActiveSession('host', hostRoomId, hostSessionId);
             renderHostLobby();
             break;
         }
         case 'host_reconnected': {
+            // Reset the budget — a flaky connection that reconnects many
+            // times across a long session would otherwise run dry.
+            hostWsReconnectAttempts = 0;
+            // Reconcile local maps with the server's authoritative state. Any
+            // joins, leaves, or submissions that happened during the brief
+            // WS gap were never delivered to the host (the server's
+            // send-to-host call short-circuits on a closed socket), so the
+            // local maps may have stale isConnected flags or missing answers.
+            // Without this, the auto-end-when-all-voted check could stall.
+            if (Array.isArray(msg.players)) {
+                const serverIds = new Set();
+                for (const p of msg.players) {
+                    if (!p || typeof p.sessionId !== 'string') continue;
+                    serverIds.add(p.sessionId);
+                    const existing = hostPlayers.get(p.sessionId);
+                    hostPlayers.set(p.sessionId, {
+                        name: p.name || (existing && existing.name) || 'Spieler',
+                        isConnected: !!p.isConnected,
+                    });
+                    // Restore answers submitted during the host's outage.
+                    if (
+                        hostActivePoll &&
+                        p.hasAnswered &&
+                        Array.isArray(p.currentAnswer) &&
+                        !hostAnswers.has(p.sessionId)
+                    ) {
+                        hostAnswers.set(p.sessionId, {
+                            ranks: [...p.currentAnswer],
+                            name: p.name || 'Spieler',
+                        });
+                    }
+                }
+                // Drop any local entries the server no longer knows about
+                // (e.g. a player left while we were briefly disconnected and
+                // the room expired their session). Collect first, then delete,
+                // so we don't mutate the Map during its own iteration.
+                const ghostIds = [];
+                for (const sid of hostPlayers.keys()) {
+                    if (!serverIds.has(sid)) ghostIds.push(sid);
+                }
+                for (const sid of ghostIds) hostPlayers.delete(sid);
+            }
             renderHostLobby();
+            if (hostActivePoll) {
+                refreshHostVotingProgress();
+                maybeAutoEndVote();
+            }
             break;
         }
         case 'room_not_found_try_restore': {
@@ -760,6 +809,22 @@ function handleHostMessage(msg) {
         }
         case 'error': {
             showMessage(msg.message || 'Unbekannter Fehler', 'error');
+            // If the server rejected the start_question we just sent, the
+            // host UI has already transitioned into "host-voting" with a
+            // running timer — but no players will ever see the question.
+            // Roll back to the composer so the host can fix the input.
+            if (hostActivePoll && !hostPollEnding) {
+                if (hostTimerInterval) {
+                    clearInterval(hostTimerInterval);
+                    hostTimerInterval = null;
+                }
+                hostActivePoll = null;
+                hostAnswers.clear();
+                showOnly(
+                    ['host-lobby', 'host-composer', 'host-voting', 'host-reveal'],
+                    'host-composer'
+                );
+            }
             break;
         }
         // player_avatar / music / categories — irrelevant for poll, ignored.
@@ -972,7 +1037,10 @@ function snapshotPlayerOptions() {
         taken.set(baseName, seen + 1);
         result.push(label);
     }
-    return result;
+    // Defensive cap. The server validates the same ceiling, so exceeding it
+    // would cause the start_question payload to be rejected silently before
+    // this fix — slicing here makes the host's local validation match.
+    return result.slice(0, MAX_REAL_OPTIONS);
 }
 
 /**
@@ -1057,6 +1125,16 @@ function startVote() {
     // here so the user gets a useful message instead of a silent drop.
     if (options.some((opt) => opt.length > 500)) {
         showMessage('Eine Option ist zu lang (max. 500 Zeichen).', 'error');
+        return;
+    }
+    // Mirror the server's options ceiling so an oversized snapshot (e.g. a
+    // very large class voting on themselves) is caught here with a clear
+    // message instead of getting silently rejected upstream.
+    if (options.length > MAX_REAL_OPTIONS + 1) {
+        showMessage(
+            `Zu viele Optionen (${options.length - 1}). Maximum: ${MAX_REAL_OPTIONS}.`,
+            'error'
+        );
         return;
     }
 
@@ -1153,10 +1231,14 @@ function startHostTimer(seconds) {
         if (remaining <= 0) {
             clearInterval(hostTimerInterval);
             hostTimerInterval = null;
-            // Grace period for last-second submissions to arrive. endVote()'s
-            // own guard makes this a no-op if the vote was already auto-ended
-            // by the last submission landing.
-            setTimeout(endVote, 2000);
+            // Grace period for last-second submissions to arrive. Bumped to
+            // 5 s because the question broadcast can be delayed several
+            // seconds on slow mobile networks — a 2 s grace was dropping
+            // votes from players whose phones got the question late and
+            // submitted right at the edge of the host's countdown.
+            // endVote()'s own guard makes this a no-op if the vote was
+            // already auto-ended by the last submission landing.
+            setTimeout(endVote, 5000);
         }
     }, 100);
 }
@@ -1523,6 +1605,10 @@ function handlePlayerMessage(msg) {
     switch (msg.type) {
         case 'joined': {
             playerSessionId = msg.sessionId;
+            // Reset the reconnect budget — a flaky mobile connection that
+            // reconnects many times across a long poll would otherwise burn
+            // through MAX_RECONNECT_ATTEMPTS and stop trying.
+            playerWsReconnectAttempts = 0;
             if (typeof msg.playerName === 'string') playerName = msg.playerName;
             saveActiveSession('player', playerRoomCode, playerSessionId, { name: playerName });
 
@@ -1997,6 +2083,31 @@ document.addEventListener('DOMContentLoaded', () => {
                     /* swallow — close handler will reconnect if the path is dead */
                 }
             }
+        }
+    });
+
+    // Mobile networks frequently drop the WebSocket without the browser
+    // noticing; the close event can take a full heartbeat cycle to fire.
+    // When the OS reports the network coming back, kick off a reconnect
+    // immediately instead of waiting for the next backoff tick.
+    globalThis.addEventListener('online', () => {
+        if (
+            playerRoomCode &&
+            playerSessionId &&
+            !playerSuppressReconnect &&
+            (!playerWs || playerWs.readyState !== WebSocket.OPEN)
+        ) {
+            playerWsReconnectAttempts = 0;
+            reconnectPlayerWs();
+        }
+        if (
+            hostRoomId &&
+            hostSessionId &&
+            !hostSuppressReconnect &&
+            (!hostWs || hostWs.readyState !== WebSocket.OPEN)
+        ) {
+            hostWsReconnectAttempts = 0;
+            reconnectHostWs();
         }
     });
 });
