@@ -264,6 +264,45 @@ function connectWithRetry(url, maxRetries = 3) {
     });
 }
 
+// Application-level keepalive interval (ms). The server pings every 30 s at
+// the WebSocket protocol level and the browser auto-pongs, but some
+// intermediate proxies (carrier NAT, corporate firewalls) only see app-layer
+// frames as "activity" and drop the TCP socket after ~60 s of silence. We
+// send a small JSON frame every 25 s to keep the path warm. The payload uses
+// an unknown `type` so the server's switch falls through to its default
+// branch (console.warn + no-op).
+const KEEPALIVE_INTERVAL_MS = 25_000;
+const KEEPALIVE_PAYLOAD = JSON.stringify({ type: 'quiz_keepalive' });
+
+/**
+ * Start a keepalive interval that fires `KEEPALIVE_PAYLOAD` over `ws` every
+ * `KEEPALIVE_INTERVAL_MS`. Returns the interval id so the caller can cancel
+ * it on close.
+ * @param {WebSocket} ws
+ * @returns {number}
+ */
+function startKeepalive(ws) {
+    return setInterval(() => {
+        if (!ws || ws.readyState !== WebSocket.OPEN) return;
+        try {
+            ws.send(KEEPALIVE_PAYLOAD);
+        } catch (error) {
+            logger.error('Keepalive send failed:', error);
+        }
+    }, KEEPALIVE_INTERVAL_MS);
+}
+
+/**
+ * Cancel a keepalive interval and return null for assignment back to the
+ * caller's state slot.
+ * @param {number|null} id
+ * @returns {null}
+ */
+function stopKeepalive(id) {
+    if (id !== null) clearInterval(id);
+    return null;
+}
+
 // --- App initialization ---
 // QR Code Modal elements (declared globally for early access)
 let qrModalOverlay = null;
@@ -367,15 +406,57 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     });
 
-    // Reconnect WebSocket when tab becomes visible again
+    // Reconnect WebSocket when tab becomes visible again. Also fire an
+    // immediate keepalive on any still-open socket: setInterval-based timers
+    // are throttled in backgrounded tabs (commonly clamped to 1/min), so a
+    // proxy idle timeout could bite right around the foregrounding moment.
     document.addEventListener('visibilitychange', () => {
         if (document.visibilityState !== 'visible') return;
         // logger.log('Tab became visible, checking connections...');
 
+        for (const ws of [hostWs, playerWs]) {
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                try {
+                    ws.send(KEEPALIVE_PAYLOAD);
+                } catch {
+                    /* swallow — close handler will reconnect if the path is dead */
+                }
+            }
+        }
         if (hostWs && hostWs.readyState !== WebSocket.OPEN && hostRoomId) {
             reconnectHostWs();
         }
         if (playerWs && playerWs.readyState !== WebSocket.OPEN && playerRoomId) {
+            reconnectPlayerWs();
+        }
+    });
+
+    // Mobile networks frequently drop WebSockets without the browser noticing;
+    // the close event can take a full heartbeat cycle (or more) to fire. When
+    // the OS reports the network coming back, kick off a reconnect immediately
+    // instead of waiting for the next backoff tick. The in-flight guards make
+    // this safe to call even if a reconnect is already running.
+    globalThis.addEventListener('online', () => {
+        if (
+            hostRoomId &&
+            !hostSuppressReconnect &&
+            !hostReconnecting &&
+            (!hostWs || hostWs.readyState !== WebSocket.OPEN) &&
+            typeof reconnectHostWs === 'function'
+        ) {
+            hostWsReconnectAttempts = 0;
+            reconnectHostWs();
+        }
+        if (
+            playerRoomId &&
+            !playerSuppressReconnect &&
+            !playerReconnecting &&
+            (!playerWs || playerWs.readyState !== WebSocket.OPEN) &&
+            typeof reconnectPlayerWs === 'function'
+        ) {
+            // Fresh attempt budget on network restoration — symmetric with
+            // the host branch above.
+            playerWsReconnectAttempts = 0;
             reconnectPlayerWs();
         }
     });
@@ -398,22 +479,41 @@ let hostViewHeading = null;
 let hostBeforeUnloadHandler = null;
 let hostWsReconnectAttempts = 0;
 let hostPendingQuestion = null;
-let suppressHostReconnect = false;
+let hostSuppressReconnect = false;
+// True while a reconnect attempt is in flight (awaiting connectWithRetry).
+// Prevents close, visibilitychange, `online`, and a manual button click from
+// racing into multiple parallel WebSocket connections.
+let hostReconnecting = false;
+let hostKeepaliveInterval = null;
 const HOST_MAX_RECONNECT_ATTEMPTS = 30;
+// Player reconnect attempt counter — module scope so the `online` event
+// listener can reset it after a long outage. Was previously closure-local
+// to initPlayerConnection, which meant a maxed-out counter could not be
+// rescued by a network-restored signal.
+let playerWsReconnectAttempts = 0;
+const MAX_RECONNECT_ATTEMPTS = 30;
 const RECONNECT_DELAY_MS = 10_000;
 
 /**
- * Reconnect backoff: 1s → 2s → 4s → 10s (then steady). A typical WS blip
+ * Reconnect backoff: ~1s → ~2s → ~4s → ~10s (then steady). A typical WS blip
  * (phone screen off, brief Wi-Fi hiccup) recovers on the first retry instead
  * of waiting the full 10 s, while sustained failures still throttle.
+ *
+ * ±25% jitter is applied so a cascade event (e.g. a brief router restart that
+ * drops every client at once) doesn't produce a thundering herd hitting the
+ * server on the same backoff schedule.
  * @param {number} attempt 1-indexed
  * @returns {number} ms before the next retry
  */
 function reconnectBackoffMs(attempt) {
-    if (attempt <= 1) return 1000;
-    if (attempt === 2) return 2000;
-    if (attempt === 3) return 4000;
-    return RECONNECT_DELAY_MS;
+    let base;
+    if (attempt <= 1) base = 1000;
+    else if (attempt === 2) base = 2000;
+    else if (attempt === 3) base = 4000;
+    else base = RECONNECT_DELAY_MS;
+    // Uniform jitter in [0.75, 1.25].
+    const jitter = 0.75 + Math.random() * 0.5;
+    return Math.round(base * jitter);
 }
 
 /**
@@ -1226,7 +1326,7 @@ async function initializeHostFeatures(reconnectInfo) {
                 }
             }
             if (hostWs) {
-                suppressHostReconnect = true;
+                hostSuppressReconnect = true;
                 hostWs.close();
                 hostWs = null;
             }
@@ -1380,6 +1480,7 @@ async function initializeHostFeatures(reconnectInfo) {
             case 'room_created': {
                 hostRoomId = msg.roomId;
                 hostSessionId = msg.sessionId;
+                hostWsReconnectAttempts = 0;
                 quizState.roomId = msg.roomId.slice(0, 2) + ' ' + msg.roomId.slice(2, 4);
                 hostSetup.classList.add('hidden');
                 qrContainer.classList.remove('hidden');
@@ -1394,6 +1495,7 @@ async function initializeHostFeatures(reconnectInfo) {
 
             case 'host_reconnected': {
                 logger.log('Host reconnected, restoring player state');
+                hostWsReconnectAttempts = 0;
                 if (msg.players) {
                     for (const p of msg.players) {
                         if (quizState.players[p.sessionId]) {
@@ -1542,7 +1644,7 @@ async function initializeHostFeatures(reconnectInfo) {
      */
     async function initHostConnection() {
         hostWsReconnectAttempts = 0;
-        suppressHostReconnect = false;
+        hostSuppressReconnect = false;
 
         try {
             hostWs = await connectWithRetry(WS_URL);
@@ -1552,6 +1654,8 @@ async function initializeHostFeatures(reconnectInfo) {
         }
 
         logger.log('Host WebSocket connected');
+        hostKeepaliveInterval = stopKeepalive(hostKeepaliveInterval);
+        hostKeepaliveInterval = startKeepalive(hostWs);
         hostWs.send(JSON.stringify({ type: 'create_room' }));
 
         hostWs.addEventListener('message', (event) => {
@@ -1564,20 +1668,13 @@ async function initializeHostFeatures(reconnectInfo) {
             handleHostMessage(msg);
         });
 
-        hostWs.addEventListener('close', () => {
+        const attachedHostWs = hostWs;
+        attachedHostWs.addEventListener('close', () => {
+            // Ignore stale closes from a ws we've already replaced.
+            if (attachedHostWs !== hostWs) return;
             logger.log('Host WebSocket closed');
-            if (suppressHostReconnect) return;
-            if (hostRoomId && hostWsReconnectAttempts < HOST_MAX_RECONNECT_ATTEMPTS) {
-                hostWsReconnectAttempts++;
-                const delay = reconnectBackoffMs(hostWsReconnectAttempts);
-                showMessage(
-                    `Verbindung unterbrochen. Reconnect ${hostWsReconnectAttempts}/${HOST_MAX_RECONNECT_ATTEMPTS}…`,
-                    'info'
-                );
-                setTimeout(reconnectHostWs, delay);
-            } else if (hostWsReconnectAttempts >= HOST_MAX_RECONNECT_ATTEMPTS) {
-                showMessage('Verbindung zum Server verloren. Bitte lade die Seite neu.', 'error');
-            }
+            hostKeepaliveInterval = stopKeepalive(hostKeepaliveInterval);
+            reconnectHostWs();
         });
 
         hostWs.addEventListener('error', (err) => {
@@ -1592,7 +1689,7 @@ async function initializeHostFeatures(reconnectInfo) {
      */
     async function initHostReconnection(info) {
         hostWsReconnectAttempts = 0;
-        suppressHostReconnect = false;
+        hostSuppressReconnect = false;
         hostRoomId = info.roomId;
         hostSessionId = info.sessionId;
         quizState.roomId = info.roomId.slice(0, 2) + ' ' + info.roomId.slice(2, 4);
@@ -1600,15 +1697,18 @@ async function initializeHostFeatures(reconnectInfo) {
         try {
             hostWs = await connectWithRetry(WS_URL);
         } catch {
-            showMessage('Server nicht erreichbar. Bitte versuche es später erneut.', 'error');
-            clearActiveSession();
-            hostRoomId = null;
-            hostSessionId = null;
+            // Don't clear the session on a transient failure — keep the
+            // reconnect button visible so the user can try again. Previously
+            // a one-off network blip would strand them on role-selection
+            // with no way back.
+            showMessage('Server nicht erreichbar. Bitte versuche es erneut.', 'error');
             document.querySelector('#role-selection').classList.remove('hidden');
             showView('role-selection');
             return;
         }
 
+        hostKeepaliveInterval = stopKeepalive(hostKeepaliveInterval);
+        hostKeepaliveInterval = startKeepalive(hostWs);
         hostWs.send(
             JSON.stringify({ type: 'reconnect_host', roomId: hostRoomId, sessionId: hostSessionId })
         );
@@ -1657,20 +1757,12 @@ async function initializeHostFeatures(reconnectInfo) {
             handleHostMessage(msg);
         });
 
-        hostWs.addEventListener('close', () => {
+        const attachedHostWs = hostWs;
+        attachedHostWs.addEventListener('close', () => {
+            if (attachedHostWs !== hostWs) return;
             logger.log('Host WebSocket closed');
-            if (suppressHostReconnect) return;
-            if (hostRoomId && hostWsReconnectAttempts < HOST_MAX_RECONNECT_ATTEMPTS) {
-                hostWsReconnectAttempts++;
-                const delay = reconnectBackoffMs(hostWsReconnectAttempts);
-                showMessage(
-                    `Verbindung unterbrochen. Reconnect ${hostWsReconnectAttempts}/${HOST_MAX_RECONNECT_ATTEMPTS}…`,
-                    'info'
-                );
-                setTimeout(reconnectHostWs, delay);
-            } else if (hostWsReconnectAttempts >= HOST_MAX_RECONNECT_ATTEMPTS) {
-                showMessage('Verbindung zum Server verloren. Bitte lade die Seite neu.', 'error');
-            }
+            hostKeepaliveInterval = stopKeepalive(hostKeepaliveInterval);
+            reconnectHostWs();
         });
 
         hostWs.addEventListener('error', (err) => {
@@ -1678,21 +1770,53 @@ async function initializeHostFeatures(reconnectInfo) {
         });
     }
 
-    reconnectHostWs = function reconnectHostWs() {
-        suppressHostReconnect = false;
-        const ws = new WebSocket(WS_URL);
-
-        ws.addEventListener('open', () => {
-            logger.log('Host WebSocket reconnected');
-            hostWsReconnectAttempts = 0;
-            ws.send(
-                JSON.stringify({
-                    type: 'reconnect_host',
-                    roomId: hostRoomId,
-                    sessionId: hostSessionId,
-                })
-            );
-        });
+    /**
+     * Single source of truth for host reconnect attempts. Called from every
+     * close handler, the visibilitychange handler, and the `online` event.
+     * Guards keep concurrent invocations from racing; a failed connect
+     * schedules another attempt with backoff instead of giving up.
+     */
+    reconnectHostWs = async function reconnectHostWs() {
+        if (hostReconnecting) return;
+        if (hostSuppressReconnect) return;
+        if (!hostRoomId || !hostSessionId) return;
+        if (hostWs && hostWs.readyState === WebSocket.OPEN) return;
+        if (hostWsReconnectAttempts >= HOST_MAX_RECONNECT_ATTEMPTS) {
+            showMessage('Verbindung zum Server verloren. Bitte lade die Seite neu.', 'error');
+            return;
+        }
+        hostReconnecting = true;
+        hostWsReconnectAttempts++;
+        showMessage(
+            `Verbindung unterbrochen. Reconnect ${hostWsReconnectAttempts}/${HOST_MAX_RECONNECT_ATTEMPTS}…`,
+            'info'
+        );
+        let ws;
+        try {
+            ws = await connectWithRetry(WS_URL);
+        } catch {
+            hostReconnecting = false;
+            if (hostSuppressReconnect) return;
+            // Schedule another attempt — a flaky uplink can exhaust
+            // connectWithRetry's inner ~30 s budget on one outer attempt.
+            const delay = reconnectBackoffMs(hostWsReconnectAttempts);
+            setTimeout(reconnectHostWs, delay);
+            return;
+        }
+        hostWs = ws;
+        logger.log('Host WebSocket reconnected');
+        hostKeepaliveInterval = stopKeepalive(hostKeepaliveInterval);
+        hostKeepaliveInterval = startKeepalive(ws);
+        // Counter resets in the 'host_reconnected' / 'room_created' message
+        // handler — only after the server actually acknowledges us, so a
+        // socket that opens then immediately closes doesn't zero the counter.
+        ws.send(
+            JSON.stringify({
+                type: 'reconnect_host',
+                roomId: hostRoomId,
+                sessionId: hostSessionId,
+            })
+        );
 
         ws.addEventListener('message', (event) => {
             let msg;
@@ -1730,26 +1854,18 @@ async function initializeHostFeatures(reconnectInfo) {
         });
 
         ws.addEventListener('close', () => {
+            // Stale-close guard: ignore if we've already replaced this ws.
+            if (ws !== hostWs) return;
             logger.log('Host WebSocket closed');
-            if (suppressHostReconnect) return;
-            if (hostRoomId && hostWsReconnectAttempts < HOST_MAX_RECONNECT_ATTEMPTS) {
-                hostWsReconnectAttempts++;
-                const delay = reconnectBackoffMs(hostWsReconnectAttempts);
-                showMessage(
-                    `Verbindung unterbrochen. Reconnect ${hostWsReconnectAttempts}/${HOST_MAX_RECONNECT_ATTEMPTS}…`,
-                    'info'
-                );
-                setTimeout(reconnectHostWs, delay);
-            } else if (hostWsReconnectAttempts >= HOST_MAX_RECONNECT_ATTEMPTS) {
-                showMessage('Verbindung zum Server verloren. Bitte lade die Seite neu.', 'error');
-            }
+            hostKeepaliveInterval = stopKeepalive(hostKeepaliveInterval);
+            reconnectHostWs();
         });
 
         ws.addEventListener('error', (err) => {
             console.error('Host WebSocket error:', err);
         });
 
-        hostWs = ws;
+        hostReconnecting = false;
     };
 
     /**
@@ -2416,22 +2532,31 @@ let playerLobbyCategories = [];
 let playerLobbyAvatarRendered = false;
 let playerCurrentQuestionIndex = -1;
 let playerBeforeUnloadHandler = null;
-let suppressPlayerReconnect = false;
+let playerSuppressReconnect = false;
+// See hostReconnecting — same purpose for the player WS lifecycle.
+let playerReconnecting = false;
+let playerKeepaliveInterval = null;
 // Assigned inside initPlayerConnection so the visibilitychange handler at the
 // module scope can re-trigger the same connection setup (handlers, retry logic).
 let playerConnectFn = null;
 
 /**
- * Reconnects the player WebSocket (called from visibilitychange).
+ * Hard-reset the player WebSocket and start a fresh connect via the
+ * closure-internal connectPlayerWs. Called from visibilitychange and the
+ * `online` event. The brief suppress flag flip prevents the old ws's close
+ * event (which fires asynchronously) from triggering its own reconnect on
+ * top of the one we're about to start ourselves — the stale-close guard
+ * inside connectPlayerWs handles the same case as belt-and-suspenders.
  */
 function reconnectPlayerWs() {
     if (playerWs) {
-        suppressPlayerReconnect = true;
+        playerSuppressReconnect = true;
         playerWs.close();
         playerWs = null;
+        playerKeepaliveInterval = stopKeepalive(playerKeepaliveInterval);
     }
     if (playerConnectFn) {
-        suppressPlayerReconnect = false;
+        playerSuppressReconnect = false;
         playerConnectFn();
     }
 }
@@ -3003,9 +3128,10 @@ function initializePlayerFeatures(reconnectInfo) {
      */
     async function initPlayerConnection(roomCode, pName) {
         playerRoomId = roomCode;
-        suppressPlayerReconnect = false;
-        let playerWsReconnectAttempts = 0;
-        const MAX_RECONNECT_ATTEMPTS = 30;
+        playerSuppressReconnect = false;
+        // Counter now lives at module scope (see top of file). Reset here for
+        // a fresh join so a previous session's counter doesn't leak in.
+        playerWsReconnectAttempts = 0;
 
         joinForm.classList.add('hidden');
         waitingRoom.classList.remove('hidden');
@@ -3051,6 +3177,11 @@ function initializePlayerFeatures(reconnectInfo) {
                 case 'joined': {
                     playerCurrentId = msg.sessionId;
                     playerScore = msg.score || 0;
+                    // Server has accepted us — safe to reset the reconnect
+                    // budget. Doing this here (rather than on TCP open) means
+                    // a socket that opens but immediately closes won't zero
+                    // out the counter.
+                    playerWsReconnectAttempts = 0;
                     savePlayerSession(roomCode, msg.sessionId, msg.playerName || pName);
                     saveActiveSession(
                         'player',
@@ -3192,67 +3323,83 @@ function initializePlayerFeatures(reconnectInfo) {
         }
 
         /**
-         * Handle WebSocket close on the player side: schedule a reconnect or
-         * surface an error after enough failures.
+         * Increment the attempt counter and surface the reconnect status to
+         * the user. Called from both the close handler and the catch block
+         * of connectPlayerWs.
          */
-        function handlePlayerClose() {
-            logger.log('Player WebSocket closed');
-            if (suppressPlayerReconnect) return;
-            if (
-                playerRoomId &&
-                playerCurrentId &&
-                playerWsReconnectAttempts < MAX_RECONNECT_ATTEMPTS
-            ) {
-                playerWsReconnectAttempts++;
-                const delay = reconnectBackoffMs(playerWsReconnectAttempts);
-                const msg = `Verbindung unterbrochen. Reconnect ${playerWsReconnectAttempts}/${MAX_RECONNECT_ATTEMPTS}…`;
-                waitingMessage.textContent = msg;
-                // Toast banner — visible on top of question / result / final
-                // views, where the waiting-room message is hidden.
-                showMessage(msg, 'info');
-                setTimeout(connectPlayerWs, delay);
-            } else if (playerWsReconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
+        function announceReconnect() {
+            playerWsReconnectAttempts++;
+            const msg = `Verbindung unterbrochen. Reconnect ${playerWsReconnectAttempts}/${MAX_RECONNECT_ATTEMPTS}…`;
+            waitingMessage.textContent = msg;
+            showMessage(msg, 'info');
+        }
+
+        /**
+         * Connect (or reconnect) the player WebSocket. Single entry point for
+         * initial join, close-handler-triggered reconnect, visibilitychange,
+         * and `online`. Guards keep concurrent invocations from racing; a
+         * failed connect schedules another attempt instead of giving up.
+         */
+        async function connectPlayerWs() {
+            if (playerReconnecting) return;
+            if (playerSuppressReconnect) return;
+            if (!playerRoomId) return;
+            if (playerWs && playerWs.readyState === WebSocket.OPEN) return;
+            if (playerWsReconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
                 showMessage(
                     'Verbindung zum Quiz-Raum verloren. Bitte lade die Seite neu.',
                     'error'
                 );
                 resetPlayerStateAndUI();
+                return;
             }
-        }
-
-        /**
-         *
-         */
-        function connectPlayerWs() {
-            // Use retry helper for initial connection (handles Fly.io cold starts)
-            connectWithRetry(WS_URL)
-                .then((ws) => {
-                    playerWs = ws;
-                    logger.log('Player WebSocket connected');
-                    playerWsReconnectAttempts = 0;
-                    playerWs.send(
-                        JSON.stringify({
-                            type: 'join',
-                            roomCode: roomCode,
-                            playerName: pName,
-                            sessionId: existingSessionId || playerCurrentId,
-                            avatar: playerAvatar || '',
-                        })
-                    );
-
-                    playerWs.addEventListener('message', onPlayerWsMessage);
-                    playerWs.addEventListener('close', handlePlayerClose);
-                    playerWs.addEventListener('error', onPlayerWsError);
+            playerReconnecting = true;
+            let ws;
+            try {
+                ws = await connectWithRetry(WS_URL);
+            } catch {
+                playerReconnecting = false;
+                if (playerSuppressReconnect) return;
+                // Schedule another attempt instead of stranding the user.
+                // A single flaky uplink can exhaust connectWithRetry's
+                // inner budget; we still have plenty of outer budget left.
+                announceReconnect();
+                const delay = reconnectBackoffMs(playerWsReconnectAttempts);
+                setTimeout(connectPlayerWs, delay);
+                return;
+            }
+            playerWs = ws;
+            logger.log('Player WebSocket connected');
+            playerKeepaliveInterval = stopKeepalive(playerKeepaliveInterval);
+            playerKeepaliveInterval = startKeepalive(playerWs);
+            // Counter resets in the 'joined' message handler — only after
+            // the server acknowledges us, so a socket that opens and then
+            // immediately closes (e.g. bad routing, server overload at
+            // handshake) doesn't prematurely zero the counter.
+            playerWs.send(
+                JSON.stringify({
+                    type: 'join',
+                    roomCode: roomCode,
+                    playerName: pName,
+                    sessionId: existingSessionId || playerCurrentId,
+                    avatar: playerAvatar || '',
                 })
-                .catch(() => {
-                    showMessage(
-                        'Server nicht erreichbar. Bitte versuche es später erneut.',
-                        'error'
-                    );
-                    resetPlayerStateAndUI();
-                    document.querySelector('#role-selection').classList.remove('hidden');
-                    showView('role-selection');
-                });
+            );
+
+            playerWs.addEventListener('message', onPlayerWsMessage);
+            playerWs.addEventListener('close', () => {
+                // Stale-close guard: ignore if this ws has been replaced.
+                if (ws !== playerWs) return;
+                logger.log('Player WebSocket closed');
+                playerKeepaliveInterval = stopKeepalive(playerKeepaliveInterval);
+                if (playerSuppressReconnect) return;
+                if (!playerRoomId || !playerCurrentId) return;
+                announceReconnect();
+                const delay = reconnectBackoffMs(playerWsReconnectAttempts);
+                setTimeout(connectPlayerWs, delay);
+            });
+            playerWs.addEventListener('error', onPlayerWsError);
+            playerReconnecting = false;
         }
 
         playerConnectFn = connectPlayerWs;
@@ -3493,7 +3640,7 @@ function initializePlayerFeatures(reconnectInfo) {
     function resetPlayerStateAndUI() {
         clearActiveSession();
         if (playerWs) {
-            suppressPlayerReconnect = true;
+            playerSuppressReconnect = true;
             playerWs.close();
             playerWs = null;
         }

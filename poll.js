@@ -43,6 +43,10 @@ const MIN_DURATION_SEC = 5;
 const MAX_DURATION_SEC = 80;
 const SESSION_STORAGE_KEY = 'poll_active_session';
 const PICKS_STORAGE_KEY = 'poll_last_picks';
+// 24 h matches quiz.js. The server-side room expiry (2 h) is the real ceiling;
+// this TTL is just for stale-entry cleanup if the user never returns. A poll
+// that's been gone longer than this is no longer recoverable anyway.
+const SESSION_TTL_MS = 24 * 60 * 60 * 1000;
 const MAX_RECONNECT_ATTEMPTS = 30;
 // Application-level keepalive interval (ms). The server pings every 30 s at the
 // WebSocket protocol level and the browser auto-pongs, but some intermediate
@@ -155,15 +159,21 @@ function connectWithRetry(url, maxRetries = 3) {
 }
 
 /**
- * 1 s → 2 s → 4 s → 10 s steady — same backoff as quiz.js.
+ * ~1 s → ~2 s → ~4 s → ~10 s steady — same backoff as quiz.js. ±25% jitter is
+ * applied so a cascade event (e.g. a brief router restart that drops every
+ * client at once) doesn't produce a thundering herd hitting the server on the
+ * same backoff schedule.
  * @param {number} attempt
  * @returns {number}
  */
 function reconnectBackoffMs(attempt) {
-    if (attempt <= 1) return 1000;
-    if (attempt === 2) return 2000;
-    if (attempt === 3) return 4000;
-    return 10_000;
+    let base;
+    if (attempt <= 1) base = 1000;
+    else if (attempt === 2) base = 2000;
+    else if (attempt === 3) base = 4000;
+    else base = 10_000;
+    const jitter = 0.75 + Math.random() * 0.5;
+    return Math.round(base * jitter);
 }
 
 /**
@@ -204,9 +214,9 @@ function stopKeepalive(id) {
  */
 function saveActiveSession(role, roomId, sessionId, extra = {}) {
     try {
-        sessionStorage.setItem(
+        localStorage.setItem(
             SESSION_STORAGE_KEY,
-            JSON.stringify({ role, roomId, sessionId, ...extra })
+            JSON.stringify({ role, roomId, sessionId, ts: Date.now(), ...extra })
         );
     } catch {
         /* private mode */
@@ -214,10 +224,14 @@ function saveActiveSession(role, roomId, sessionId, extra = {}) {
 }
 function loadActiveSession() {
     try {
-        const raw = sessionStorage.getItem(SESSION_STORAGE_KEY);
+        const raw = localStorage.getItem(SESSION_STORAGE_KEY);
         if (!raw) return null;
         const parsed = JSON.parse(raw);
         if (!parsed || !parsed.role || !parsed.roomId || !parsed.sessionId) return null;
+        if (parsed.ts && Date.now() - parsed.ts > SESSION_TTL_MS) {
+            localStorage.removeItem(SESSION_STORAGE_KEY);
+            return null;
+        }
         return parsed;
     } catch {
         return null;
@@ -225,7 +239,7 @@ function loadActiveSession() {
 }
 function clearActiveSession() {
     try {
-        sessionStorage.removeItem(SESSION_STORAGE_KEY);
+        localStorage.removeItem(SESSION_STORAGE_KEY);
     } catch {
         /* private mode */
     }
@@ -2082,8 +2096,12 @@ document.addEventListener('DOMContentLoaded', () => {
     // When a backgrounded tab comes back to foreground, setInterval-based
     // keepalives may have been throttled (browsers commonly clamp to 1/min
     // in hidden tabs) — long enough for a proxy idle timeout to bite.
-    // Fire an immediate keepalive on each foreground transition to refresh
-    // the path before the 25 s tick.
+    // Two things to do on each foreground transition:
+    //  1. Fire an immediate keepalive on still-open sockets to refresh the
+    //     path before the 25 s tick.
+    //  2. Actively probe any non-OPEN socket: mobile networks sometimes drop
+    //     the TCP connection without ever firing a `close` event, so the
+    //     auto-reconnect chain may not have kicked in. Trigger it ourselves.
     document.addEventListener('visibilitychange', () => {
         if (document.visibilityState !== 'visible') return;
         for (const ws of [hostWs, playerWs]) {
@@ -2094,6 +2112,24 @@ document.addEventListener('DOMContentLoaded', () => {
                     /* swallow — close handler will reconnect if the path is dead */
                 }
             }
+        }
+        if (
+            playerRoomCode &&
+            playerSessionId &&
+            !playerSuppressReconnect &&
+            !playerReconnecting &&
+            (!playerWs || playerWs.readyState !== WebSocket.OPEN)
+        ) {
+            reconnectPlayerWs();
+        }
+        if (
+            hostRoomId &&
+            hostSessionId &&
+            !hostSuppressReconnect &&
+            !hostReconnecting &&
+            (!hostWs || hostWs.readyState !== WebSocket.OPEN)
+        ) {
+            reconnectHostWs();
         }
     });
 
