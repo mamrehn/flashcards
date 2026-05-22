@@ -1289,10 +1289,11 @@ function renderHostReveal(podium) {
 
     const totalBallots = hostAnswers.size;
     const connected = [...hostPlayers.values()].filter((p) => p.isConnected).length;
+    const revealTxt = hostActivePoll.revealCount === 'all' ? 'alle' : hostActivePoll.revealCount;
     const metaTxt =
         `${totalBallots} von ${connected} Stimmen · ` +
-        `picksPerVoter=${hostActivePoll.picksPerVoter} · ` +
-        `revealCount=${hostActivePoll.revealCount} · ` +
+        `Auswahlen pro Person: ${hostActivePoll.picksPerVoter} · ` +
+        `Ergebnisse: ${revealTxt} · ` +
         `Quelle: ${hostActivePoll.source === 'players' ? 'Spielernamen' : 'eigene Optionen'}`;
     dom.hostRevealMeta.textContent = metaTxt;
 }
