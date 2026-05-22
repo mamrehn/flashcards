@@ -282,43 +282,53 @@ const HEARTBEAT_PAYLOAD = JSON.stringify({ type: 'heartbeat' });
 
 /**
  * Start the bidirectional heartbeat for a WebSocket. Returns a state object
- * containing both intervals plus last-seen / last-sent timestamps. Pass the
- * state to `stopHeartbeat` when the socket closes.
+ * holding the rescheduling timer, the watchdog interval, and the last-seen /
+ * last-sent timestamps. Pass the state to `stopHeartbeat` when the socket
+ * closes.
  *
- * `ws.send` is wrapped so that *any* outbound traffic (submit_answer,
- * start_question, etc.) updates `lastSendTime`. The heartbeat tick then skips
- * itself if we already sent something within the past `HEARTBEAT_INTERVAL_MS`
- * — pointless to chase a fresh submit_answer with a heartbeat ping.
+ * `ws.send` is wrapped so that *any* outbound frame (submit_answer,
+ * start_question, heartbeat itself, ...) reschedules the next heartbeat for
+ * exactly `HEARTBEAT_INTERVAL_MS` from now. This guarantees the gap between
+ * any two outbound frames is at most `HEARTBEAT_INTERVAL_MS` — important for
+ * NATs that drop idle TCP after as little as 30 s. A simple periodic
+ * `setInterval` skip-if-recent would have a worst-case gap of ~2× the
+ * interval (~50 s) when a real send lands just after a tick fires.
  *
  * `state.lastMsgTime` is updated externally on every received frame, so an
- * active stream of server-pushed messages (questions, results) keeps the
- * watchdog quiet without a redundant heartbeat round-trip.
+ * active stream of server-pushed messages keeps the watchdog quiet without
+ * a redundant heartbeat round-trip.
  * @param {WebSocket} ws
- * @returns {{sendInterval:number, watchdog:number, lastMsgTime:number, lastSendTime:number}}
+ * @returns {{heartbeatTimer:number, watchdog:number, lastMsgTime:number, lastSendTime:number}}
  */
 function startHeartbeat(ws) {
     const now = Date.now();
-    const state = { lastMsgTime: now, lastSendTime: now };
+    const state = { lastMsgTime: now, lastSendTime: now, heartbeatTimer: null };
 
-    // Wrap ws.send so every outbound frame bumps lastSendTime. Shadowing the
-    // prototype method via an own property is contained to this socket.
+    function scheduleNextHeartbeat() {
+        if (state.heartbeatTimer !== null) clearTimeout(state.heartbeatTimer);
+        state.heartbeatTimer = setTimeout(() => {
+            if (!ws || ws.readyState !== WebSocket.OPEN) return;
+            try {
+                // Goes through the wrapped send, which itself reschedules.
+                ws.send(HEARTBEAT_PAYLOAD);
+            } catch (error) {
+                logger.error('Heartbeat send failed:', error);
+            }
+        }, HEARTBEAT_INTERVAL_MS);
+    }
+
+    // Wrap ws.send so every outbound frame bumps lastSendTime *and* resets
+    // the heartbeat timer. Shadowing the prototype method via an own
+    // property is contained to this socket.
     const originalSend = ws.send.bind(ws);
     ws.send = (...args) => {
         state.lastSendTime = Date.now();
+        scheduleNextHeartbeat();
         return originalSend(...args);
     };
 
-    state.sendInterval = setInterval(() => {
-        if (!ws || ws.readyState !== WebSocket.OPEN) return;
-        // Skip the heartbeat if we already sent *something* within the
-        // interval window — pointless to ping right after a real message.
-        if (Date.now() - state.lastSendTime < HEARTBEAT_INTERVAL_MS) return;
-        try {
-            ws.send(HEARTBEAT_PAYLOAD);
-        } catch (error) {
-            logger.error('Heartbeat send failed:', error);
-        }
-    }, HEARTBEAT_INTERVAL_MS);
+    // Kick off the first heartbeat 25 s from now (initial state).
+    scheduleNextHeartbeat();
 
     state.watchdog = setInterval(() => {
         if (!ws || ws.readyState !== WebSocket.OPEN) return;
@@ -339,14 +349,14 @@ function startHeartbeat(ws) {
 }
 
 /**
- * Cancel a heartbeat state's intervals and return null for assignment back
+ * Cancel a heartbeat state's timer and return null for assignment back
  * to the caller's state slot.
- * @param {{sendInterval:number, watchdog:number}|null} state
+ * @param {{heartbeatTimer:number|null, watchdog:number}|null} state
  * @returns {null}
  */
 function stopHeartbeat(state) {
     if (state) {
-        clearInterval(state.sendInterval);
+        if (state.heartbeatTimer !== null) clearTimeout(state.heartbeatTimer);
         clearInterval(state.watchdog);
     }
     return null;
