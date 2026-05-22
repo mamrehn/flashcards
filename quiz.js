@@ -165,6 +165,9 @@ const LOBBY_MUSIC_VOTE_OPTIONS = [
     { id: 'none', label: 'Keine Musik', icon: '🔇', tagline: 'Stille fürs Lernen' },
 ];
 const LOBBY_MUSIC_VOTE_IDS = new Set(LOBBY_MUSIC_VOTE_OPTIONS.map((o) => o.id));
+// Themes that exist as host-side audio but aren't fully implemented yet —
+// players cannot vote for these (the buttons render disabled).
+const LOBBY_MUSIC_VOTE_DISABLED = new Set(['cinematic', 'classical']);
 
 // Host-side audio split into seamless loops vs. one-shot stingers.
 // See audio/themes/README.md for the full spec.
@@ -2776,6 +2779,12 @@ function initializePlayerFeatures(reconnectInfo) {
             btn.dataset.theme = opt.id;
             btn.setAttribute('aria-pressed', String(opt.id === playerVote));
             if (opt.id === playerVote) btn.classList.add('selected');
+            const voteDisabled = LOBBY_MUSIC_VOTE_DISABLED.has(opt.id);
+            if (voteDisabled) {
+                btn.disabled = true;
+                btn.classList.add('locked');
+                btn.title = 'Bald verfügbar';
+            }
             if (playerLobbyMusicLocked) {
                 btn.disabled = true;
                 btn.classList.add('locked');
@@ -2835,6 +2844,7 @@ function initializePlayerFeatures(reconnectInfo) {
     function castMusicVote(choice) {
         if (playerLobbyMusicLocked) return;
         if (!LOBBY_MUSIC_VOTE_IDS.has(choice)) return;
+        if (LOBBY_MUSIC_VOTE_DISABLED.has(choice)) return;
         playerVote = choice;
         if (playerWs && playerWs.readyState === WebSocket.OPEN) {
             playerWs.send(JSON.stringify({ type: 'cast_music_vote', choice }));
