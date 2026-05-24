@@ -452,10 +452,13 @@ const POLL_SUGGESTIONS = [
     { title: 'Open-Source-Philanthrop*in',         question: 'Open-Source-Philanthrop*in: Wer hat während des Unterrichts heimlich Bug-Bounties gesammelt oder Pull Requests eingereicht?' },
 ];
 
-// Indices already used in this session (consumed when the host actually starts
-// a vote with the suggested question). Suggestions are picked at random from
-// the unused set so each appears at most once until the session ends.
-const usedSuggestionIndices = new Set();
+// Cycle state: the host walks a single shuffled order of all suggestions
+// (randomized once per session, then deterministic). A substring filter from
+// the question textarea is applied on top — cycling and auto-pick stay within
+// matching suggestions. When the typed text matches nothing, the filter is
+// ignored so a suggestion still shows (same as an empty input).
+let suggestionOrder = [];
+let suggestionCursor = 0;
 let currentSuggestionIdx = null;
 
 /* ============================================================================
@@ -1058,40 +1061,96 @@ function openComposer() {
     // on people in the room); preserve choice on subsequent openings.
     renderComposerOptionsList();
     updateFixedSectionVisibility();
-    if (currentSuggestionIdx === null) pickNextSuggestion();
-    renderSuggestionBox();
+    refreshSuggestionForInput();
     dom.composerQuestion.focus();
 }
 
 /**
- * Pick a random unused suggestion. Sets currentSuggestionIdx to null if no
- * suggestions remain. When `excludeCurrent` is true, the currently-shown
- * suggestion is also excluded so the "another suggestion" button actually
- * cycles to a different one (rather than possibly re-rolling the same).
- * @param {boolean} [excludeCurrent]
+ * Lazily shuffle the suggestion order once per session (Fisher-Yates) and
+ * seed the cursor at position 0.
  */
-function pickNextSuggestion(excludeCurrent = false) {
-    const candidates = [];
-    for (let i = 0; i < POLL_SUGGESTIONS.length; i++) {
-        if (usedSuggestionIndices.has(i)) continue;
-        if (excludeCurrent && i === currentSuggestionIdx) continue;
-        candidates.push(i);
+function ensureSuggestionOrder() {
+    if (suggestionOrder.length === POLL_SUGGESTIONS.length) return;
+    suggestionOrder = POLL_SUGGESTIONS.map((_, i) => i);
+    for (let i = suggestionOrder.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [suggestionOrder[i], suggestionOrder[j]] = [suggestionOrder[j], suggestionOrder[i]];
     }
-    if (candidates.length === 0) {
-        // Fall back to the current one if cycling found no alternatives —
-        // beats clearing the box mid-session.
-        if (!excludeCurrent || currentSuggestionIdx === null) {
-            currentSuggestionIdx = null;
-        }
-        return;
-    }
-    const pick = candidates[Math.floor(Math.random() * candidates.length)];
-    currentSuggestionIdx = pick;
+    suggestionCursor = 0;
+    currentSuggestionIdx = suggestionOrder[0];
 }
 
 /**
- * Render the suggestion box. Hidden entirely when no unused suggestions
- * remain — the host can still type a custom question, but nothing nags them.
+ * Case-insensitive substring match against title OR question.
+ * @param {number|null} idx
+ * @param {string} q lowercased filter (empty string = match any)
+ * @returns {boolean}
+ */
+function suggestionMatches(idx, q) {
+    if (!q) return true;
+    if (idx === null) return false;
+    const s = POLL_SUGGESTIONS[idx];
+    return (
+        s.title.toLowerCase().includes(q) ||
+        s.question.toLowerCase().includes(q)
+    );
+}
+
+/**
+ * Returns the filter to apply: the lowercased trimmed input, or '' if no
+ * suggestion would match it (in which case the cycle behaves as if the input
+ * were empty — any suggestion is fair game).
+ * @returns {string}
+ */
+function effectiveSuggestionFilter() {
+    const raw = dom.composerQuestion ? dom.composerQuestion.value : '';
+    const q = raw.trim().toLowerCase();
+    if (!q) return '';
+    const anyMatch = POLL_SUGGESTIONS.some((_, i) => suggestionMatches(i, q));
+    return anyMatch ? q : '';
+}
+
+/**
+ * Walk the shuffled order forward until landing on a suggestion that matches
+ * the active filter. When `forceAdvance` is true, the currently-shown
+ * suggestion is skipped so the "Anderer Vorschlag" button actually moves.
+ * @param {boolean} forceAdvance
+ */
+function advanceSuggestion(forceAdvance) {
+    ensureSuggestionOrder();
+    const q = effectiveSuggestionFilter();
+    const n = suggestionOrder.length;
+    const start = forceAdvance ? suggestionCursor + 1 : suggestionCursor;
+    for (let step = 0; step < n; step++) {
+        const pos = (start + step) % n;
+        const idx = suggestionOrder[pos];
+        if (forceAdvance && idx === currentSuggestionIdx) continue;
+        if (suggestionMatches(idx, q)) {
+            suggestionCursor = pos;
+            currentSuggestionIdx = idx;
+            return;
+        }
+    }
+}
+
+/**
+ * Called on every textarea content change. Keeps the displayed suggestion
+ * if it still matches the new filter, otherwise jumps to the next one that
+ * does.
+ */
+function refreshSuggestionForInput() {
+    ensureSuggestionOrder();
+    const q = effectiveSuggestionFilter();
+    if (!suggestionMatches(currentSuggestionIdx, q)) {
+        advanceSuggestion(false);
+    }
+    renderSuggestionBox();
+}
+
+/**
+ * Render the suggestion box. Hidden only before the shuffled order has been
+ * seeded (i.e. before the composer has opened); once seeded the cycle always
+ * has a current entry to show.
  */
 function renderSuggestionBox() {
     if (!dom.suggestionBox) return;
@@ -1121,10 +1180,11 @@ function applyCurrentSuggestion() {
 }
 
 /**
- * Roll to a different unused suggestion. No-op when only one is left.
+ * Walk to the next matching suggestion in the shuffled order. No-op when
+ * only one suggestion matches the active filter.
  */
 function cycleSuggestion() {
-    pickNextSuggestion(true);
+    advanceSuggestion(true);
     renderSuggestionBox();
 }
 
@@ -1354,17 +1414,6 @@ function startVote() {
     hostAnswers.clear();
 
     hostWs.send(JSON.stringify(payload));
-
-    // Consume the suggestion only if the host actually started a vote whose
-    // question text still matches the suggestion. If they edited it, treat it
-    // as a custom question and leave the suggestion available for next time.
-    if (
-        currentSuggestionIdx !== null &&
-        POLL_SUGGESTIONS[currentSuggestionIdx].question === question
-    ) {
-        usedSuggestionIndices.add(currentSuggestionIdx);
-        currentSuggestionIdx = null;
-    }
 
     showOnly(
         ['host-lobby', 'host-composer', 'host-voting', 'host-reveal'],
@@ -1618,7 +1667,8 @@ function hardResetHost() {
     hostPollEnding = false;
     hostPlayers.clear();
     hostAnswers.clear();
-    usedSuggestionIndices.clear();
+    suggestionOrder = [];
+    suggestionCursor = 0;
     currentSuggestionIdx = null;
     clearActiveSession();
     showTopView('role-selection');
@@ -2220,6 +2270,9 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     if (dom.cycleSuggestionBtn) {
         dom.cycleSuggestionBtn.addEventListener('click', cycleSuggestion);
+    }
+    if (dom.composerQuestion) {
+        dom.composerQuestion.addEventListener('input', refreshSuggestionForInput);
     }
     dom.composerRevealAll.addEventListener('change', () => {
         dom.composerReveal.disabled = dom.composerRevealAll.checked;
