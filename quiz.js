@@ -2927,6 +2927,7 @@ function initializePlayerFeatures(reconnectInfo) {
     const joinForm = document.querySelector('#join-form');
     const waitingRoom = document.querySelector('#waiting-room');
     const waitingMessage = document.querySelector('#waiting-message');
+    const lobbyWelcomeTitle = document.querySelector('#lobby-welcome-title');
     const lobbyCategoriesEl = document.querySelector('#lobby-categories');
     const lobbyCategoriesListEl = document.querySelector('#lobby-categories-list');
     const lobbyMusicOptionsEl = document.querySelector('#lobby-music-options');
@@ -3414,6 +3415,12 @@ function initializePlayerFeatures(reconnectInfo) {
                     // and complete the transition.
                     const phase = typeof msg.phase === 'string' ? msg.phase : 'lobby';
                     if (phase === 'lobby') {
+                        const greetName = msg.playerName || pName;
+                        if (lobbyWelcomeTitle) {
+                            lobbyWelcomeTitle.textContent = greetName
+                                ? `Willkommen, ${greetName}!`
+                                : 'Willkommen in der Lobby';
+                        }
                         waitingMessage.textContent = msg.isReconnect
                             ? 'Wieder drin — wir warten auf den Host.'
                             : 'Du bist drin — wir warten auf den Host.';
