@@ -1602,20 +1602,41 @@ async function initializeHostFeatures(reconnectInfo) {
                 hostWsReconnectAttempts = 0;
                 if (msg.players) {
                     for (const p of msg.players) {
-                        if (quizState.players[p.sessionId]) {
-                            quizState.players[p.sessionId].isConnected = p.isConnected;
-                            quizState.players[p.sessionId].score = p.score;
-                            if (p.avatar) quizState.players[p.sessionId].avatar = p.avatar;
+                        const existing = quizState.players[p.sessionId];
+                        // Restore answers submitted during the host's outage.
+                        // The server bundles hasAnswered/currentAnswer in the
+                        // host_reconnected payload (no per-player_answered
+                        // replay), so without picking them up here the
+                        // allConnectedAnswered auto-end check would stall on
+                        // phantom-unanswered players. The snapshot has no
+                        // elapsedMs, so the restored answerTime stays null
+                        // — calculateScores treats null as max elapsed, i.e.
+                        // correctness points without a speed bonus.
+                        const restoreAnswer =
+                            quizState.isQuestionActive &&
+                            !!p.hasAnswered &&
+                            Array.isArray(p.currentAnswer);
+                        if (existing) {
+                            existing.isConnected = p.isConnected;
+                            existing.score = p.score;
+                            if (p.avatar) existing.avatar = p.avatar;
+                            if (restoreAnswer && !existing.hasAnswered) {
+                                existing.hasAnswered = true;
+                                existing.currentAnswer = [...p.currentAnswer];
+                                quizState.answersReceived++;
+                            }
                         } else {
                             quizState.players[p.sessionId] = {
                                 id: p.sessionId,
                                 name: p.name,
                                 avatar: p.avatar || '',
                                 score: p.score,
-                                currentAnswer: [],
+                                currentAnswer: restoreAnswer ? [...p.currentAnswer] : [],
                                 answerTime: null,
                                 isConnected: p.isConnected,
+                                hasAnswered: restoreAnswer,
                             };
+                            if (restoreAnswer) quizState.answersReceived++;
                         }
                     }
                 }
@@ -1631,12 +1652,18 @@ async function initializeHostFeatures(reconnectInfo) {
                 // Push categories again in case server lost them (e.g. restored room).
                 sendCategoriesToServer();
                 refreshPlayerDisplay();
+                // Reflect any answers we just restored in the live counter,
+                // and check whether they now satisfy the auto-end condition.
+                if (quizState.isQuestionActive) {
+                    answersCount.textContent = quizState.answersReceived.toString();
+                    if (allConnectedAnswered()) endQuestion();
+                }
                 // Do NOT auto-restart the active question on reconnect: the
-                // host's local state (timer, options, players' submissions)
-                // is intact, and re-calling startQuestion would replay the
-                // new_question stinger and reset the timer for everyone.
-                // We just resume in place; the server kept relaying answers
-                // through the brief disconnect window.
+                // host's local state (timer, options) is intact, and re-calling
+                // startQuestion would replay the new_question stinger and
+                // reset the timer for everyone. We just resume in place; the
+                // per-player answer state was reconciled above from the
+                // host_reconnected payload.
                 if (hostPendingQuestion) {
                     // Resend question that failed to send before disconnect
                     logger.log('Resending pending question after reconnect');
@@ -1738,6 +1765,39 @@ async function initializeHostFeatures(reconnectInfo) {
 
             case 'player_answered': {
                 handlePlayerAnswer(msg);
+                break;
+            }
+
+            case 'quiz_terminated': {
+                // Server-side termination (SIGTERM during fly.io redeploy, or
+                // a stale-room expiry that the host happens to still be
+                // attached to). Without this case the host UI would sit on a
+                // stale room while the auto-reconnect loop burns through its
+                // budget against a server that's gone.
+                showMessage('Sitzung wurde beendet.', 'info');
+                hostSuppressReconnect = true;
+                clearActiveSession();
+                if (hostMusicEngine) hostMusicEngine.stop();
+                if (hostTimerInterval) {
+                    clearInterval(hostTimerInterval);
+                    hostTimerInterval = null;
+                }
+                if (hostEndQuestionTimeout) {
+                    clearTimeout(hostEndQuestionTimeout);
+                    hostEndQuestionTimeout = null;
+                }
+                hostHeartbeat = stopHeartbeat(hostHeartbeat);
+                if (hostWs) {
+                    try { hostWs.close(); } catch { /* ignore */ }
+                }
+                hostWs = null;
+                hostRoomId = null;
+                hostSessionId = null;
+                hostGlobalQuizState = null;
+                hostPendingQuestion = null;
+                isHostInitialized = false;
+                document.querySelector('#role-selection').classList.remove('hidden');
+                showView('role-selection');
                 break;
             }
 
