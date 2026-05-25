@@ -133,9 +133,17 @@ function connectWithRetry(url, maxRetries = 3) {
             attempt++;
             const ws = new WebSocket(url);
             let settled = false;
+            // Listener refs so we can detach the unused one on settle.
+            let onOpen;
+            let onError;
+            const detach = () => {
+                ws.removeEventListener('open', onOpen);
+                ws.removeEventListener('error', onError);
+            };
             const timeout = setTimeout(() => {
                 if (settled) return;
                 settled = true;
+                detach();
                 ws.close();
                 if (attempt < maxRetries) {
                     setTimeout(tryConnect, 2000 * attempt);
@@ -143,22 +151,26 @@ function connectWithRetry(url, maxRetries = 3) {
                     reject(new Error('WebSocket connection failed after retries'));
                 }
             }, 10_000);
-            ws.addEventListener('open', () => {
+            onOpen = () => {
                 if (settled) return;
                 settled = true;
                 clearTimeout(timeout);
+                detach();
                 resolve(ws);
-            });
-            ws.addEventListener('error', () => {
+            };
+            onError = () => {
                 if (settled) return;
                 settled = true;
                 clearTimeout(timeout);
+                detach();
                 if (attempt < maxRetries) {
                     setTimeout(tryConnect, 2000 * attempt);
                 } else {
                     reject(new Error('WebSocket connection failed after retries'));
                 }
-            });
+            };
+            ws.addEventListener('open', onOpen);
+            ws.addEventListener('error', onError);
         }
         tryConnect();
     });
@@ -221,10 +233,14 @@ function startHeartbeat(ws) {
     }
 
     // Wrap ws.send so every outbound frame bumps lastSendTime *and* resets
-    // the heartbeat timer. Shadowing the prototype method via an own
-    // property is contained to this socket; nothing else in the app reaches
-    // into WebSocket.prototype.send.
-    const originalSend = ws.send.bind(ws);
+    // the heartbeat timer. Stash the native bound send on the socket itself
+    // so a second startHeartbeat call on the same socket doesn't capture
+    // the previous wrapper as "original" and stack wrappers (which would
+    // self-reschedule recursively on each outbound frame).
+    if (!ws.__heartbeatNativeSend) {
+        ws.__heartbeatNativeSend = ws.send.bind(ws);
+    }
+    const originalSend = ws.__heartbeatNativeSend;
     ws.send = (...args) => {
         state.lastSendTime = Date.now();
         scheduleNextHeartbeat();
@@ -408,6 +424,11 @@ const hostAnswers = new Map(); // sessionId -> {ranks: number[], name}
 let hostTimerInterval = null;
 // Pending question to send once a fresh hostWs is open after a transient drop.
 let hostPendingQuestion = null;
+// Pending results frame to send once a fresh hostWs is open after a transient
+// drop. Without this, an endVote() that ran while the host WS was closed
+// would compute the podium locally but never notify the players — they'd be
+// stuck on the voting screen until reconnect or manual session end.
+let hostPendingResults = null;
 
 // Player state
 let playerWs = null;
@@ -729,8 +750,12 @@ async function reconnectHostWs() {
         return;
     }
     hostWs = connectedWs;
-    attachHostWsHandlers(hostWs);
+    // Clear the in-flight guard before attaching handlers and sending. If
+    // `ws.send` throws or a synchronous close event fires mid-setup, the
+    // close handler's reconnectHostWs() call would otherwise early-return
+    // on the still-true guard and we'd stall.
     hostReconnecting = false;
+    attachHostWsHandlers(hostWs);
     hostWs.send(
         JSON.stringify({ type: 'reconnect_host', roomId: hostRoomId, sessionId: hostSessionId })
     );
@@ -738,6 +763,12 @@ async function reconnectHostWs() {
     if (hostPendingQuestion) {
         hostWs.send(JSON.stringify(hostPendingQuestion));
         hostPendingQuestion = null;
+    }
+    // Same for results — an endVote() that fired during the outage left the
+    // poll resolved on the host side but never reached players.
+    if (hostPendingResults) {
+        hostWs.send(JSON.stringify(hostPendingResults));
+        hostPendingResults = null;
     }
     // Counter resets to 0 in the 'host_reconnected' message handler.
 }
@@ -1013,6 +1044,10 @@ function handleHostMessage(msg) {
  *
  */
 function renderHostLobby() {
+    // Guard against a stray render before `room_created` lands — a spurious
+    // host_reconnected (or any caller that races ahead of room creation)
+    // would otherwise throw on the slice.
+    if (!hostRoomId) return;
     const displayCode = hostRoomId.slice(0, 2) + ' ' + hostRoomId.slice(2, 4);
     dom.roomIdEl.textContent = displayCode;
     if (dom.modalRoomIdSpan) dom.modalRoomIdSpan.textContent = displayCode;
@@ -1500,17 +1535,28 @@ function endVote() {
     // its `final` snapshot, so we set isFinal: true on every poll result.
     const leaderboard = podium.map((p) => ({ name: p.label, score: p.points }));
 
+    const resultsPayload = {
+        type: 'send_results',
+        correct: [],
+        isFinal: true,
+        leaderboard,
+    };
     if (hostWs && hostWs.readyState === WebSocket.OPEN) {
-        hostWs.send(
-            JSON.stringify({
-                type: 'send_results',
-                correct: [],
-                isFinal: true,
-                leaderboard,
-            })
-        );
+        try {
+            hostWs.send(JSON.stringify(resultsPayload));
+        } catch {
+            hostPendingResults = resultsPayload;
+            showMessage(
+                'Keine Verbindung — Ergebnisse werden nach Reconnect gesendet.',
+                'info'
+            );
+        }
     } else {
-        showMessage('Keine Verbindung — Ergebnisse konnten nicht versendet werden.', 'error');
+        hostPendingResults = resultsPayload;
+        showMessage(
+            'Keine Verbindung — Ergebnisse werden nach Reconnect gesendet.',
+            'info'
+        );
     }
 
     renderHostReveal(podium);
@@ -1665,6 +1711,8 @@ function hardResetHost() {
     hostSessionId = null;
     hostActivePoll = null;
     hostPollEnding = false;
+    hostPendingQuestion = null;
+    hostPendingResults = null;
     hostPlayers.clear();
     hostAnswers.clear();
     suggestionOrder = [];

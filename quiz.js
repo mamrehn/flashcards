@@ -230,9 +230,19 @@ function connectWithRetry(url, maxRetries = 3) {
             attempt++;
             const ws = new WebSocket(url);
             let settled = false;
+            // Listener refs so we can detach the unused one on settle. Without
+            // this both stay bound to a dead/abandoned socket and keep the ws
+            // object alive longer than necessary.
+            let onOpen;
+            let onError;
+            const detach = () => {
+                ws.removeEventListener('open', onOpen);
+                ws.removeEventListener('error', onError);
+            };
             const timeout = setTimeout(() => {
                 if (settled) return;
                 settled = true;
+                detach();
                 ws.close();
                 if (attempt < maxRetries) {
                     logger.log(`WebSocket connection attempt ${attempt} timed out, retrying...`);
@@ -242,23 +252,27 @@ function connectWithRetry(url, maxRetries = 3) {
                 }
             }, 10_000);
 
-            ws.addEventListener('open', () => {
+            onOpen = () => {
                 if (settled) return;
                 settled = true;
                 clearTimeout(timeout);
+                detach();
                 resolve(ws);
-            });
-            ws.addEventListener('error', () => {
+            };
+            onError = () => {
                 if (settled) return;
                 settled = true;
                 clearTimeout(timeout);
+                detach();
                 if (attempt < maxRetries) {
                     logger.log(`WebSocket connection attempt ${attempt} failed, retrying...`);
                     setTimeout(tryConnect, 2000 * attempt);
                 } else {
                     reject(new Error('WebSocket connection failed after retries'));
                 }
-            });
+            };
+            ws.addEventListener('open', onOpen);
+            ws.addEventListener('error', onError);
         }
         tryConnect();
     });
@@ -318,9 +332,14 @@ function startHeartbeat(ws) {
     }
 
     // Wrap ws.send so every outbound frame bumps lastSendTime *and* resets
-    // the heartbeat timer. Shadowing the prototype method via an own
-    // property is contained to this socket.
-    const originalSend = ws.send.bind(ws);
+    // the heartbeat timer. Stash the native bound send on the socket itself
+    // so a second startHeartbeat call doesn't capture the previous wrapper
+    // as "original" and stack wrappers (which would self-reschedule
+    // recursively on each outbound frame).
+    if (!ws.__heartbeatNativeSend) {
+        ws.__heartbeatNativeSend = ws.send.bind(ws);
+    }
+    const originalSend = ws.__heartbeatNativeSend;
     ws.send = (...args) => {
         state.lastSendTime = Date.now();
         scheduleNextHeartbeat();
@@ -532,6 +551,11 @@ let hostWs = null;
 let hostSessionId = null;
 let isHostInitialized = false;
 let hostTimerInterval = null;
+// Deferred endQuestion() fired by startTimer when the bar reaches 0. Tracked
+// at module scope so endQuestion (or a follow-up startTimer) can cancel it —
+// otherwise a pending fire from the previous round could close out the next
+// question if the host clicks "Next" inside the 2s grace window.
+let hostEndQuestionTimeout = null;
 let hostQuestionStartTime = null;
 let hostRoomId = null;
 let hostViewHeading = null;
@@ -970,6 +994,20 @@ function getConnectedNonHostPlayers() {
 }
 
 /**
+ * True iff every currently-connected player has submitted for the active
+ * question. Used as the end-of-round trigger instead of a raw count: a
+ * count-based check would falsely fire when an answered player disconnects,
+ * because their answer stays in `answersReceived` while they drop out of
+ * the connected total — cutting off players who hadn't answered yet.
+ * @returns {boolean}
+ */
+function allConnectedAnswered() {
+    const connected = getConnectedNonHostPlayers();
+    if (connected.length === 0) return false;
+    return connected.every((p) => p.hasAnswered === true);
+}
+
+/**
  * Retrieves and sorts player data for the leaderboard (descending by score).
  * @returns {Array<object>} Sorted array of player objects with name and score.
  */
@@ -1394,6 +1432,13 @@ async function initializeHostFeatures(reconnectInfo) {
             hostSessionId = null;
             hostGlobalQuizState = null;
             hostPendingQuestion = null;
+            // Reset isHostInitialized so the next initializeHostFeatures()
+            // call re-attaches listeners with closures over the fresh
+            // hostGlobalQuizState. The old listeners stay bound to the old
+            // state, but their mutations are invisible (the old state has
+            // no reachable references outside the dead closures, and
+            // module-level helpers like getNonHostPlayers() read the new
+            // hostGlobalQuizState).
             isHostInitialized = false;
             fileStatus.textContent = '';
             if (jsonFileInput) jsonFileInput.value = '';
@@ -1658,10 +1703,7 @@ async function initializeHostFeatures(reconnectInfo) {
                 if (quizState.players[msg.sessionId]) {
                     quizState.players[msg.sessionId].isConnected = false;
                     refreshPlayerDisplay();
-                    if (
-                        quizState.isQuestionActive &&
-                        quizState.answersReceived >= getNonHostPlayerCount()
-                    ) {
+                    if (quizState.isQuestionActive && allConnectedAnswered()) {
                         endQuestion();
                     }
                 }
@@ -1878,6 +1920,11 @@ async function initializeHostFeatures(reconnectInfo) {
         logger.log('Host WebSocket reconnected');
         hostHeartbeat = stopHeartbeat(hostHeartbeat);
         hostHeartbeat = startHeartbeat(ws);
+        // Clear the in-flight guard before sending and before wiring up
+        // listeners. If `ws.send` throws or a synchronous close event fires
+        // mid-setup, the close handler's reconnectHostWs() call would
+        // otherwise early-return on the still-true guard and we'd stall.
+        hostReconnecting = false;
         // Counter resets in the 'host_reconnected' / 'room_created' message
         // handler — only after the server actually acknowledges us, so a
         // socket that opens then immediately closes doesn't zero the counter.
@@ -1936,8 +1983,6 @@ async function initializeHostFeatures(reconnectInfo) {
         ws.addEventListener('error', (err) => {
             console.error('Host WebSocket error:', err);
         });
-
-        hostReconnecting = false;
     };
 
     /**
@@ -1964,7 +2009,7 @@ async function initializeHostFeatures(reconnectInfo) {
         p.currentAnswer = msg.answerData;
         answersCount.textContent = quizState.answersReceived.toString();
 
-        if (quizState.answersReceived >= getNonHostPlayerCount()) {
+        if (allConnectedAnswered()) {
             endQuestion();
         }
     }
@@ -2310,6 +2355,10 @@ async function initializeHostFeatures(reconnectInfo) {
     function startTimer(durationSeconds) {
         timerBar.style.width = '100%';
         if (hostTimerInterval) clearInterval(hostTimerInterval);
+        if (hostEndQuestionTimeout) {
+            clearTimeout(hostEndQuestionTimeout);
+            hostEndQuestionTimeout = null;
+        }
 
         const totalDurationMs = durationSeconds * 1000;
         const timerStartTime = Date.now();
@@ -2323,7 +2372,10 @@ async function initializeHostFeatures(reconnectInfo) {
                 // Wait a grace period for client auto-submits to arrive
                 clearInterval(hostTimerInterval);
                 hostTimerInterval = null;
-                setTimeout(() => endQuestion(), 2000);
+                hostEndQuestionTimeout = setTimeout(() => {
+                    hostEndQuestionTimeout = null;
+                    endQuestion();
+                }, 2000);
             }
         }, 100); // Update every 100ms
     }
@@ -2337,6 +2389,10 @@ async function initializeHostFeatures(reconnectInfo) {
         if (hostTimerInterval) {
             clearInterval(hostTimerInterval);
             hostTimerInterval = null;
+        }
+        if (hostEndQuestionTimeout) {
+            clearTimeout(hostEndQuestionTimeout);
+            hostEndQuestionTimeout = null;
         }
 
         quizState.isQuestionActive = false;
@@ -2627,8 +2683,12 @@ function reconnectPlayerWs() {
         playerWs = null;
         playerHeartbeat = stopHeartbeat(playerHeartbeat);
     }
+    // Always clear the suppress flag — leaving it `true` when there is no
+    // connect function to call (e.g. visibility/online fires before
+    // initPlayerConnection has run, or after a hard reset) would silently
+    // block every future reconnect attempt.
+    playerSuppressReconnect = false;
     if (playerConnectFn) {
-        playerSuppressReconnect = false;
         playerConnectFn();
     }
 }
@@ -3131,6 +3191,33 @@ function initializePlayerFeatures(reconnectInfo) {
                 return;
             }
 
+            // Send first, then mark submitted. Doing it the other way around
+            // lets a closed-but-not-yet-noticed socket silently swallow the
+            // answer while locking the UI in "submitted" state — the host
+            // never receives it and the player can't retry on reconnect.
+            if (!playerWs || playerWs.readyState !== WebSocket.OPEN) {
+                showMessage(
+                    'Verbindung unterbrochen. Antwort konnte nicht gesendet werden.',
+                    'error'
+                );
+                return;
+            }
+            try {
+                playerWs.send(
+                    JSON.stringify({
+                        type: 'submit_answer',
+                        answerData: selectedAnswers,
+                        answerTime: new Date().toISOString(),
+                    })
+                );
+            } catch {
+                showMessage(
+                    'Verbindung unterbrochen. Antwort konnte nicht gesendet werden.',
+                    'error'
+                );
+                return;
+            }
+
             playerHasSubmitted = true;
             submitAnswerBtn.disabled = true;
             submitAnswerBtn.classList.remove('pulse-cta');
@@ -3141,22 +3228,6 @@ function initializePlayerFeatures(reconnectInfo) {
             if (playerTimerInterval) {
                 clearInterval(playerTimerInterval);
                 playerTimerInterval = null;
-            }
-
-            // Send answer via WebSocket
-            if (playerWs && playerWs.readyState === WebSocket.OPEN) {
-                playerWs.send(
-                    JSON.stringify({
-                        type: 'submit_answer',
-                        answerData: selectedAnswers,
-                        answerTime: new Date().toISOString(),
-                    })
-                );
-            } else {
-                showMessage(
-                    'Verbindung unterbrochen. Antwort konnte nicht gesendet werden.',
-                    'error'
-                );
             }
         });
 
@@ -3332,6 +3403,12 @@ function initializePlayerFeatures(reconnectInfo) {
                     playerCurrentQuestionOptions = msg.options;
                     selectedAnswers = [];
                     playerCurrentQuestionIndex = msg.index;
+                    // Pass `alreadySubmitted` so the option buttons + submit
+                    // button render directly into their final disabled state.
+                    // Previously displayQuestion always rendered them enabled,
+                    // then the alreadySubmitted branch below disabled them —
+                    // leaving a brief window where a fast tap could fire a
+                    // duplicate submit.
                     displayQuestion(msg);
                     // Use server-computed remaining seconds so the player's
                     // local clock is never compared against the server epoch.
@@ -3342,16 +3419,6 @@ function initializePlayerFeatures(reconnectInfo) {
                         : msg.duration;
                     startPlayerTimer(remaining);
                     if (msg.alreadySubmitted) {
-                        // Player had submitted before disconnecting. Server
-                        // still has their answer; the host won't accept a
-                        // second submission, so freeze the UI accordingly.
-                        playerHasSubmitted = true;
-                        submitAnswerBtn.disabled = true;
-                        submitAnswerBtn.classList.add('hidden');
-                        submitAnswerBtn.classList.remove('pulse-cta');
-                        for (const btn of optionsContainer.querySelectorAll('button.option-btn')) {
-                            btn.disabled = true;
-                        }
                         showMessage('Antwort wurde bereits gesendet.', 'info');
                     }
                     break;
@@ -3503,25 +3570,38 @@ function initializePlayerFeatures(reconnectInfo) {
             if (remaining <= 0) {
                 clearInterval(playerTimerInterval);
                 playerTimerInterval = null;
-                // Auto-submit current selections if player hasn't already submitted
+                // Auto-submit current selections if player hasn't already
+                // submitted. Send first, set the flag only on success — a
+                // closed-but-not-yet-noticed socket would otherwise lock the
+                // player into "submitted" with the host never having received
+                // the answer. After timer expiry the question is over for
+                // them either way, so failure just means they don't score.
                 if (!playerHasSubmitted) {
-                    playerHasSubmitted = true;
-                    playerWasAutoSubmitted = selectedAnswers.length > 0;
-                    submitAnswerBtn.disabled = true;
+                    let sent = false;
                     if (playerWs && playerWs.readyState === WebSocket.OPEN) {
-                        playerWs.send(
-                            JSON.stringify({
-                                type: 'submit_answer',
-                                answerData: selectedAnswers,
-                                answerTime: new Date().toISOString(),
-                            })
-                        );
+                        try {
+                            playerWs.send(
+                                JSON.stringify({
+                                    type: 'submit_answer',
+                                    answerData: selectedAnswers,
+                                    answerTime: new Date().toISOString(),
+                                })
+                            );
+                            sent = true;
+                        } catch {
+                            sent = false;
+                        }
+                    }
+                    if (sent) {
+                        playerHasSubmitted = true;
+                        playerWasAutoSubmitted = selectedAnswers.length > 0;
                     } else {
                         showMessage(
                             'Verbindung unterbrochen. Antwort konnte nicht gesendet werden.',
                             'error'
                         );
                     }
+                    submitAnswerBtn.disabled = true;
                 }
                 submitAnswerBtn.classList.add('hidden');
                 submitAnswerBtn.classList.remove('pulse-cta');
@@ -3576,13 +3656,16 @@ function initializePlayerFeatures(reconnectInfo) {
         // Keep submit button visible-but-disabled while a question is active so
         // it doesn't materialize under the player's finger when they tap the
         // bottom-most option (which previously caused a ghost-click auto-submit).
-        submitAnswerBtn.classList.remove('hidden');
+        // On a mid-question reconnect the server sets `alreadySubmitted` so we
+        // render the locked state in one paint instead of enable→disable.
+        const alreadySubmitted = !!qData.alreadySubmitted;
+        submitAnswerBtn.classList.toggle('hidden', alreadySubmitted);
         submitAnswerBtn.classList.remove('pulse-cta');
         submitAnswerBtn.disabled = true;
-        playerHasSubmitted = false;
+        playerHasSubmitted = alreadySubmitted;
         playerWasAutoSubmitted = false;
         for (const btn of optionsContainer.querySelectorAll('button.option-btn')) {
-            btn.disabled = false;
+            btn.disabled = alreadySubmitted;
             btn.classList.remove('correct-answer', 'incorrect-answer', 'selected'); // Clean up previous result styles
         }
     }
