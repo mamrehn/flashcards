@@ -443,6 +443,11 @@ select:focus {
     background-color: rgba(255, 184, 0, 0.2);
     color: #b07f00;
     box-shadow: 0 0 0 4px rgba(255, 184, 0, 0.08);
+    /* Partial-correct badge contains a ratio (e.g. "1/3", "2/5") rather
+       than a single glyph — shrink the type so 3-4 characters still sit
+       cleanly inside the 4rem circle. */
+    font-size: 1.5rem;
+    font-variant-numeric: tabular-nums;
 }
 .result-status[data-state="partial"] .result-label {
     color: #8c6500;

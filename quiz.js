@@ -3967,8 +3967,8 @@ function initializePlayerFeatures(reconnectInfo) {
             triggerConfetti();
         } else if (partialCorrect) {
             state = 'partial';
-            icon = '½';
-            label = `Teilweise (${correctHits}/${correctSet.size})`;
+            icon = `${correctHits}/${correctSet.size}`;
+            label = 'Teilweise richtig';
         } else {
             state = 'incorrect';
             icon = '✗';
