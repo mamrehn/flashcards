@@ -394,50 +394,161 @@ select:focus {
     font-weight: bold;
 }
 
-/* Player result display */
+/* --- Player per-question result screen ---
+ * Visual hierarchy (top → bottom):
+ *   1. Status badge: circular icon + verdict label (green/yellow/red/gray)
+ *   2. Big "+N" animated points-gained pop — the emotional reward
+ *   3. Compact running total
+ *   4. Correct-answer reveal
+ *   5. Quiet "waiting for next question" footer
+ * The big pop is what carries the reward feeling; everything else is
+ * supporting context. Keep it short — the host's stinger gives the player
+ * only a few seconds to read this. */
+.result-status {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.4rem;
+    margin: 0.75rem 0 0.25rem;
+}
+
+.result-icon {
+    font-size: 2.6rem;
+    width: 4rem;
+    height: 4rem;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    line-height: 1;
+}
+
+.result-label {
+    font-size: 1.3rem;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+}
+
+.result-status[data-state="correct"] .result-icon {
+    background-color: rgba(40, 167, 69, 0.18);
+    color: var(--correct-color);
+    box-shadow: 0 0 0 4px rgba(40, 167, 69, 0.08);
+}
+.result-status[data-state="correct"] .result-label {
+    color: var(--correct-color);
+}
+
+.result-status[data-state="partial"] .result-icon {
+    background-color: rgba(255, 184, 0, 0.2);
+    color: #b07f00;
+    box-shadow: 0 0 0 4px rgba(255, 184, 0, 0.08);
+}
+.result-status[data-state="partial"] .result-label {
+    color: #8c6500;
+}
+
+.result-status[data-state="incorrect"] .result-icon {
+    background-color: rgba(220, 53, 69, 0.18);
+    color: var(--wrong-color);
+    box-shadow: 0 0 0 4px rgba(220, 53, 69, 0.08);
+}
+.result-status[data-state="incorrect"] .result-label {
+    color: var(--wrong-color);
+}
+
+.result-status[data-state="none"] .result-icon {
+    background-color: rgba(128, 128, 128, 0.15);
+    color: var(--text-muted);
+}
+.result-status[data-state="none"] .result-label {
+    color: var(--text-muted);
+}
+
+.result-points-pop {
+    text-align: center;
+    font-size: 2.4rem;
+    font-weight: 800;
+    color: var(--correct-color);
+    margin: 0.25rem 0 0.5rem;
+    line-height: 1;
+}
+
+.result-points-pop.animate-pop {
+    animation: result-points-pop 650ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+
+@keyframes result-points-pop {
+    0% { transform: scale(0.4); opacity: 0; }
+    55% { transform: scale(1.2); opacity: 1; }
+    100% { transform: scale(1); opacity: 1; }
+}
+
+.result-score {
+    text-align: center;
+    font-size: 0.95rem;
+    color: var(--text-muted);
+    margin-bottom: 0.75rem;
+}
+.result-score #player-score {
+    color: var(--text-color);
+    font-weight: 700;
+    font-size: 1.1rem;
+    margin-left: 0.25em;
+}
+
 #result-display {
     text-align: center;
-    font-size: 1.4rem;
-    margin: 0.75rem 0;
-    padding: 0.75rem;
-    border-radius: 8px;
+    margin: 0.5rem 0;
+    font-size: 0.95rem;
+    color: var(--text-color);
 }
 
-#result-display.correct {
+.result-correct-label {
+    font-size: 0.85rem;
+    color: var(--text-muted);
+    margin-bottom: 0.25rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.result-correct-items {
+    line-height: 1.7;
+}
+
+.result-correct-items .correct-answer-chip {
+    display: inline-block;
     background-color: rgba(40, 167, 69, 0.15);
     color: var(--correct-color);
+    border-radius: 999px;
+    padding: 0.15rem 0.6rem;
+    margin: 0.15rem;
+    font-weight: 600;
 }
 
-#result-display.incorrect {
-    background-color: rgba(220, 53, 69, 0.15);
-    color: var(--wrong-color);
+.result-correct-items .correct-answer-chip.player-selected {
+    box-shadow: 0 0 0 2px var(--correct-color);
 }
 
-#result-display .correct {
-    color: var(--correct-color);
-    font-weight: bold;
-}
-
-#result-display .incorrect {
-    color: var(--wrong-color);
-    font-weight: bold;
-}
-
-#result-display .player-selected {
-    text-decoration: underline;
-    font-weight: bold;
-}
-
-#result-display .correct-not-selected {
-    font-weight: bold;
+#result-display .auto-submit-note {
+    margin-top: 0.5rem;
+    font-size: 0.8rem;
+    color: var(--text-muted);
     font-style: italic;
-    color: var(--correct-color);
 }
 
-.score-gained {
-    color: var(--correct-color);
-    font-weight: bold;
-    margin: 0 4px;
+.result-waiting {
+    text-align: center;
+    color: var(--text-muted);
+    font-size: 0.85rem;
+    margin-top: 1rem;
+    font-style: italic;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .result-points-pop.animate-pop {
+        animation: none;
+    }
 }
 
 /* Scoreboard */
@@ -967,11 +1078,14 @@ select:focus {
 }
 
 /*
- * Hide chrome (back arrow + Datenschutz footer link) once the player has
- * joined a room. Accidental taps during the game would yank the player out
- * of the lobby / quiz with no way back. Host view is unaffected.
+ * Hide chrome (page header, back arrow, Datenschutz footer link) once the
+ * player has joined a room. Accidental taps during the game would yank the
+ * player out of the lobby / quiz with no way back, and the "Multiplayer
+ * Quiz" title is pure brand chrome the player doesn't need mid-game (it
+ * also costs valuable vertical space on mobile, where the timer bar and
+ * answer buttons want to be above the fold). Host view is unaffected.
  */
-body.player-in-game .back-link,
+body.player-in-game header,
 body.player-in-game footer {
     display: none;
 }

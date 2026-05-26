@@ -280,11 +280,16 @@
                 </div>
 
                 <div id="player-result" class="hidden">
-                    <div id="result-display"></div>
-                    <div class="score-display">
-                        Deine Punktzahl: <span id="player-score">0</span>
+                    <div id="result-status" class="result-status" data-state="correct">
+                        <div id="result-icon" class="result-icon" aria-hidden="true">✓</div>
+                        <div id="result-label" class="result-label">Richtig!</div>
                     </div>
-                    <p id="waiting-for-next">Warten auf nächste Frage...</p>
+                    <div id="result-points-pop" class="result-points-pop hidden" aria-live="polite">+0</div>
+                    <div class="result-score">
+                        Gesamt: <span id="player-score">0</span>
+                    </div>
+                    <div id="result-display"></div>
+                    <p id="waiting-for-next" class="result-waiting">Warten auf nächste Frage…</p>
                 </div>
 
                 <div id="player-final-result" class="view card hidden">

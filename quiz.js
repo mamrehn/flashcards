@@ -3694,7 +3694,7 @@ function initializePlayerFeatures(reconnectInfo) {
                     const oldScore = playerScore;
                     playerScore = msg.playerScore || playerScore;
                     const gainedPoints = playerScore - oldScore;
-                    displayResult(msg, selectedAnswers, playerScore, gainedPoints, oldScore);
+                    displayResult(msg, selectedAnswers, playerScore, gainedPoints);
                     waitingForNext.textContent = msg.isFinal
                         ? 'Warten auf Endergebnisse...'
                         : 'Warten auf nächste Frage...';
@@ -3935,75 +3935,92 @@ function initializePlayerFeatures(reconnectInfo) {
      * @param {number} gainedPoints - Points gained in this round.
      * @param {number} oldScore - The previous score.
      */
-    function displayResult(rData, playerAnswer, currentScore, gainedPoints = 0, oldScore = 0) {
+    function displayResult(rData, playerAnswer, currentScore, gainedPoints = 0) {
         playerQuestionView.classList.add('hidden');
         playerResultView.classList.remove('hidden');
         flyInElement(playerResultView);
 
-        let resultHtml = 'Deine Antwort war ';
-        // Use the actual playerAnswer passed to the function
         const playerAnsSet = new Set(playerAnswer || []);
         const correctSet = new Set(rData.correct);
-        // Use local options if not in payload
-        const options = playerCurrentQuestionOptions; // Use locally stored options instead of network payload
+        const options = playerCurrentQuestionOptions;
 
+        // Classify the answer: full / partial / wrong / no-answer.
         const correctHits = [...playerAnsSet].filter((item) => correctSet.has(item)).length;
-        const isCompletelyCorrect =
-            correctHits === correctSet.size && playerAnsSet.size === correctSet.size;
+        const noAnswer = !playerAnswer || playerAnswer.length === 0;
+        const fullyCorrect =
+            !noAnswer
+            && correctHits === correctSet.size
+            && playerAnsSet.size === correctSet.size;
+        const partialCorrect = !noAnswer && !fullyCorrect && correctHits > 0;
 
-        if (!playerAnswer || playerAnswer.length === 0) {
-            resultHtml = 'Du hast nicht geantwortet. ';
-        } else if (isCompletelyCorrect) {
-            resultHtml += '<strong class="correct">RICHTIG!</strong> ';
+        let state;
+        let icon;
+        let label;
+        if (noAnswer) {
+            state = 'none';
+            icon = '—';
+            label = 'Nicht beantwortet';
+        } else if (fullyCorrect) {
+            state = 'correct';
+            icon = '✓';
+            label = 'Richtig!';
             triggerConfetti();
-        } else if (correctHits > 0) {
-            resultHtml += `<strong class="correct">TEILWEISE RICHTIG (${correctHits}/${correctSet.size})</strong> `;
+        } else if (partialCorrect) {
+            state = 'partial';
+            icon = '½';
+            label = `Teilweise (${correctHits}/${correctSet.size})`;
         } else {
-            resultHtml += '<strong class="incorrect">FALSCH.</strong> ';
+            state = 'incorrect';
+            icon = '✗';
+            label = 'Falsch';
         }
 
-        if (playerWasAutoSubmitted && playerAnswer && playerAnswer.length > 0) {
-            resultHtml +=
-                '<br><span class="auto-submit-note">Automatisch bei Zeitablauf gesendet – kein Geschwindigkeitsbonus.</span>';
+        const statusEl = document.querySelector('#result-status');
+        const iconEl = document.querySelector('#result-icon');
+        const labelEl = document.querySelector('#result-label');
+        if (statusEl) statusEl.dataset.state = state;
+        if (iconEl) iconEl.textContent = icon;
+        if (labelEl) labelEl.textContent = label;
+
+        // Big animated points-gained pop. Restart the animation by toggling
+        // the class — assigning the same className wouldn't replay it.
+        const pointsEl = document.querySelector('#result-points-pop');
+        if (pointsEl) {
+            if (gainedPoints > 0) {
+                pointsEl.textContent = `+${Math.round(gainedPoints)}`;
+                pointsEl.classList.remove('hidden', 'animate-pop');
+                // Force reflow so the animation can replay on repeat rounds —
+                // toggling the class within the same frame wouldn't restart it.
+                pointsEl.getBoundingClientRect();
+                pointsEl.classList.add('animate-pop');
+            } else {
+                pointsEl.classList.add('hidden');
+                pointsEl.classList.remove('animate-pop');
+                pointsEl.textContent = '';
+            }
         }
 
-        resultHtml += '<br>Richtige Antwort(en): ';
+        playerScoreEl.textContent = Math.round(currentScore);
 
+        // Reveal the correct answer(s) as chips, plus the auto-submit note if
+        // applicable. We deliberately don't show what the player picked
+        // beyond highlighting their *correct* picks (a ring around the chip);
+        // wrong picks aren't called out — there's no value in shaming.
+        let correctHtml = '<div class="result-correct-label">Richtige Antwort(en)</div>';
+        correctHtml += '<div class="result-correct-items">';
         for (const [index, option] of options.entries()) {
-            // Always show correct answers
-            if (correctSet.has(index)) {
-                const cls = playerAnsSet.has(index) ? 'correct player-selected' : 'correct-not-selected';
-                resultHtml += `<span class="${cls}">"${sanitizeHTML(option)}"</span> `;
-            } else if (playerAnsSet.has(index)) {
-                // Per instruction: "Do not show the falsely selected answers of the player anymore."
-                // This means we don't add special classes or text for them.
-                // The original text for the option will still be there, but no specific highlight.
-            }
+            if (!correctSet.has(index)) continue;
+            const cls = playerAnsSet.has(index)
+                ? 'correct-answer-chip player-selected'
+                : 'correct-answer-chip';
+            correctHtml += `<span class="${cls}">${sanitizeHTML(option)}</span>`;
         }
-
-        resultDisplay.innerHTML = resultHtml;
-
-        // Display score breakdown: Old + Gained = New
-        if (gainedPoints > 0) {
-            playerScoreEl.innerHTML = `${Math.round(oldScore)} + <span class="score-gained">${Math.round(gainedPoints)}</span> = <strong>${Math.round(currentScore)}</strong>`;
-        } else {
-            playerScoreEl.textContent = Math.round(currentScore);
+        correctHtml += '</div>';
+        if (playerWasAutoSubmitted && !noAnswer) {
+            correctHtml +=
+                '<p class="auto-submit-note">Automatisch bei Zeitablauf gesendet – kein Geschwindigkeitsbonus.</p>';
         }
-
-        // Update player option buttons to show correct/incorrect after result
-        for (const btn of optionsContainer.querySelectorAll('button.option-btn')) {
-            const index = Number.parseInt(btn.dataset.index);
-            btn.disabled = true; // Ensure buttons are disabled
-            btn.classList.remove('selected'); // Remove selected class from active state
-
-            if (correctSet.has(index)) {
-                btn.classList.add('correct-answer'); // Highlight correct answer
-            }
-            // If the player selected a correct answer, re-apply 'selected' to show they chose it.
-            if (playerAnsSet.has(index) && correctSet.has(index)) {
-                btn.classList.add('selected'); // Re-apply selected style if it was correct and selected
-            }
-        }
+        resultDisplay.innerHTML = correctHtml;
     }
 
     /**
