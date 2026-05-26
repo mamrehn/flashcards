@@ -2911,6 +2911,19 @@ function triggerConfetti() {
             piece.remove();
         });
     }
+
+    if (playerAvatar) {
+        const variants = ['pop', 'launch', 'wiggle', 'bubble', 'drop'];
+        const variant = variants[Math.floor(Math.random() * variants.length)];
+        const avatarEl = document.createElement('div');
+        avatarEl.className = `confetti-avatar confetti-avatar-${variant}`;
+        avatarEl.setAttribute('aria-hidden', 'true');
+        avatarEl.textContent = playerAvatar;
+        confettiContainer.append(avatarEl);
+        avatarEl.addEventListener('animationend', () => {
+            avatarEl.remove();
+        });
+    }
 }
 
 /**

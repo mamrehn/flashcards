@@ -589,6 +589,81 @@ select:focus {
     }
 }
 
+/* Avatar celebration — single emoji animation paired with the confetti burst.
+   The variant class is picked at random in triggerConfetti(). */
+.confetti-avatar {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    font-size: 6rem;
+    line-height: 1;
+    user-select: none;
+    pointer-events: none;
+    will-change: transform, opacity;
+    text-shadow: 0 4px 18px rgba(0, 0, 0, 0.35);
+}
+
+.confetti-avatar-pop {
+    animation: confetti-avatar-pop 1.6s ease-out forwards;
+}
+.confetti-avatar-launch {
+    animation: confetti-avatar-launch 1.8s ease-out forwards;
+}
+.confetti-avatar-wiggle {
+    animation: confetti-avatar-wiggle 1.6s ease-in-out forwards;
+}
+.confetti-avatar-bubble {
+    animation: confetti-avatar-bubble 2.4s ease-in-out forwards;
+}
+.confetti-avatar-drop {
+    animation: confetti-avatar-drop 1.8s ease-in-out forwards;
+}
+
+@keyframes confetti-avatar-pop {
+    0%   { transform: translate(-50%, -50%) scale(0);   opacity: 0; }
+    25%  { transform: translate(-50%, -50%) scale(1.4); opacity: 1; }
+    40%  { transform: translate(-50%, -50%) scale(0.85); }
+    55%  { transform: translate(-50%, -50%) scale(1.1); }
+    70%  { transform: translate(-50%, -50%) scale(1);   opacity: 1; }
+    100% { transform: translate(-50%, -50%) scale(1);   opacity: 0; }
+}
+
+@keyframes confetti-avatar-launch {
+    0%   { transform: translate(-50%, -50%) translateY(55vh) rotate(0deg);     opacity: 0; }
+    10%  { opacity: 1; }
+    50%  { transform: translate(-50%, -50%) translateY(-25vh) rotate(720deg);  opacity: 1; }
+    100% { transform: translate(-50%, -50%) translateY(60vh)  rotate(1440deg); opacity: 0; }
+}
+
+@keyframes confetti-avatar-wiggle {
+    0%   { transform: translate(-50%, -50%) scale(0)   rotate(0deg);   opacity: 0; }
+    20%  { transform: translate(-50%, -50%) scale(1)   rotate(-15deg); opacity: 1; }
+    35%  { transform: translate(-50%, -50%) scale(1)   rotate(15deg); }
+    50%  { transform: translate(-50%, -50%) scale(1)   rotate(-15deg); }
+    65%  { transform: translate(-50%, -50%) scale(1)   rotate(15deg); }
+    80%  { transform: translate(-50%, -50%) scale(1)   rotate(0deg);   opacity: 1; }
+    100% { transform: translate(-50%, -50%) scale(1)   rotate(0deg);   opacity: 0; }
+}
+
+@keyframes confetti-avatar-bubble {
+    0%   { transform: translate(-50%, -50%) translate(0,    40vh) scale(0.6); opacity: 0; }
+    15%  { opacity: 1; }
+    30%  { transform: translate(-50%, -50%) translate(-30px, 20vh) scale(1);   opacity: 1; }
+    50%  { transform: translate(-50%, -50%) translate(20px,  0)    scale(1);   opacity: 1; }
+    70%  { transform: translate(-50%, -50%) translate(-15px, -20vh) scale(1);  opacity: 1; }
+    100% { transform: translate(-50%, -50%) translate(0,    -45vh) scale(1);   opacity: 0; }
+}
+
+@keyframes confetti-avatar-drop {
+    0%   { transform: translate(-50%, -50%) translateY(-55vh) scaleX(0.9) scaleY(1.1); opacity: 0; }
+    10%  { opacity: 1; }
+    45%  { transform: translate(-50%, -50%) translateY(0)     scaleX(0.9) scaleY(1.1); opacity: 1; }
+    55%  { transform: translate(-50%, -50%) translateY(0)     scaleX(1.3) scaleY(0.6); }
+    72%  { transform: translate(-50%, -50%) translateY(-22vh) scaleX(0.9) scaleY(1.1); }
+    87%  { transform: translate(-50%, -50%) translateY(0)     scaleX(1.1) scaleY(0.85); }
+    100% { transform: translate(-50%, -50%) translateY(0)     scaleX(1)   scaleY(1);   opacity: 0; }
+}
+
 #leaderboard {
     margin-top: 0.75rem;
 }
