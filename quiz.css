@@ -1237,11 +1237,51 @@ body.player-in-game footer {
 }
 
 /* `.in-game` is set on #waiting-room when the player reconnects mid-quiz
-   (or is parked between questions). Hides the lobby-only sections so the
-   reconnect view matches the rest of the players' experience. */
-#waiting-room.in-game .lobby-welcome,
+   (or is parked between questions). Hide the lobby-only cosmetics —
+   greeting art/title/hint, avatar builder, music vote, category chips —
+   but keep #waiting-message visible so the player sees "Warten auf nächste
+   Frage…" instead of a blank card. Previously the entire .lobby-welcome
+   was hidden, taking the status text down with it. */
+#waiting-room.in-game .lobby-welcome-art,
+#waiting-room.in-game .lobby-welcome-title,
+#waiting-room.in-game .lobby-welcome-hint,
 #waiting-room.in-game .lobby-section {
     display: none;
+}
+
+#waiting-room.in-game .lobby-welcome {
+    text-align: center;
+    margin: 2rem 0;
+}
+
+#waiting-room.in-game #waiting-message {
+    font-size: 1.1rem;
+    color: var(--text-color);
+    margin: 0;
+}
+
+#waiting-room.in-game #waiting-message::before {
+    content: "";
+    display: inline-block;
+    width: 0.6rem;
+    height: 0.6rem;
+    border-radius: 50%;
+    background-color: var(--primary-color);
+    margin-right: 0.5rem;
+    vertical-align: 0.05em;
+    animation: in-game-pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes in-game-pulse {
+    0%, 100% { opacity: 0.3; transform: scale(0.85); }
+    50% { opacity: 1; transform: scale(1); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    #waiting-room.in-game #waiting-message::before {
+        animation: none;
+        opacity: 0.7;
+    }
 }
 
 .lobby-welcome-art {

@@ -3628,7 +3628,11 @@ function initializePlayerFeatures(reconnectInfo) {
                         playerFinalResultView.classList.add('hidden');
                     } else {
                         // 'question' or 'final': the next replay message
-                        // takes over the view. Park briefly to avoid flicker.
+                        // takes over the view. Set a generic in-game text
+                        // so the brief flicker (before the replay arrives)
+                        // doesn't show the stale "Du bist drin — warten auf
+                        // den Host" lobby line.
+                        waitingMessage.textContent = 'Wieder verbunden — Quiz läuft.';
                         waitingRoom.classList.add('in-game');
                     }
                     break;
