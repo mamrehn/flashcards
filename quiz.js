@@ -1378,13 +1378,45 @@ async function initializeHostFeatures(reconnectInfo) {
                 return Math.round(dMin + t * (dMax - dMin));
             });
 
+            // If we're already attached to a live room (host reloaded, then
+            // re-uploaded questions), don't create a second one — just slide
+            // back into the QR view in-place. Players stay in the lobby.
+            if (hostRoomId && hostWs && hostWs.readyState === WebSocket.OPEN) {
+                hostSetup.classList.add('hidden');
+                qrContainer.classList.remove('hidden');
+                roomIdElement.textContent = quizState.roomId;
+                const currentJoinUrl = updateJoinLink(hostRoomId);
+                generateQRCode(currentJoinUrl);
+                if (hostViewHeading) hostViewHeading.classList.remove('hidden');
+                sendCategoriesToServer();
+                startHostLobbyMusic();
+                return;
+            }
+
             await initHostConnection();
         });
 
         // Event listener for starting questions (after players join)
         startQuestionsBtn.addEventListener('click', async () => {
-            if (getNonHostPlayerCount() === 0) {
+            if (getNonHostPlayers().length === 0) {
                 showMessage('Es sind noch keine Spieler beigetreten!', 'info');
+                return;
+            }
+            if (getNonHostPlayerCount() === 0) {
+                // Players joined earlier but are all offline right now.
+                // Don't start a quiz nobody can answer — wait for at least
+                // one to reconnect (or for the host to add more).
+                showMessage(
+                    'Alle Spieler sind aktuell offline. Bitte warte, bis mindestens ein Spieler wieder verbunden ist.',
+                    'info'
+                );
+                return;
+            }
+            if (quizState.shuffledQuestions.length === 0) {
+                showMessage(
+                    'Es sind keine Fragen geladen. Bitte lade die Fragen erneut hoch.',
+                    'error'
+                );
                 return;
             }
             // Lock the music vote at start. The server replies with the
@@ -1678,6 +1710,24 @@ async function initializeHostFeatures(reconnectInfo) {
                 if (quizState.isQuestionActive) {
                     answersCount.textContent = quizState.answersReceived.toString();
                     if (allConnectedAnswered()) endQuestion();
+                }
+                // Questions aren't server-persisted: a page reload wipes the
+                // host's local `quizState.questions`/`shuffledQuestions`. The
+                // room (and player list) survive, but "Fragen starten" would
+                // immediately jump to the empty-final-results screen. Route
+                // the host back to the upload view so they can re-add their
+                // questions before kicking the quiz off.
+                if (
+                    !quizState.isQuestionActive &&
+                    (quizState.shuffledQuestions.length === 0) &&
+                    (quizState.questions.length === 0)
+                ) {
+                    showMessage(
+                        'Nach dem Reload sind die Fragen verloren — bitte lade sie erneut hoch.',
+                        'info'
+                    );
+                    qrContainer.classList.add('hidden');
+                    hostSetup.classList.remove('hidden');
                 }
                 // Do NOT auto-restart the active question on reconnect: the
                 // host's local state (timer, options) is intact, and re-calling
@@ -2251,7 +2301,13 @@ async function initializeHostFeatures(reconnectInfo) {
             playersList.append(i);
         }
 
-        startQuestionsBtn.classList.toggle('hidden', connectedCount === 0);
+        // Keep the "Fragen starten" button visible as long as someone has
+        // ever joined this room, even if they're momentarily disconnected
+        // (e.g. mid-reload). Otherwise the button vanishes during the brief
+        // player_left → player_reconnected window and the host gets stuck
+        // unable to click. The click handler still guards against actually
+        // starting with 0 connected.
+        startQuestionsBtn.classList.toggle('hidden', allPlayers.length === 0);
     }
 
     /**
