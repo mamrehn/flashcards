@@ -618,6 +618,21 @@ select:focus {
 .confetti-avatar-drop {
     animation: confetti-avatar-drop 1.8s ease-in-out forwards;
 }
+.confetti-avatar-spin {
+    animation: confetti-avatar-spin 1.8s ease-out forwards;
+}
+.confetti-avatar-pulse {
+    animation: confetti-avatar-pulse 1.8s ease-in-out forwards;
+}
+.confetti-avatar-comet {
+    animation: confetti-avatar-comet 1.4s ease-in forwards;
+}
+.confetti-avatar-multibounce {
+    animation: confetti-avatar-multibounce 2s ease-in-out forwards;
+}
+.confetti-avatar-orbit {
+    animation: confetti-avatar-orbit 2.2s ease-in-out forwards;
+}
 
 @keyframes confetti-avatar-pop {
     0%   { transform: translate(-50%, -50%) scale(0);   opacity: 0; }
@@ -662,6 +677,51 @@ select:focus {
     72%  { transform: translate(-50%, -50%) translateY(-22vh) scaleX(0.9) scaleY(1.1); }
     87%  { transform: translate(-50%, -50%) translateY(0)     scaleX(1.1) scaleY(0.85); }
     100% { transform: translate(-50%, -50%) translateY(0)     scaleX(1)   scaleY(1);   opacity: 0; }
+}
+
+@keyframes confetti-avatar-spin {
+    0%   { transform: translate(-50%, -50%) scale(0) rotate(0deg);      opacity: 0; }
+    20%  { transform: translate(-50%, -50%) scale(1) rotate(180deg);    opacity: 1; }
+    80%  { transform: translate(-50%, -50%) scale(1) rotate(900deg);    opacity: 1; }
+    100% { transform: translate(-50%, -50%) scale(1) rotate(1080deg);   opacity: 0; }
+}
+
+@keyframes confetti-avatar-pulse {
+    0%   { transform: translate(-50%, -50%) scale(0);   opacity: 0; }
+    10%  { transform: translate(-50%, -50%) scale(1);   opacity: 1; }
+    25%  { transform: translate(-50%, -50%) scale(1.3); }
+    40%  { transform: translate(-50%, -50%) scale(1);   }
+    55%  { transform: translate(-50%, -50%) scale(1.35); }
+    70%  { transform: translate(-50%, -50%) scale(1);   }
+    85%  { transform: translate(-50%, -50%) scale(1.25); opacity: 1; }
+    100% { transform: translate(-50%, -50%) scale(1);   opacity: 0; }
+}
+
+@keyframes confetti-avatar-comet {
+    0%   { transform: translate(-50%, -50%) translate(-55vw, 35vh)  rotate(-25deg); opacity: 0; }
+    15%  { opacity: 1; }
+    85%  { opacity: 1; }
+    100% { transform: translate(-50%, -50%) translate(55vw,  -35vh) rotate(-25deg); opacity: 0; }
+}
+
+@keyframes confetti-avatar-multibounce {
+    0%   { transform: translate(-50%, -50%) translateY(-50vh) scale(1);              opacity: 0; }
+    10%  { opacity: 1; }
+    25%  { transform: translate(-50%, -50%) translateY(0)     scaleX(1.25) scaleY(0.7); }
+    42%  { transform: translate(-50%, -50%) translateY(-28vh) scale(1); }
+    58%  { transform: translate(-50%, -50%) translateY(0)     scaleX(1.2)  scaleY(0.75); }
+    72%  { transform: translate(-50%, -50%) translateY(-14vh) scale(1); }
+    86%  { transform: translate(-50%, -50%) translateY(0)     scaleX(1.1)  scaleY(0.85); }
+    100% { transform: translate(-50%, -50%) translateY(0)     scale(1);              opacity: 0; }
+}
+
+@keyframes confetti-avatar-orbit {
+    0%   { transform: translate(-50%, -50%) translate(0,     32vh)  scale(0); opacity: 0; }
+    15%  { transform: translate(-50%, -50%) translate(32vh,  0)     scale(1); opacity: 1; }
+    35%  { transform: translate(-50%, -50%) translate(0,     -32vh) scale(1); opacity: 1; }
+    55%  { transform: translate(-50%, -50%) translate(-32vh, 0)     scale(1); opacity: 1; }
+    78%  { transform: translate(-50%, -50%) translate(0,     32vh)  scale(1); opacity: 1; }
+    100% { transform: translate(-50%, -50%) translate(22vh,  22vh)  scale(0); opacity: 0; }
 }
 
 #leaderboard {

@@ -2866,6 +2866,20 @@ function clearActiveSession() {
     if (rPlayer) rPlayer.classList.add('hidden');
 }
 
+const CONFETTI_AVATAR_VARIANTS = [
+    'pop',
+    'launch',
+    'wiggle',
+    'bubble',
+    'drop',
+    'spin',
+    'pulse',
+    'comet',
+    'multibounce',
+    'orbit',
+];
+let lastConfettiAvatarVariant = null;
+
 /**
  * Triggers confetti animation for correct answers.
  */
@@ -2913,8 +2927,11 @@ function triggerConfetti() {
     }
 
     if (playerAvatar) {
-        const variants = ['pop', 'launch', 'wiggle', 'bubble', 'drop'];
-        const variant = variants[Math.floor(Math.random() * variants.length)];
+        const pool = lastConfettiAvatarVariant
+            ? CONFETTI_AVATAR_VARIANTS.filter((v) => v !== lastConfettiAvatarVariant)
+            : CONFETTI_AVATAR_VARIANTS;
+        const variant = pool[Math.floor(Math.random() * pool.length)];
+        lastConfettiAvatarVariant = variant;
         const avatarEl = document.createElement('div');
         avatarEl.className = `confetti-avatar confetti-avatar-${variant}`;
         avatarEl.setAttribute('aria-hidden', 'true');
