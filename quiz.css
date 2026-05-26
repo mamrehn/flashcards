@@ -542,6 +542,15 @@ select:focus {
     font-style: italic;
 }
 
+/* Sub-line that surfaces pick counts ("2 falsche Antworten markiert"),
+   so the badge ratio alone doesn't mislead when the player ticked extra
+   options. Counts only — never the option text. */
+.result-pick-tally {
+    margin-top: 0.6rem;
+    font-size: 0.85rem;
+    color: var(--text-muted);
+}
+
 .result-waiting {
     text-align: center;
     color: var(--text-muted);

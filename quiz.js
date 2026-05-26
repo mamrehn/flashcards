@@ -3950,12 +3950,18 @@ function initializePlayerFeatures(reconnectInfo) {
 
         // Classify the answer: full / partial / wrong / no-answer.
         const correctHits = [...playerAnsSet].filter((item) => correctSet.has(item)).length;
+        const wrongPicks = playerAnsSet.size - correctHits;
+        const missedCorrect = correctSet.size - correctHits;
         const noAnswer = !playerAnswer || playerAnswer.length === 0;
-        const fullyCorrect =
-            !noAnswer
-            && correctHits === correctSet.size
-            && playerAnsSet.size === correctSet.size;
+        // Fully correct = every correct option picked AND no wrong ones.
+        const fullyCorrect = !noAnswer && correctHits === correctSet.size && wrongPicks === 0;
+        // "Partial" covers two distinct shapes — missed some correct ones,
+        // and/or picked too many. Both deserve the partial badge so the
+        // player doesn't read "3/3 correct hits" as a perfect round when
+        // they also ticked a handful of wrong options.
         const partialCorrect = !noAnswer && !fullyCorrect && correctHits > 0;
+        // Pure-wrong: only wrong picks, no correct ones at all.
+        const allWrong = !noAnswer && correctHits === 0;
 
         let state;
         let icon;
@@ -3972,7 +3978,15 @@ function initializePlayerFeatures(reconnectInfo) {
         } else if (partialCorrect) {
             state = 'partial';
             icon = `${correctHits}/${correctSet.size}`;
-            label = 'Teilweise richtig';
+            // Differentiate the two partial shapes so "3/3" + extra wrongs
+            // doesn't read identically to "missed one of three".
+            if (correctHits === correctSet.size) {
+                label = 'Zu viele markiert';
+            } else if (wrongPicks === 0) {
+                label = 'Teilweise erkannt';
+            } else {
+                label = 'Teilweise richtig';
+            }
         } else {
             state = 'incorrect';
             icon = '✗';
@@ -4006,10 +4020,11 @@ function initializePlayerFeatures(reconnectInfo) {
 
         playerScoreEl.textContent = Math.round(currentScore);
 
-        // Reveal the correct answer(s) as chips, plus the auto-submit note if
-        // applicable. We deliberately don't show what the player picked
-        // beyond highlighting their *correct* picks (a ring around the chip);
-        // wrong picks aren't called out — there's no value in shaming.
+        // Reveal the correct answer(s) as chips. We deliberately don't cite
+        // the specific wrong options the player ticked (no shaming, and the
+        // question text is already gone). We do surface *counts* though —
+        // a tick-all strategy that hits "3/3" looks identical to actually
+        // getting it right unless we say "+ also picked 3 wrong".
         let correctHtml = '<div class="result-correct-label">Richtige Antwort(en)</div>';
         correctHtml += '<div class="result-correct-items">';
         for (const [index, option] of options.entries()) {
@@ -4020,6 +4035,29 @@ function initializePlayerFeatures(reconnectInfo) {
             correctHtml += `<span class="${cls}">${sanitizeHTML(option)}</span>`;
         }
         correctHtml += '</div>';
+
+        const tallyParts = [];
+        if (missedCorrect > 0 && !allWrong) {
+            // Skip for the pure-wrong case — saying "0 hits, 3 verfehlt" on
+            // top of the red ✗ is redundant. Only useful when the player
+            // got *some* right and missed others.
+            tallyParts.push(
+                missedCorrect === 1
+                    ? '1 richtige Antwort verfehlt'
+                    : `${missedCorrect} richtige Antworten verfehlt`
+            );
+        }
+        if (wrongPicks > 0) {
+            tallyParts.push(
+                wrongPicks === 1
+                    ? '1 falsche Antwort markiert'
+                    : `${wrongPicks} falsche Antworten markiert`
+            );
+        }
+        if (tallyParts.length > 0) {
+            correctHtml +=
+                `<p class="result-pick-tally">${sanitizeHTML(tallyParts.join(' · '))}</p>`;
+        }
         if (playerWasAutoSubmitted && !noAnswer) {
             correctHtml +=
                 '<p class="auto-submit-note">Automatisch bei Zeitablauf gesendet – kein Geschwindigkeitsbonus.</p>';
