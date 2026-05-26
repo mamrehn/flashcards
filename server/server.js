@@ -1044,6 +1044,11 @@ function handleDisconnect(ws) {
     if (!room) return;
 
     if (ws.role === 'host') {
+        // Stale-close guard: the old host socket may close after a new one
+        // has already taken its place (page reload, fast reconnect). Acting
+        // on it would null out the active host connection and start a bogus
+        // 5-minute termination countdown.
+        if (room.hostWs !== ws) return;
         room.hostWs = null;
         console.log(`Host disconnected from room ${ws.roomId}, grace period started`);
 
@@ -1064,6 +1069,13 @@ function handleDisconnect(ws) {
     } else if (ws.role === 'player') {
         const player = room.players.get(ws.sessionId);
         if (player) {
+            // Stale-close guard: if the player has already reconnected with
+            // a different socket (page reload races the old socket's FIN —
+            // or the old socket only times out via heartbeat ~60s later),
+            // this close event is for a socket we already replaced. Acting
+            // on it would flip an active player to disconnected and emit a
+            // spurious player_left to the host.
+            if (player.ws !== ws) return;
             player.isConnected = false;
             player.ws = null;
 
