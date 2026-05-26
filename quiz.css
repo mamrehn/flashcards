@@ -966,6 +966,16 @@ select:focus {
     text-decoration: underline;
 }
 
+/*
+ * Hide chrome (back arrow + Datenschutz footer link) once the player has
+ * joined a room. Accidental taps during the game would yank the player out
+ * of the lobby / quiz with no way back. Host view is unaffected.
+ */
+body.player-in-game .back-link,
+body.player-in-game footer {
+    display: none;
+}
+
 .qr-error {
     color: var(--wrong-color);
 }

@@ -1839,6 +1839,9 @@ function initPlayerReconnect(info) {
         'player-waiting'
     );
     dom.playerWaitingStatus.textContent = 'Wiederverbindung läuft…';
+    // Suppress page-level back arrow during the brief reconnect window so
+    // an accidental tap doesn't pull the player out before the WS lands.
+    document.body.classList.add('player-in-game');
     playerWsReconnectAttempts = 0;
     playerSuppressReconnect = false;
     reconnectPlayerWs();
@@ -1954,6 +1957,8 @@ function handlePlayerMessage(msg) {
                 ? 'Wiederverbunden — warte auf nächste Umfrage.'
                 : 'Du bist drin — wir warten auf die nächste Umfrage.';
             dom.playerNameDisplay.textContent = `Eingeloggt als ${playerName}`;
+            // Suppress page-level navigation while the player is in the room.
+            document.body.classList.add('player-in-game');
             break;
         }
         case 'question': {
@@ -2305,6 +2310,9 @@ function hardResetPlayer() {
     playerDisplayOptions = [];
     playerSelectedRanks = [];
     playerHasSubmitted = false;
+    // Restore page-level navigation (back arrow) now that the player has
+    // explicitly left the room.
+    document.body.classList.remove('player-in-game');
     clearActiveSession();
     clearLastPicks();
     showTopView('role-selection');

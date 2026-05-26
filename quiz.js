@@ -3369,6 +3369,10 @@ function initializePlayerFeatures(reconnectInfo) {
         if (!playerLobbyAvatarRendered) renderAvatarBuilder();
         renderMusicVote();
         renderCategoryChips();
+        // Suppress page-level navigation (back arrow, Datenschutz link)
+        // while the player is in a room — accidental taps would drop them
+        // out with no graceful way back. Cleared in resetPlayerStateAndUI.
+        document.body.classList.add('player-in-game');
     }
 
     if (!isPlayerInitialized) {
@@ -4061,6 +4065,8 @@ function initializePlayerFeatures(reconnectInfo) {
         playerCurrentQuestionIndex = -1;
         playerRoomId = null;
         playerCurrentId = null;
+        // Restore page-level navigation (back arrow, Datenschutz footer).
+        document.body.classList.remove('player-in-game');
 
         roomCodeInput.value = '';
         playerNameInput.value = '';

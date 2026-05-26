@@ -120,6 +120,15 @@ header h1 {
     background-color: rgba(128, 128, 128, 0.15);
 }
 
+/*
+ * Hide the back arrow once the player has joined a poll. Accidental taps
+ * would yank the player out of the lobby / active vote. Host view is
+ * unaffected.
+ */
+body.player-in-game .back-link {
+    display: none;
+}
+
 .view {
     display: none;
 }
