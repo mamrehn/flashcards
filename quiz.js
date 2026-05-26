@@ -432,8 +432,6 @@ document.addEventListener('DOMContentLoaded', () => {
         initializePlayerFeatures();
     });
 
-    // Reconnect buttons exist in the DOM as a manual fallback, but the
-    // primary path is now auto-reconnect on page load.
     const reconnectHostBtn = document.querySelector('#reconnect-host-btn');
     const reconnectPlayerBtn = document.querySelector('#reconnect-player-btn');
     reconnectHostBtn.classList.add('hidden');
@@ -467,29 +465,30 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     // Determine initial view. Priority order:
-    //   1. Saved session in localStorage → auto-reconnect (host or player).
-    //      This covers page reloads — previously the user had to spot a
-    //      "Reconnect" button on role-selection and click it, which left
-    //      the host viewing them as disconnected for the duration.
-    //   2. ?host=ROOMCODE URL param → player view with code pre-filled.
-    //   3. Fallback → role-selection.
+    //   1. Saved player session → auto-reconnect silently. Players reload
+    //      mid-game and just need to be back where they were.
+    //   2. Saved host session → land on role-selection with the reconnect
+    //      button highlighted. The host has to make an explicit choice
+    //      between resuming and starting fresh (closing the old game), so
+    //      we don't auto-reconnect them — that would lock them out of the
+    //      "host a new quiz" path on every reload.
+    //   3. ?host=ROOMCODE URL param → player view with code pre-filled.
+    //   4. Fallback → role-selection.
     const urlParams = new URLSearchParams(globalThis.location.search);
     const hostIdFromUrl = urlParams.get('host');
     const savedSession = getActiveSession();
 
-    if (savedSession && savedSession.role === 'host') {
-        showView('host-view');
-        initializeHostFeatures({
-            roomId: savedSession.roomId,
-            sessionId: savedSession.sessionId,
-        });
-    } else if (savedSession && savedSession.role === 'player') {
+    if (savedSession && savedSession.role === 'player') {
         showView('player-view');
         initializePlayerFeatures({
             roomId: savedSession.roomId,
             sessionId: savedSession.sessionId,
             playerName: savedSession.playerName,
         });
+    } else if (savedSession && savedSession.role === 'host') {
+        showView('role-selection');
+        reconnectHostBtn.classList.remove('hidden');
+        reconnectHostBtn.classList.add('pulse-cta');
     } else if (hostIdFromUrl) {
         // URL param: navigate directly to player view and pre-fill room code
         showView('player-view');

@@ -2413,20 +2413,21 @@ document.addEventListener('DOMContentLoaded', () => {
     refreshReconnectButtons();
 
     // Auto-reconnect on page reload. Priority:
-    //   1. Saved session in localStorage → reconnect host or player silently.
-    //      Previously the user had to spot a "Reconnect" button on
-    //      role-selection and click it, leaving the host viewing them as
-    //      disconnected in the meantime.
-    //   2. ?room=XXXX URL param (QR scan / shared invite) → player join form.
-    //   3. Fall through to role-selection (default view from collectDom).
+    //   1. Saved player session → silent reconnect. Players reload mid-game
+    //      and just need to be back where they were.
+    //   2. Saved host session → stay on role-selection with the reconnect
+    //      CTA highlighted. The host has to make an explicit choice between
+    //      resuming the existing poll and starting a new one, so we don't
+    //      auto-reconnect them — refreshReconnectButtons() above already
+    //      surfaced the button.
+    //   3. ?room=XXXX URL param (QR scan / shared invite) → player join form.
+    //   4. Fall through to role-selection.
     const initialParams = new URLSearchParams(globalThis.location.search);
     const bootSession = loadActiveSession();
 
-    if (bootSession && bootSession.role === 'host') {
-        initHostReconnect(bootSession);
-    } else if (bootSession && bootSession.role === 'player') {
+    if (bootSession && bootSession.role === 'player') {
         initPlayerReconnect(bootSession);
-    } else if (initialParams.get('room')) {
+    } else if (!bootSession && initialParams.get('room')) {
         openPlayerJoin();
     }
 
