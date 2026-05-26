@@ -305,8 +305,11 @@
                 </div>
 
                 <div id="player-submitted" class="hidden">
-                    <h2>Deine Stimme ist abgegeben</h2>
-                    <p>Warten auf die Auswertung…</p>
+                    <div class="submitted-status" data-state="submitted">
+                        <div class="submitted-icon" aria-hidden="true">✓</div>
+                        <div class="submitted-label">Stimme abgegeben</div>
+                    </div>
+                    <p class="submitted-wait">Warten auf die Auswertung…</p>
                     <div id="submitted-picks-echo" class="picks-echo"></div>
                 </div>
 

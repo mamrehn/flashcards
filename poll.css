@@ -121,11 +121,12 @@ header h1 {
 }
 
 /*
- * Hide the back arrow once the player has joined a poll. Accidental taps
- * would yank the player out of the lobby / active vote. Host view is
- * unaffected.
+ * Hide the page header (back arrow + "Umfrage" title) once the player has
+ * joined a poll. Accidental taps on the back arrow would yank the player
+ * out of the lobby / active vote, and the title is brand chrome that
+ * doesn't earn its vertical space during voting. Host view is unaffected.
  */
-body.player-in-game .back-link {
+body.player-in-game header {
     display: none;
 }
 
@@ -720,6 +721,58 @@ textarea:focus {
 .session-end-link:focus-visible {
     color: var(--wrong-color, #dc3545);
     outline: none;
+}
+
+/* -------- Player "vote submitted" confirmation -------- */
+
+.submitted-status {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.4rem;
+    margin: 1rem 0 0.5rem;
+}
+
+.submitted-icon {
+    font-size: 2.6rem;
+    width: 4rem;
+    height: 4rem;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    line-height: 1;
+    background-color: rgba(107, 66, 166, 0.18);
+    color: var(--primary-color);
+    box-shadow: 0 0 0 4px rgba(107, 66, 166, 0.08);
+    animation: submitted-pop 500ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+
+.submitted-label {
+    font-size: 1.3rem;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    color: var(--primary-color);
+}
+
+.submitted-wait {
+    text-align: center;
+    color: var(--text-muted);
+    font-style: italic;
+    margin: 0.5rem 0 1rem;
+}
+
+@keyframes submitted-pop {
+    0% { transform: scale(0.4); opacity: 0; }
+    55% { transform: scale(1.2); opacity: 1; }
+    100% { transform: scale(1); opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .submitted-icon {
+        animation: none;
+    }
 }
 
 /* -------- Player picks echo (after submit / on reveal) -------- */
