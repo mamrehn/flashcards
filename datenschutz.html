@@ -11,7 +11,7 @@
     <body>
         <div class="container">
             <header>
-                <a href="index.html" class="back-link" title="Zur Startseite">←</a>
+                <a href="index.html" class="back-link" id="back-link" title="Zurück">←</a>
                 <h1>Datenschutz</h1>
             </header>
         </div>
@@ -40,5 +40,22 @@
             oder spätestens nach <strong>2 Stunden</strong>. Es erfolgt keine Profilbildung. Die
             Nutzung erfolgt anonymisiert.
         </p>
+        <script>
+            // If we got here from another page on this site (e.g. the
+            // quiz lobby), the back arrow should return there so the
+            // user resumes their session. Otherwise fall through to
+            // the href fallback (index.html).
+            document.querySelector('#back-link').addEventListener('click', (e) => {
+                try {
+                    const ref = document.referrer;
+                    if (ref && new URL(ref).origin === window.location.origin) {
+                        e.preventDefault();
+                        history.back();
+                    }
+                } catch {
+                    /* malformed referrer — let the href fallback handle it */
+                }
+            });
+        </script>
     </body>
 </html>
