@@ -465,20 +465,39 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     // Determine initial view. Priority order:
-    //   1. Saved player session → auto-reconnect silently. Players reload
+    //   1. ?host=ROOMCODE URL param that points at a *different* room than
+    //      the saved session → respect the URL, treat as a fresh join. A
+    //      shared invite link is an explicit "join this room" intent that
+    //      auto-reconnecting to the old room would silently override.
+    //   2. Saved player session → auto-reconnect silently. Players reload
     //      mid-game and just need to be back where they were.
-    //   2. Saved host session → land on role-selection with the reconnect
+    //   3. Saved host session → land on role-selection with the reconnect
     //      button highlighted. The host has to make an explicit choice
     //      between resuming and starting fresh (closing the old game), so
     //      we don't auto-reconnect them — that would lock them out of the
     //      "host a new quiz" path on every reload.
-    //   3. ?host=ROOMCODE URL param → player view with code pre-filled.
-    //   4. Fallback → role-selection.
+    //   4. ?host=ROOMCODE URL param (no conflicting session) → player view
+    //      with code pre-filled.
+    //   5. Fallback → role-selection.
     const urlParams = new URLSearchParams(globalThis.location.search);
-    const hostIdFromUrl = urlParams.get('host');
+    const hostIdFromUrl = (urlParams.get('host') || '').toUpperCase();
     const savedSession = getActiveSession();
+    const savedRoomId = savedSession ? (savedSession.roomId || '').toUpperCase() : '';
+    const urlOverridesSession =
+        hostIdFromUrl &&
+        savedSession &&
+        savedSession.role === 'player' &&
+        hostIdFromUrl !== savedRoomId;
 
-    if (savedSession && savedSession.role === 'player') {
+    if (urlOverridesSession) {
+        // Drop the stale player session so the host_reconnected-style
+        // auto-reconnect logic in initPlayerConnection doesn't pick it up
+        // by per-room key, and so the user can pick a fresh name.
+        clearActiveSession();
+        showView('player-view');
+        initializePlayerFeatures();
+        document.querySelector('#room-code-input').value = hostIdFromUrl;
+    } else if (savedSession && savedSession.role === 'player') {
         showView('player-view');
         initializePlayerFeatures({
             roomId: savedSession.roomId,
