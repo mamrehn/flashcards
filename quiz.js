@@ -432,30 +432,12 @@ document.addEventListener('DOMContentLoaded', () => {
         initializePlayerFeatures();
     });
 
-    // Determine initial view: URL params or role selection
-    const urlParams = new URLSearchParams(globalThis.location.search);
-    const hostIdFromUrl = urlParams.get('host');
-
-    if (hostIdFromUrl) {
-        // URL param: navigate directly to player view and pre-fill room code
-        showView('player-view');
-        initializePlayerFeatures();
-        document.querySelector('#room-code-input').value = hostIdFromUrl;
-    } else {
-        showView('role-selection');
-    }
-
-    // Show reconnect buttons if a saved session exists in localStorage
+    // Reconnect buttons exist in the DOM as a manual fallback, but the
+    // primary path is now auto-reconnect on page load.
     const reconnectHostBtn = document.querySelector('#reconnect-host-btn');
     const reconnectPlayerBtn = document.querySelector('#reconnect-player-btn');
-    const savedSession = getActiveSession();
-
-    if (savedSession && savedSession.role === 'host') {
-        reconnectHostBtn.classList.remove('hidden');
-    } else if (savedSession && savedSession.role === 'player') {
-        reconnectPlayerBtn.classList.remove('hidden');
-        reconnectPlayerBtn.classList.add('pulse-cta');
-    }
+    reconnectHostBtn.classList.add('hidden');
+    reconnectPlayerBtn.classList.add('hidden');
 
     reconnectHostBtn.addEventListener('click', () => {
         const session = getActiveSession();
@@ -483,6 +465,39 @@ document.addEventListener('DOMContentLoaded', () => {
             playerName: session.playerName,
         });
     });
+
+    // Determine initial view. Priority order:
+    //   1. Saved session in localStorage → auto-reconnect (host or player).
+    //      This covers page reloads — previously the user had to spot a
+    //      "Reconnect" button on role-selection and click it, which left
+    //      the host viewing them as disconnected for the duration.
+    //   2. ?host=ROOMCODE URL param → player view with code pre-filled.
+    //   3. Fallback → role-selection.
+    const urlParams = new URLSearchParams(globalThis.location.search);
+    const hostIdFromUrl = urlParams.get('host');
+    const savedSession = getActiveSession();
+
+    if (savedSession && savedSession.role === 'host') {
+        showView('host-view');
+        initializeHostFeatures({
+            roomId: savedSession.roomId,
+            sessionId: savedSession.sessionId,
+        });
+    } else if (savedSession && savedSession.role === 'player') {
+        showView('player-view');
+        initializePlayerFeatures({
+            roomId: savedSession.roomId,
+            sessionId: savedSession.sessionId,
+            playerName: savedSession.playerName,
+        });
+    } else if (hostIdFromUrl) {
+        // URL param: navigate directly to player view and pre-fill room code
+        showView('player-view');
+        initializePlayerFeatures();
+        document.querySelector('#room-code-input').value = hostIdFromUrl;
+    } else {
+        showView('role-selection');
+    }
 
     // Reconnect WebSocket when tab becomes visible again. Also fire an
     // immediate keepalive on any still-open socket: setInterval-based timers
@@ -556,6 +571,13 @@ let hostTimerInterval = null;
 // otherwise a pending fire from the previous round could close out the next
 // question if the host clicks "Next" inside the 2s grace window.
 let hostEndQuestionTimeout = null;
+// Grace timer for mid-question disconnects. When a player_left arrives while
+// a question is active and that disconnect makes every *remaining* connected
+// player look "all answered", we defer endQuestion for DISCONNECT_GRACE_MS so
+// a page-reloading player can rejoin and submit. Cleared if any player
+// reconnects, if a new submission lands, or when the round advances.
+let hostDisconnectGraceTimeout = null;
+const DISCONNECT_GRACE_MS = 10_000;
 let hostQuestionStartTime = null;
 let hostRoomId = null;
 let hostViewHeading = null;
@@ -1730,14 +1752,24 @@ async function initializeHostFeatures(reconnectInfo) {
                 if (quizState.players[msg.sessionId]) {
                     quizState.players[msg.sessionId].isConnected = false;
                     refreshPlayerDisplay();
-                    if (quizState.isQuestionActive && allConnectedAnswered()) {
-                        endQuestion();
+                    if (quizState.isQuestionActive) {
+                        // Schedule a grace window so a page-reloading player
+                        // has time to rejoin before the round closes — both
+                        // when this disconnect made allConnectedAnswered true
+                        // and when a *later* answer would otherwise trigger
+                        // endQuestion (handlePlayerAnswer respects the timer).
+                        scheduleDisconnectGraceEnd();
                     }
                 }
                 break;
             }
 
             case 'player_reconnected': {
+                // Any reconnect cancels a pending grace-period auto-end.
+                if (hostDisconnectGraceTimeout) {
+                    clearTimeout(hostDisconnectGraceTimeout);
+                    hostDisconnectGraceTimeout = null;
+                }
                 const reconnectedName =
                     sanitizePlayerName(msg.name) || `Spieler ${msg.sessionId.slice(0, 4)}`;
                 const reconnectedAvatar = typeof msg.avatar === 'string' ? msg.avatar : '';
@@ -2070,6 +2102,11 @@ async function initializeHostFeatures(reconnectInfo) {
         answersCount.textContent = quizState.answersReceived.toString();
 
         if (allConnectedAnswered()) {
+            // If a disconnect happened within the grace window, let that
+            // timer handle the endQuestion call — the reloading player may
+            // be back any moment and we don't want to cut them out of the
+            // round just because the rest of the room finished first.
+            if (hostDisconnectGraceTimeout) return;
             endQuestion();
         }
     }
@@ -2276,6 +2313,11 @@ async function initializeHostFeatures(reconnectInfo) {
         const currentQuestion = quizState.shuffledQuestions[quizState.currentQuestionIndex];
         quizState.answersReceived = 0;
         quizState.isQuestionActive = true;
+        // A grace timer from the prior round must not bleed into this one.
+        if (hostDisconnectGraceTimeout) {
+            clearTimeout(hostDisconnectGraceTimeout);
+            hostDisconnectGraceTimeout = null;
+        }
 
         // Prepare shuffled options and correct indices for this question
         const optionObjects = currentQuestion.options.map((text, index) => ({
@@ -2443,6 +2485,28 @@ async function initializeHostFeatures(reconnectInfo) {
     /**
      * Ends the current question round, calculates scores, and displays results.
      */
+    /**
+     * Schedule a deferred endQuestion check after a mid-question disconnect.
+     * When a player leaves while a question is active and all *remaining*
+     * connected players have answered, we used to call endQuestion right
+     * away — but a reloading player is briefly disconnected mid-WS-handshake
+     * and would lose their seat at this question. The grace timer holds the
+     * auto-end so the reloader can rejoin (and either submit or be picked
+     * up by the normal question timer). The timer is cancelled by:
+     *   - any player_reconnected
+     *   - the next endQuestion (manual or timer-driven)
+     *   - re-entering this function while a timer is already pending (no-op)
+     */
+    function scheduleDisconnectGraceEnd() {
+        if (hostDisconnectGraceTimeout) return;
+        hostDisconnectGraceTimeout = setTimeout(() => {
+            hostDisconnectGraceTimeout = null;
+            if (quizState.isQuestionActive && allConnectedAnswered()) {
+                endQuestion();
+            }
+        }, DISCONNECT_GRACE_MS);
+    }
+
     async function endQuestion() {
         if (!quizState.isQuestionActive) return;
 
@@ -2453,6 +2517,10 @@ async function initializeHostFeatures(reconnectInfo) {
         if (hostEndQuestionTimeout) {
             clearTimeout(hostEndQuestionTimeout);
             hostEndQuestionTimeout = null;
+        }
+        if (hostDisconnectGraceTimeout) {
+            clearTimeout(hostDisconnectGraceTimeout);
+            hostDisconnectGraceTimeout = null;
         }
 
         quizState.isQuestionActive = false;
@@ -3367,14 +3435,28 @@ function initializePlayerFeatures(reconnectInfo) {
         // a fresh join so a previous session's counter doesn't leak in.
         playerWsReconnectAttempts = 0;
 
+        // Check for existing session (reconnection)
+        const existingSession = getPlayerSession(playerRoomId);
+        const existingSessionId = existingSession ? existingSession.playerId : null;
+
+        // Lock the name on reconnect: the server ignores `playerName` on a
+        // sessionId-bearing join, so anything the user typed in the join
+        // form would be silently dropped (host kept showing the old name).
+        // Override `pName` so local UI matches the server-authoritative name.
+        if (existingSessionId && existingSession.playerName) {
+            if (pName && pName !== existingSession.playerName) {
+                showMessage(
+                    `Du bist bereits als "${existingSession.playerName}" in diesem Raum angemeldet.`,
+                    'info'
+                );
+            }
+            pName = existingSession.playerName;
+        }
+
         joinForm.classList.add('hidden');
         waitingRoom.classList.remove('hidden');
         waitingMessage.textContent = `Verbinde mit Raum ${playerRoomId}...`;
         enterLobbyUI();
-
-        // Check for existing session (reconnection)
-        const existingSession = getPlayerSession(playerRoomId);
-        const existingSessionId = existingSession ? existingSession.playerId : null;
 
         /**
          * Forward a WebSocket 'message' event to the parsing/dispatch helpers.

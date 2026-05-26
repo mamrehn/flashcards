@@ -429,6 +429,11 @@ let hostPendingQuestion = null;
 // would compute the podium locally but never notify the players — they'd be
 // stuck on the voting screen until reconnect or manual session end.
 let hostPendingResults = null;
+// Grace timer that defers maybeAutoEndVote when a disconnect makes the
+// remaining connected players look all-voted. Lets a reloading voter rejoin
+// before the vote closes around them.
+let hostDisconnectGraceTimeout = null;
+const DISCONNECT_GRACE_MS = 10_000;
 
 // Player state
 let playerWs = null;
@@ -791,6 +796,12 @@ function handleHostPlayerUpdate(msg) {
     break;
     }
     case 'player_reconnected': {
+        // Cancel any pending grace-period auto-end: a reconnect could mean
+        // the player is back at the voting screen and about to submit.
+        if (hostDisconnectGraceTimeout) {
+            clearTimeout(hostDisconnectGraceTimeout);
+            hostDisconnectGraceTimeout = null;
+        }
         const existing = hostPlayers.get(msg.sessionId);
         if (existing) {
             existing.isConnected = true;
@@ -819,11 +830,31 @@ function handleHostPlayerUpdate(msg) {
     }
     refreshPlayersUI();
     // Voting view: the count denominator changes too; refresh and check if
-    // the disconnect left the remaining connected players all-voted.
+    // the disconnect left the remaining connected players all-voted. For
+    // `player_left` we defer the auto-end through a grace timer so a
+    // reloading voter can rejoin before the vote closes around them.
     if (hostActivePoll) {
         refreshHostVotingProgress();
-        maybeAutoEndVote();
+        if (msg.type === 'player_left') {
+            scheduleDisconnectGraceEnd();
+        } else {
+            maybeAutoEndVote();
+        }
     }
+}
+
+/**
+ * Defer maybeAutoEndVote by DISCONNECT_GRACE_MS so a page-reloading voter
+ * isn't kicked out of the vote between their `player_left` and
+ * `player_reconnected` events. Idempotent: re-entry while a timer is
+ * already pending is a no-op.
+ */
+function scheduleDisconnectGraceEnd() {
+    if (hostDisconnectGraceTimeout) return;
+    hostDisconnectGraceTimeout = setTimeout(() => {
+        hostDisconnectGraceTimeout = null;
+        maybeAutoEndVote();
+    }, DISCONNECT_GRACE_MS);
 }
 
 /**
@@ -888,6 +919,10 @@ function handleHostAnswer(msg) {
         name: msg.name || (hostPlayers.get(msg.sessionId) || {}).name || 'Spieler',
     });
     refreshHostVotingProgress();
+    // If a recent disconnect set a grace timer, let it decide when to end —
+    // closing the vote the moment the remaining voters finish would lock a
+    // reloading voter out of the poll.
+    if (hostDisconnectGraceTimeout) return;
     maybeAutoEndVote();
 }
 
@@ -1447,6 +1482,11 @@ function startVote() {
     };
     hostPollEnding = false;
     hostAnswers.clear();
+    // A grace timer from a prior round must not bleed into this one.
+    if (hostDisconnectGraceTimeout) {
+        clearTimeout(hostDisconnectGraceTimeout);
+        hostDisconnectGraceTimeout = null;
+    }
 
     hostWs.send(JSON.stringify(payload));
 
@@ -1525,6 +1565,10 @@ function endVote() {
     if (hostTimerInterval) {
         clearInterval(hostTimerInterval);
         hostTimerInterval = null;
+    }
+    if (hostDisconnectGraceTimeout) {
+        clearTimeout(hostDisconnectGraceTimeout);
+        hostDisconnectGraceTimeout = null;
     }
 
     const podium = computeBordaPodium(hostActivePoll);
@@ -2368,11 +2412,21 @@ document.addEventListener('DOMContentLoaded', () => {
     renderComposerOptionsList();
     refreshReconnectButtons();
 
-    // If the URL carries ?room=XXXX (typical: QR scan or shared invite link),
-    // skip role selection and land on the player join form directly — the
-    // user clearly came to join, not to host.
+    // Auto-reconnect on page reload. Priority:
+    //   1. Saved session in localStorage → reconnect host or player silently.
+    //      Previously the user had to spot a "Reconnect" button on
+    //      role-selection and click it, leaving the host viewing them as
+    //      disconnected in the meantime.
+    //   2. ?room=XXXX URL param (QR scan / shared invite) → player join form.
+    //   3. Fall through to role-selection (default view from collectDom).
     const initialParams = new URLSearchParams(globalThis.location.search);
-    if (initialParams.get('room')) {
+    const bootSession = loadActiveSession();
+
+    if (bootSession && bootSession.role === 'host') {
+        initHostReconnect(bootSession);
+    } else if (bootSession && bootSession.role === 'player') {
+        initPlayerReconnect(bootSession);
+    } else if (initialParams.get('room')) {
         openPlayerJoin();
     }
 
