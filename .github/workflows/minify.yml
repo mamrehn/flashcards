@@ -41,8 +41,11 @@ jobs:
                     exit 1
                   fi
                   echo "WS_URL is set (length: ${#WS_URL})"
-                  sed -i "s|'__WS_URL__'|'$WS_URL'|g" quiz.js
-                  if grep -q "__WS_URL__" quiz.js; then
+                  # Both the quiz and the poll client carry the '__WS_URL__'
+                  # placeholder — inject into both or the poll silently relies
+                  # on its hard-coded fallback URL.
+                  sed -i "s|'__WS_URL__'|'$WS_URL'|g" quiz.js poll.js
+                  if grep -q "__WS_URL__" quiz.js poll.js; then
                     echo "WS_URL injection may have failed"
                     exit 1
                   fi
@@ -53,49 +56,64 @@ jobs:
                   terser index.js --compress --mangle -o index.js
                   terser cards.js --compress --mangle -o cards.js
                   terser quiz.js --compress --mangle -o quiz.js
+                  terser poll.js --compress --mangle -o poll.js
                   terser library.js --compress --mangle -o library.js
                   terser sanitize.js --compress --mangle -o sanitize.js
+                  terser logger.js --compress --mangle -o logger.js
                   terser theme.js --compress --mangle -o theme.js
 
             - name: Minify CSS files
               run: |
                   csso cards.css -o cards.css
                   csso quiz.css -o quiz.css
+                  csso poll.css -o poll.css
                   csso library.css -o library.css
                   csso theme.css -o theme.css
 
             - name: Add inline attributes to HTML files for inlining
               run: |
                   # index.html
-                  sed -i 's|<link rel="stylesheet" href="theme\.css">|<link inline rel="stylesheet" href="theme.css">|g' index.html
+                  sed -i 's|<link rel="stylesheet" href="theme\.css" />|<link inline rel="stylesheet" href="theme.css" />|g' index.html
                   sed -i 's|<script src="theme\.js"></script>|<script inline src="theme.js"></script>|g' index.html
+                  sed -i 's|<script src="logger\.js"></script>|<script inline src="logger.js"></script>|g' index.html
                   sed -i 's|<script src="index\.js"></script>|<script inline src="index.js"></script>|g' index.html
 
                   # cards.html
-                  sed -i 's|<link rel="stylesheet" href="theme\.css">|<link inline rel="stylesheet" href="theme.css">|g' cards.html
+                  sed -i 's|<link rel="stylesheet" href="theme\.css" />|<link inline rel="stylesheet" href="theme.css" />|g' cards.html
                   sed -i 's|<script src="theme\.js"></script>|<script inline src="theme.js"></script>|g' cards.html
-                  sed -i 's|<link rel="stylesheet" href="cards\.css">|<link inline rel="stylesheet" href="cards.css">|g' cards.html
+                  sed -i 's|<script src="logger\.js"></script>|<script inline src="logger.js"></script>|g' cards.html
+                  sed -i 's|<link rel="stylesheet" href="cards\.css" />|<link inline rel="stylesheet" href="cards.css" />|g' cards.html
                   sed -i 's|<script src="sanitize\.js"></script>|<script inline src="sanitize.js"></script>|g' cards.html
                   sed -i 's|<script src="cards\.js"></script>|<script inline src="cards.js"></script>|g' cards.html
 
                   # library.html
-                  sed -i 's|<link rel="stylesheet" href="theme\.css">|<link inline rel="stylesheet" href="theme.css">|g' library.html
+                  sed -i 's|<link rel="stylesheet" href="theme\.css" />|<link inline rel="stylesheet" href="theme.css" />|g' library.html
                   sed -i 's|<script src="theme\.js"></script>|<script inline src="theme.js"></script>|g' library.html
-                  sed -i 's|<link rel="stylesheet" href="library\.css">|<link inline rel="stylesheet" href="library.css">|g' library.html
+                  sed -i 's|<script src="logger\.js"></script>|<script inline src="logger.js"></script>|g' library.html
+                  sed -i 's|<link rel="stylesheet" href="library\.css" />|<link inline rel="stylesheet" href="library.css" />|g' library.html
                   sed -i 's|<script src="sanitize\.js"></script>|<script inline src="sanitize.js"></script>|g' library.html
                   sed -i 's|<script src="library\.js"></script>|<script inline src="library.js"></script>|g' library.html
 
                   # quiz.html - need to handle external CDN scripts differently
-                  sed -i 's|<link rel="stylesheet" href="theme\.css">|<link inline rel="stylesheet" href="theme.css">|g' quiz.html
+                  sed -i 's|<link rel="stylesheet" href="theme\.css" />|<link inline rel="stylesheet" href="theme.css" />|g' quiz.html
                   sed -i 's|<script src="theme\.js"></script>|<script inline src="theme.js"></script>|g' quiz.html
-                  sed -i 's|<link rel="stylesheet" href="quiz\.css">|<link inline rel="stylesheet" href="quiz.css">|g' quiz.html
+                  sed -i 's|<script src="logger\.js"></script>|<script inline src="logger.js"></script>|g' quiz.html
+                  sed -i 's|<link rel="stylesheet" href="quiz\.css" />|<link inline rel="stylesheet" href="quiz.css" />|g' quiz.html
                   sed -i 's|<script src="sanitize\.js"></script>|<script inline src="sanitize.js"></script>|g' quiz.html
                   sed -i 's|<script src="quiz\.js"></script>|<script inline src="quiz.js"></script>|g' quiz.html
 
+                  # poll.html - mirrors quiz.html (also pulls in the external CDN QR script)
+                  sed -i 's|<link rel="stylesheet" href="theme\.css" />|<link inline rel="stylesheet" href="theme.css" />|g' poll.html
+                  sed -i 's|<script src="theme\.js"></script>|<script inline src="theme.js"></script>|g' poll.html
+                  sed -i 's|<script src="logger\.js"></script>|<script inline src="logger.js"></script>|g' poll.html
+                  sed -i 's|<script src="sanitize\.js"></script>|<script inline src="sanitize.js"></script>|g' poll.html
+                  sed -i 's|<link rel="stylesheet" href="poll\.css" />|<link inline rel="stylesheet" href="poll.css" />|g' poll.html
+                  sed -i 's|<script src="poll\.js"></script>|<script inline src="poll.js"></script>|g' poll.html
+
                   # datenschutz.html
-                  sed -i 's|<link rel="stylesheet" href="theme\.css">|<link inline rel="stylesheet" href="theme.css">|g' datenschutz.html
+                  sed -i 's|<link rel="stylesheet" href="theme\.css" />|<link inline rel="stylesheet" href="theme.css" />|g' datenschutz.html
                   sed -i 's|<script src="theme\.js"></script>|<script inline src="theme.js"></script>|g' datenschutz.html
-                  sed -i 's|<link rel="stylesheet" href="quiz\.css">|<link inline rel="stylesheet" href="quiz.css">|g' datenschutz.html
+                  sed -i 's|<link rel="stylesheet" href="quiz\.css" />|<link inline rel="stylesheet" href="quiz.css" />|g' datenschutz.html
 
             - name: Inline CSS and JS into HTML files
               run: |
@@ -114,6 +132,10 @@ jobs:
                   # Inline quiz.html
                   inline-source quiz.html --compress false --root ./ > quiz.inline.html
                   mv quiz.inline.html quiz.html
+
+                  # Inline poll.html
+                  inline-source poll.html --compress false --root ./ > poll.inline.html
+                  mv poll.inline.html poll.html
 
                   # Inline datenschutz.html
                   inline-source datenschutz.html --compress false --root ./ > datenschutz.inline.html
@@ -168,6 +190,18 @@ jobs:
                     --remove-style-link-type-attributes \
                     --use-short-doctype \
                     quiz.html -o quiz.html
+
+                  html-minifier \
+                    --collapse-boolean-attributes \
+                    --collapse-whitespace \
+                    --minify-css true \
+                    --minify-js true \
+                    --remove-comments \
+                    --remove-redundant-attributes \
+                    --remove-script-type-attributes \
+                    --remove-style-link-type-attributes \
+                    --use-short-doctype \
+                    poll.html -o poll.html
 
                   html-minifier \
                     --collapse-boolean-attributes \
