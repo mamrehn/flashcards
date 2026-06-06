@@ -186,7 +186,29 @@ const MAX_OPTIONS_PER_QUESTION = 250;
 
 const ROOM_MAX_AGE_MS = 2 * 60 * 60 * 1000; // 2 hours
 
-const ALLOWED_ORIGINS = ['https://mamrehn.github.io', 'http://localhost', 'http://127.0.0.1'];
+// Exact-origin allow-list. Production is the GitHub Pages host; local dev is
+// any port on localhost / 127.0.0.1. Matching is on the parsed origin/hostname,
+// never a prefix — `startsWith('https://mamrehn.github.io')` would also accept
+// `https://mamrehn.github.io.evil.com`, so we compare the full origin instead.
+const ALLOWED_ORIGINS = new Set(['https://mamrehn.github.io']);
+const LOCAL_DEV_HOSTS = new Set(['localhost', '127.0.0.1']);
+
+/**
+ * @param {string} origin
+ * @returns {boolean}
+ */
+function isAllowedOrigin(origin) {
+    // Non-browser clients (and same-origin requests) may omit Origin entirely.
+    if (!origin) return true;
+    let url;
+    try {
+        url = new URL(origin);
+    } catch {
+        return false;
+    }
+    if (ALLOWED_ORIGINS.has(url.origin)) return true;
+    return LOCAL_DEV_HOSTS.has(url.hostname);
+}
 
 const wss = new WebSocketServer({
     noServer: true,
@@ -196,7 +218,7 @@ const wss = new WebSocketServer({
 
 httpServer.on('upgrade', (req, socket, head) => {
     const origin = req.headers.origin || '';
-    const isAllowed = !origin || ALLOWED_ORIGINS.some((allowed) => origin.startsWith(allowed));
+    const isAllowed = isAllowedOrigin(origin);
 
     if (!isAllowed) {
         console.warn(`Rejected WebSocket from origin: ${origin}`);
@@ -336,15 +358,36 @@ wss.on('connection', (ws) => {
 // --- Handlers ---
 
 /**
+ * Tear down any room this connection currently owns as host. Called before a
+ * host creates or restores a (new) room so a single connection can never
+ * accumulate more than one room. This both bounds create/restore spam (no
+ * unbounded room growth from one socket) and cleanly ends the previous game
+ * when a host deliberately starts a fresh one.
+ * @param ws
+ */
+function closeOwnedRoom(ws) {
+    if (ws.roomId) {
+        const room = rooms.get(ws.roomId);
+        if (room && room.hostWs === ws) {
+            broadcastToPlayers(room, { type: 'quiz_terminated' });
+            if (room.expiryTimer) clearTimeout(room.expiryTimer);
+            if (room.hostDisconnectTimer) clearTimeout(room.hostDisconnectTimer);
+            rooms.delete(ws.roomId);
+            console.log(`Room ${ws.roomId} closed (host opened a new room)`);
+        }
+    }
+    ws.roomId = null;
+    ws._hasRoom = false;
+}
+
+/**
  *
  * @param ws
  */
 function handleCreateRoom(ws) {
-    // Limit: one room per host connection
-    if (ws._hasRoom) {
-        send(ws, { type: 'error', message: 'Du hast bereits einen Raum erstellt.' });
-        return;
-    }
+    // One active room per host connection: opening a new room ends the
+    // previous one this socket owned (rather than rejecting the request).
+    closeOwnedRoom(ws);
 
     const roomId = generateRoomId();
     if (!roomId) {
@@ -507,6 +550,10 @@ function handleRestoreRoom(ws, msg) {
         }
     }
 
+    // One active room per connection: if this socket already restored/created
+    // a room earlier, close it before standing up the new one.
+    closeOwnedRoom(ws);
+
     // Re-create the room
     const room = {
         hostWs: ws,
@@ -657,8 +704,12 @@ function handleJoin(ws, msg) {
         }
         console.log(`Player "${player.name}" reconnected to room ${roomCode}`);
     } else {
-        // Enforce max player limit
-        if (room.players.size >= MAX_PLAYERS_PER_ROOM) {
+        // Enforce max player limit on *connected* players. Entries are kept
+        // after disconnect so players can reconnect with their score, so
+        // room.players.size counts everyone who ever joined — using it here
+        // would wrongly report "full" in a room with lots of join/leave churn
+        // even when far fewer than the cap are actually present.
+        if (getConnectedPlayerCount(room) >= MAX_PLAYERS_PER_ROOM) {
             send(ws, { type: 'error', message: 'Raum ist voll (max. 240 Spieler).' });
             return;
         }
@@ -759,8 +810,22 @@ function handleSubmitAnswer(ws, msg) {
         return;
     }
 
-    // Validate answerData: must be an array of at most 20 indices
+    // Only accept answers while a question is actually live. Outside the
+    // 'question' phase (lobby / results) there is nothing to answer, and the
+    // host already ignores such frames — drop them server-side too.
+    if (room.phase !== 'question') return;
+
+    // Validate answerData: an array of at most 20 non-negative integer option
+    // indices (bounded by the per-question option ceiling). Out-of-range or
+    // non-integer values can't score on the host anyway, so reject them here.
     if (!Array.isArray(msg.answerData) || msg.answerData.length > 20) return;
+    if (
+        !msg.answerData.every(
+            (i) => Number.isInteger(i) && i >= 0 && i < MAX_OPTIONS_PER_QUESTION
+        )
+    ) {
+        return;
+    }
 
     // Persist on the player object so a reconnect can show "already answered".
     player.hasAnswered = true;

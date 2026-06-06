@@ -282,8 +282,11 @@ async function main() {
         }
     }
 
+    // No build timestamp: the manifest is a pure function of the deck inputs so
+    // it only changes when a deck actually changes. A `new Date()` here made
+    // library.json differ on every CI run, forcing a needless gh-pages commit
+    // each deploy even when no deck was touched.
     const manifest = {
-        generatedAt: new Date().toISOString(),
         deckCount: decks.length,
         decks,
     };

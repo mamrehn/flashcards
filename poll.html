@@ -348,5 +348,16 @@
         </div>
 
         <script src="poll.js"></script>
+
+        <!-- Service Worker Registration (offline shell + installability).
+             Voters land here directly via the shared poll link, so register
+             here too rather than relying on a prior visit to another page. -->
+        <script>
+            if ('serviceWorker' in navigator) {
+                window.addEventListener('load', () => {
+                    navigator.serviceWorker.register('./sw.js').catch(() => {});
+                });
+            }
+        </script>
     </body>
 </html>

@@ -1191,10 +1191,29 @@ function saveToLocalStorage(deckName, deckCards, incorrectIndices = [], meta = n
 }
 
 /**
+ * localStorage.setItem wrapped to swallow quota/availability errors (private
+ * mode, full storage) instead of throwing out of a UI handler. Callers that
+ * need rollback (e.g. saveToLocalStorage) handle errors themselves; this is for
+ * best-effort writes where a failure should warn, not crash the flow.
+ * @param {string} key - Storage key
+ * @param {string} value - Serialized value to store
+ * @returns {boolean} true when the write succeeded
+ */
+function persistToStorage(key, value) {
+    try {
+        localStorage.setItem(key, value);
+        return true;
+    } catch (error) {
+        console.error(`Error writing "${key}" to localStorage (quota exceeded?):`, error);
+        return false;
+    }
+}
+
+/**
  * Update incorrect indices in localStorage
  */
 function updateIncorrectIndices() {
-    localStorage.setItem('flashcardIncorrectIndices', JSON.stringify(previousIncorrectIndices));
+    persistToStorage('flashcardIncorrectIndices', JSON.stringify(previousIncorrectIndices));
 }
 
 // ============================================================================
@@ -1749,11 +1768,11 @@ function deselectAllDecks() {
 function deleteSavedDeck(deckName) {
     if (confirm(`Möchtest du das Deck "${deckName}" wirklich löschen?`)) {
         delete savedDecks[deckName];
-        localStorage.setItem('flashcardDecks', JSON.stringify(savedDecks));
+        persistToStorage('flashcardDecks', JSON.stringify(savedDecks));
 
         if (previousIncorrectIndices[deckName]) {
             delete previousIncorrectIndices[deckName];
-            localStorage.setItem(
+            persistToStorage(
                 'flashcardIncorrectIndices',
                 JSON.stringify(previousIncorrectIndices)
             );
@@ -1785,9 +1804,9 @@ function deleteSavedTopic(topic) {
             incorrectChanged = true;
         }
     }
-    localStorage.setItem('flashcardDecks', JSON.stringify(savedDecks));
+    persistToStorage('flashcardDecks', JSON.stringify(savedDecks));
     if (incorrectChanged) {
-        localStorage.setItem(
+        persistToStorage(
             'flashcardIncorrectIndices',
             JSON.stringify(previousIncorrectIndices)
         );
@@ -1853,7 +1872,7 @@ function initializeQuiz(loadedCards) {
         const hintsToggle = document.querySelector('.keyboard-hints-toggle');
         if (hintsPanel) {
             hintsPanel.classList.remove('hidden');
-            localStorage.setItem('keyboardHintsShown', '1');
+            persistToStorage('keyboardHintsShown', '1');
             setTimeout(() => hintsPanel.classList.add('hidden'), 5000);
         }
         if (hintsToggle) {
@@ -3767,7 +3786,7 @@ function undoLastAnswer() {
     } else if (previousIncorrectIndices[snapshot.deckName]) {
         delete previousIncorrectIndices[snapshot.deckName];
     }
-    localStorage.setItem('flashcardIncorrectIndices', JSON.stringify(previousIncorrectIndices));
+    persistToStorage('flashcardIncorrectIndices', JSON.stringify(previousIncorrectIndices));
 
     // Restore card state
     answeredCards[snapshot.cardIndex] = null;

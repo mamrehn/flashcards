@@ -348,5 +348,16 @@
 
         <!-- Main Application Script -->
         <script src="quiz.js"></script>
+
+        <!-- Service Worker Registration (offline shell + installability).
+             Players often land here directly via the join link, so register
+             here too rather than relying on a prior visit to the study page. -->
+        <script>
+            if ('serviceWorker' in navigator) {
+                window.addEventListener('load', () => {
+                    navigator.serviceWorker.register('./sw.js').catch(() => {});
+                });
+            }
+        </script>
     </body>
 </html>

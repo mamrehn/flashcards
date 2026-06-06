@@ -411,5 +411,16 @@
 
         <!-- Main Application Script -->
         <script src="index.js"></script>
+
+        <!-- Service Worker Registration (offline shell + installability).
+             The landing page is the first thing many users open, so register
+             here so the PWA installs even if they never visit the study page. -->
+        <script>
+            if ('serviceWorker' in navigator) {
+                window.addEventListener('load', () => {
+                    navigator.serviceWorker.register('./sw.js').catch(() => {});
+                });
+            }
+        </script>
     </body>
 </html>

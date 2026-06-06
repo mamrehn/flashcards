@@ -13,7 +13,7 @@ const SW_DEBUG =
 // eslint-disable-next-line no-console
 const swLog = SW_DEBUG ? console.log.bind(console) : () => {};
 
-const CACHE_NAME = 'flashcards-v3';
+const CACHE_NAME = 'flashcards-v4';
 const ASSETS_TO_CACHE = [
     './',
     './index.html',
@@ -113,25 +113,22 @@ self.addEventListener('fetch', (event) => {
                     .then((networkResponse) => {
                         // Only cache successful responses
                         if (networkResponse.ok) {
-                            // Clone before caching
-                            const responseToCache = networkResponse.clone();
+                            // Always refresh the cache with the fresh response
+                            // (true stale-while-revalidate). The previous logic
+                            // only wrote when Last-Modified changed, so an asset
+                            // served without that header — or with an unchanged
+                            // one despite new content — could be served stale
+                            // forever until the cache name was bumped.
+                            cache.put(event.request, networkResponse.clone());
 
-                            // Check if content has changed
-                            if (cachedResponse) {
-                                // Compare Last-Modified timestamps to detect changes
-                                const cachedLastModified =
-                                    cachedResponse.headers.get('last-modified');
-                                const networkLastModified =
-                                    networkResponse.headers.get('last-modified');
-
-                                if (cachedLastModified !== networkLastModified) {
-                                    // Content changed - update cache and notify
-                                    cache.put(event.request, responseToCache);
-                                    notifyClientsOfUpdate();
-                                }
-                            } else {
-                                // No cached version - just cache it
-                                cache.put(event.request, responseToCache);
+                            // Best-effort "update available" signal for the
+                            // in-app reload toast: only fire when we can prove
+                            // the bytes changed (ETag preferred, Last-Modified
+                            // fallback). When neither header is present we can't
+                            // tell, so we stay quiet rather than nag on every
+                            // navigation — the cache is already up to date above.
+                            if (cachedResponse && hasContentChanged(cachedResponse, networkResponse)) {
+                                notifyClientsOfUpdate();
                             }
                         }
                         return networkResponse;
@@ -147,6 +144,29 @@ self.addEventListener('fetch', (event) => {
         })
     );
 });
+
+/**
+ * Best-effort detection of whether a freshly-fetched response differs from the
+ * cached one, using validator headers. Prefers ETag (strong/weak compared
+ * verbatim) and falls back to Last-Modified. Returns false when neither side
+ * exposes a validator — we can't prove a change, so we don't notify.
+ * @param {Response} cachedResponse
+ * @param {Response} networkResponse
+ * @returns {boolean}
+ */
+function hasContentChanged(cachedResponse, networkResponse) {
+    const cachedETag = cachedResponse.headers.get('etag');
+    const networkETag = networkResponse.headers.get('etag');
+    if (cachedETag || networkETag) {
+        return cachedETag !== networkETag;
+    }
+    const cachedLastModified = cachedResponse.headers.get('last-modified');
+    const networkLastModified = networkResponse.headers.get('last-modified');
+    if (cachedLastModified || networkLastModified) {
+        return cachedLastModified !== networkLastModified;
+    }
+    return false;
+}
 
 /**
  * Notify all clients that an update is available
