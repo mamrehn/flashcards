@@ -2,7 +2,7 @@
 <html lang="de">
     <head>
         <meta charset="UTF-8" />
-        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
         <meta
             http-equiv="Content-Security-Policy"
             content="default-src 'self'; script-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com; style-src 'self' 'unsafe-inline'; connect-src 'self' wss://qlash-server.fly.dev; img-src 'self' data:; font-src 'self'; base-uri 'self'; form-action 'self';"
@@ -114,14 +114,36 @@
                             />
                         </div>
                         <div class="option-group">
-                            <input type="text" class="option-input" placeholder="Option 1" />
-                            <input type="checkbox" class="correct-checkbox" />
-                            <label>Richtig</label>
+                            <input
+                                type="text"
+                                class="option-input"
+                                placeholder="Option 1"
+                                aria-label="Option 1"
+                            />
+                            <label
+                                ><input
+                                    type="checkbox"
+                                    class="correct-checkbox"
+                                    aria-label="Option 1 ist richtig"
+                                />
+                                Richtig</label
+                            >
                         </div>
                         <div class="option-group">
-                            <input type="text" class="option-input" placeholder="Option 2" />
-                            <input type="checkbox" class="correct-checkbox" />
-                            <label>Richtig</label>
+                            <input
+                                type="text"
+                                class="option-input"
+                                placeholder="Option 2"
+                                aria-label="Option 2"
+                            />
+                            <label
+                                ><input
+                                    type="checkbox"
+                                    class="correct-checkbox"
+                                    aria-label="Option 2 ist richtig"
+                                />
+                                Richtig</label
+                            >
                         </div>
                         <button type="button" id="add-option-btn" class="btn">
                             Option hinzufügen
@@ -202,12 +224,29 @@
             <div id="player-view" class="view card">
                 <div id="join-form">
                     <h2>Einem Quiz beitreten</h2>
+                    <label for="room-code-input" class="sr-only">Host-ID / Raumcode</label>
                     <input
                         type="text"
                         id="room-code-input"
                         placeholder="Host-ID eingeben oder QR scannen"
+                        autocapitalize="characters"
+                        autocorrect="off"
+                        spellcheck="false"
+                        autocomplete="off"
+                        inputmode="text"
+                        enterkeyhint="next"
+                        maxlength="9"
                     />
-                    <input type="text" id="player-name-input" placeholder="Dein Name" />
+                    <label for="player-name-input" class="sr-only">Dein Name</label>
+                    <input
+                        type="text"
+                        id="player-name-input"
+                        placeholder="Dein Name"
+                        autocomplete="off"
+                        autocapitalize="words"
+                        enterkeyhint="go"
+                        maxlength="50"
+                    />
                     <button id="join-btn" class="btn">Quiz beitreten</button>
                     <p>Oder scanne den vom Host bereitgestellten QR-Code</p>
                 </div>
@@ -215,7 +254,9 @@
                 <div id="waiting-room" class="hidden">
                     <div class="lobby-welcome">
                         <div class="lobby-welcome-art" aria-hidden="true">🛋️ ☕ 🎧</div>
-                        <h2 id="lobby-welcome-title" class="lobby-welcome-title">Willkommen in der Lobby</h2>
+                        <h2 id="lobby-welcome-title" class="lobby-welcome-title">
+                            Willkommen in der Lobby
+                        </h2>
                         <p id="waiting-message" class="lobby-welcome-status">
                             Du bist drin — wir warten auf den Host.
                         </p>
@@ -262,9 +303,7 @@
                                     aria-label="Accessoire"
                                 ></div>
                             </div>
-                            <p class="avatar-builder-hint">
-                                Personalisiere deinen Avatar.
-                            </p>
+                            <p class="avatar-builder-hint">Personalisiere deinen Avatar.</p>
                         </div>
                     </section>
                 </div>
@@ -284,10 +323,10 @@
                         <div id="result-icon" class="result-icon" aria-hidden="true">✓</div>
                         <div id="result-label" class="result-label">Richtig!</div>
                     </div>
-                    <div id="result-points-pop" class="result-points-pop hidden" aria-live="polite">+0</div>
-                    <div class="result-score">
-                        Gesamt: <span id="player-score">0</span>
+                    <div id="result-points-pop" class="result-points-pop hidden" aria-live="polite">
+                        +0
                     </div>
+                    <div class="result-score">Gesamt: <span id="player-score">0</span></div>
                     <div id="result-display"></div>
                     <p id="waiting-for-next" class="result-waiting">Warten auf nächste Frage…</p>
                 </div>

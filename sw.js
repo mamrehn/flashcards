@@ -127,7 +127,10 @@ self.addEventListener('fetch', (event) => {
                             // fallback). When neither header is present we can't
                             // tell, so we stay quiet rather than nag on every
                             // navigation — the cache is already up to date above.
-                            if (cachedResponse && hasContentChanged(cachedResponse, networkResponse)) {
+                            if (
+                                cachedResponse &&
+                                hasContentChanged(cachedResponse, networkResponse)
+                            ) {
                                 notifyClientsOfUpdate();
                             }
                         }

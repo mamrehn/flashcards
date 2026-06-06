@@ -25,19 +25,21 @@ const MANIFEST_PATH = path.join(DECKS_DIR, 'library.json');
  * @param str
  */
 function slugify(str) {
-    return str
-        .toLowerCase()
-        .normalize('NFD')
-        .replaceAll(/[\u0300-\u036F]/g, '')
-        .replaceAll('ä', 'ae')
-        .replaceAll('ö', 'oe')
-        .replaceAll('ü', 'ue')
-        .replaceAll('ß', 'ss')
-        .replaceAll(/[^a-z0-9]+/g, '-')
-        // Trim leading/trailing dashes. Build-time input (deck filenames) is trusted.
-        .replace(/^-+/, '')
-        // eslint-disable-next-line sonarjs/slow-regex
-        .replace(/-+$/, '');
+    return (
+        str
+            .toLowerCase()
+            .normalize('NFD')
+            .replaceAll(/[\u0300-\u036F]/g, '')
+            .replaceAll('ä', 'ae')
+            .replaceAll('ö', 'oe')
+            .replaceAll('ü', 'ue')
+            .replaceAll('ß', 'ss')
+            .replaceAll(/[^a-z0-9]+/g, '-')
+            // Trim leading/trailing dashes. Build-time input (deck filenames) is trusted.
+            .replace(/^-+/, '')
+            // eslint-disable-next-line sonarjs/slow-regex
+            .replace(/-+$/, '')
+    );
 }
 
 /**

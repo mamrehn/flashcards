@@ -130,6 +130,18 @@ body {
     box-shadow: 0 0 0 2px var(--lib-light);
 }
 
+/* Visible keyboard focus for interactive library elements (deck cards are
+   real <a> links, plus import/preview/update buttons and inline links).
+   Previously only the search input had a focus style. library.css only loads
+   on library.html, so a broad selector is safe; the theme toggle keeps its own
+   ring via the higher-specificity .theme-toggle rule in theme.css. */
+a:focus-visible,
+button:focus-visible,
+.deck-card:focus-visible {
+    outline: 3px solid var(--lib-primary);
+    outline-offset: 2px;
+}
+
 /* Mobile filter toggle: hidden on desktop, shown when sidebar collapses. */
 .facets-toggle-btn {
     display: none;

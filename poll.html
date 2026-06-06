@@ -2,7 +2,7 @@
 <html lang="de">
     <head>
         <meta charset="UTF-8" />
-        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
         <meta
             http-equiv="Content-Security-Policy"
             content="default-src 'self'; script-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com; style-src 'self' 'unsafe-inline'; connect-src 'self' wss://qlash-server.fly.dev; img-src 'self' data:; font-src 'self'; base-uri 'self'; form-action 'self';"
@@ -30,15 +30,32 @@
 
     <body>
         <noscript>
-            <div style="max-width: 36rem; margin: 2rem auto; padding: 1rem 1.25rem; border: 1px solid #c33; border-radius: 8px; background: #fff5f5; color: #722; font-family: system-ui, sans-serif;">
+            <div
+                style="
+                    max-width: 36rem;
+                    margin: 2rem auto;
+                    padding: 1rem 1.25rem;
+                    border: 1px solid #c33;
+                    border-radius: 8px;
+                    background: #fff5f5;
+                    color: #722;
+                    font-family: system-ui, sans-serif;
+                "
+            >
                 <strong>JavaScript benötigt.</strong>
-                Diese Umfrage funktioniert nur mit aktiviertem JavaScript.
-                Bitte aktiviere JavaScript im Browser und lade die Seite neu.
+                Diese Umfrage funktioniert nur mit aktiviertem JavaScript. Bitte aktiviere
+                JavaScript im Browser und lade die Seite neu.
             </div>
         </noscript>
         <div class="container">
             <header>
-                <a href="index.html" class="back-link" aria-label="Zur Startseite" title="Zur Startseite">←</a>
+                <a
+                    href="index.html"
+                    class="back-link"
+                    aria-label="Zur Startseite"
+                    title="Zur Startseite"
+                    >←</a
+                >
                 <h1>Umfrage</h1>
             </header>
 
@@ -53,9 +70,8 @@
                     Erneut zur Umfrage verbinden
                 </button>
                 <p class="role-hint">
-                    Live-Abstimmungen für die Gruppe: Klassensprecherwahl,
-                    Wandertagsziel, oder eine spontane Stimmungsumfrage.
-                    Keine Punkte, kein Richtig/Falsch — nur Ergebnisse.
+                    Live-Abstimmungen für die Gruppe: Klassensprecherwahl, Wandertagsziel, oder eine
+                    spontane Stimmungsumfrage. Keine Punkte, kein Richtig/Falsch — nur Ergebnisse.
                 </p>
             </div>
 
@@ -84,9 +100,7 @@
                         <p>Verbundene Spieler: <span id="player-count">0</span></p>
                         <div class="players-list" id="players-list"></div>
                     </div>
-                    <button id="show-composer-btn" class="btn btn-accent">
-                        Frage erstellen
-                    </button>
+                    <button id="show-composer-btn" class="btn btn-accent">Frage erstellen</button>
                 </section>
 
                 <section id="host-composer" class="hidden">
@@ -129,12 +143,7 @@
                     <fieldset class="composer-fieldset">
                         <legend>Antwortquelle</legend>
                         <label class="radio-label">
-                            <input
-                                type="radio"
-                                name="poll-source"
-                                value="players"
-                                checked
-                            />
+                            <input type="radio" name="poll-source" value="players" checked />
                             Spielernamen (aktuelle Lobby)
                         </label>
                         <label class="radio-label">
@@ -204,9 +213,7 @@
                     </div>
 
                     <div class="reveal-primary-actions">
-                        <button id="start-vote-btn" class="btn btn-accent">
-                            Umfrage starten
-                        </button>
+                        <button id="start-vote-btn" class="btn btn-accent">Umfrage starten</button>
                     </div>
                     <div class="reveal-danger-zone">
                         <button id="back-to-lobby-btn" type="button" class="session-end-link">
@@ -227,9 +234,7 @@
                         <span id="host-total-players">0</span>
                     </p>
                     <ul id="host-live-options" class="host-options-list"></ul>
-                    <button id="end-vote-btn" class="btn">
-                        Umfrage jetzt beenden
-                    </button>
+                    <button id="end-vote-btn" class="btn">Umfrage jetzt beenden</button>
                 </section>
 
                 <section id="host-reveal" class="hidden">
@@ -238,9 +243,7 @@
                     <ol id="host-podium-list" class="podium-list"></ol>
                     <p id="host-reveal-meta" class="reveal-meta"></p>
                     <div class="reveal-primary-actions">
-                        <button id="next-question-btn" class="btn btn-accent">
-                            Nächste Frage
-                        </button>
+                        <button id="next-question-btn" class="btn btn-accent">Nächste Frage</button>
                     </div>
                     <div class="reveal-danger-zone">
                         <button id="end-session-btn" type="button" class="session-end-link">
@@ -253,6 +256,7 @@
             <div id="player-view" class="view card">
                 <div id="join-form">
                     <h2>Umfrage beitreten</h2>
+                    <label for="room-code-input" class="sr-only">Raumcode</label>
                     <input
                         type="text"
                         id="room-code-input"
@@ -260,13 +264,20 @@
                         autocapitalize="characters"
                         autocorrect="off"
                         spellcheck="false"
+                        autocomplete="off"
                         inputmode="text"
+                        enterkeyhint="next"
                         maxlength="8"
                     />
+                    <label for="player-name-input" class="sr-only">Dein Name</label>
                     <input
                         type="text"
                         id="player-name-input"
                         placeholder="Dein Name"
+                        autocomplete="off"
+                        autocapitalize="words"
+                        enterkeyhint="go"
+                        maxlength="50"
                     />
                     <button id="join-btn" class="btn">Beitreten</button>
                 </div>
@@ -325,7 +336,9 @@
 
         <div id="qr-modal-overlay" class="qr-modal-overlay hidden">
             <div id="qr-modal-content" class="qr-modal-content">
-                <button id="qr-modal-close" class="qr-modal-close" aria-label="Schließen">&times;</button>
+                <button id="qr-modal-close" class="qr-modal-close" aria-label="Schließen">
+                    &times;
+                </button>
                 <h3>QR-Code scannen oder URL eingeben, um beizutreten</h3>
                 <div id="large-qrcode"></div>
                 <p>

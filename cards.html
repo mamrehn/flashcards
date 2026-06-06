@@ -2,7 +2,7 @@
 <html lang="de">
     <head>
         <meta charset="UTF-8" />
-        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
         <meta
             http-equiv="Content-Security-Policy"
             content="default-src 'self'; script-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self'; base-uri 'self'; form-action 'self';"
@@ -298,7 +298,7 @@
 
                                 <!-- Standard answer display -->
                                 <div id="standard-answer-container">
-                                    <div class="answer" id="answer-text">
+                                    <div class="answer" id="answer-text" aria-live="polite">
                                         Antwort erscheint hier
                                     </div>
                                 </div>
@@ -331,7 +331,10 @@
                                 </div>
 
                                 <!-- Matching result display -->
-                                <div id="matching-result-container" class="matching-result-container hidden">
+                                <div
+                                    id="matching-result-container"
+                                    class="matching-result-container hidden"
+                                >
                                     <!-- Matching results will be dynamically inserted here -->
                                 </div>
                             </div>
@@ -397,7 +400,7 @@
                     </div>
                 </div>
 
-                <div id="error-message" class="error-message hidden"></div>
+                <div id="error-message" class="error-message hidden" role="alert"></div>
             </div>
 
             <div id="book-view" class="hidden">

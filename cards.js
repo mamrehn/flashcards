@@ -741,7 +741,7 @@ async function handleFileUpload(event) {
 
             // Detect backup file: has flashcardDecks key
             if (data.flashcardDecks && typeof data.flashcardDecks === 'object' && !data.cards) {
-                handleBackupImport(data);
+                await handleBackupImport(data);
                 continue;
             }
 
@@ -825,10 +825,8 @@ async function handleZipUpload(event) {
                     const deckName = base.replace('.json', '');
                     // Resolution order: inline meta on the card file (legacy
                     // back-compat) → zip-level manifest.json → zip basename.
-                    const meta =
-                        (data.meta && typeof data.meta === 'object' && data.meta) ||
-                        manifestMeta ||
-                        { name: zipBaseName };
+                    const meta = (data.meta && typeof data.meta === 'object' && data.meta) ||
+                        manifestMeta || { name: zipBaseName };
                     saveToLocalStorage(deckName, validCards, [], meta);
                     importedDeckNames.push(deckName);
                 } catch {
@@ -931,10 +929,8 @@ async function handleLibraryImportDeepLink() {
                 // Fall back to library manifest meta (or zip basename) when the inner JSON omits it,
                 // so all entries from the same library archive group into one topic.
                 const zipBaseName = deckMeta.filename.replace(/\.(zip|json)$/i, '');
-                const meta =
-                    (data && typeof data.meta === 'object' && data.meta) ||
-                    deckMeta.meta ||
-                    { name: zipBaseName };
+                const meta = (data && typeof data.meta === 'object' && data.meta) ||
+                    deckMeta.meta || { name: zipBaseName };
                 saveToLocalStorage(deckName, validCards, [], meta);
             }
             importedDeckNames.push(deckName);
@@ -1033,17 +1029,17 @@ function processJsonData(data, fileName) {
  * Handle backup file import (auto-detected from handleFileUpload)
  * @param {object} backup - Parsed backup JSON object
  */
-function handleBackupImport(backup) {
+async function handleBackupImport(backup) {
     const deckCount = Object.keys(backup.flashcardDecks).length;
     const srCount = backup.spacedRepetitionData
         ? Object.keys(backup.spacedRepetitionData).length
         : 0;
 
-    if (
-        !confirm(
-            `Backup erkannt!\n\n${deckCount} Decks und ${srCount} SR-Einträge werden wiederhergestellt.\n\nAchtung: Vorhandene Daten werden überschrieben!`
-        )
-    ) {
+    const ok = await uiConfirm(
+        `Backup erkannt!\n\n${deckCount} Decks und ${srCount} SR-Einträge werden wiederhergestellt.\n\nAchtung: Vorhandene Daten werden überschrieben!`,
+        { confirmText: 'Wiederherstellen', danger: true }
+    );
+    if (!ok) {
         fileInput.value = '';
         return;
     }
@@ -1093,7 +1089,10 @@ function validateCards(cards) {
             Array.isArray(card.pairs) &&
             card.pairs.length >= 2 &&
             card.pairs.every(
-                (p) => p && typeof p.right === 'string' && (p.left === null || p.left === undefined || typeof p.left === 'string')
+                (p) =>
+                    p &&
+                    typeof p.right === 'string' &&
+                    (p.left === null || p.left === undefined || typeof p.left === 'string')
             )
         ) {
             return true;
@@ -1665,9 +1664,7 @@ function filterCards(cards, perCategory) {
     return cards.filter((card) => {
         const t = cardType(card);
         const cardCats =
-            card.categories && card.categories.length > 0
-                ? card.categories
-                : ['__uncategorized__'];
+            card.categories && card.categories.length > 0 ? card.categories : ['__uncategorized__'];
         return cardCats.some((c) => {
             const allowed = perCategory.get(c);
             return allowed && allowed.has(t);
@@ -1765,21 +1762,22 @@ function deselectAllDecks() {
  * Delete a saved deck from localStorage
  * @param {string} deckName - Name of the deck to delete
  */
-function deleteSavedDeck(deckName) {
-    if (confirm(`Möchtest du das Deck "${deckName}" wirklich löschen?`)) {
-        delete savedDecks[deckName];
-        persistToStorage('flashcardDecks', JSON.stringify(savedDecks));
+async function deleteSavedDeck(deckName) {
+    const ok = await uiConfirm(`Möchtest du das Deck "${deckName}" wirklich löschen?`, {
+        confirmText: 'Löschen',
+        danger: true,
+    });
+    if (!ok) return;
 
-        if (previousIncorrectIndices[deckName]) {
-            delete previousIncorrectIndices[deckName];
-            persistToStorage(
-                'flashcardIncorrectIndices',
-                JSON.stringify(previousIncorrectIndices)
-            );
-        }
+    delete savedDecks[deckName];
+    persistToStorage('flashcardDecks', JSON.stringify(savedDecks));
 
-        displaySavedDecks();
+    if (previousIncorrectIndices[deckName]) {
+        delete previousIncorrectIndices[deckName];
+        persistToStorage('flashcardIncorrectIndices', JSON.stringify(previousIncorrectIndices));
     }
+
+    displaySavedDecks();
 }
 
 /**
@@ -1787,15 +1785,16 @@ function deleteSavedDeck(deckName) {
  * For single-deck topics this is equivalent to `deleteSavedDeck`.
  * @param {{title: string, decks: string[]}} topic
  */
-function deleteSavedTopic(topic) {
+async function deleteSavedTopic(topic) {
     if (!topic || !Array.isArray(topic.decks) || topic.decks.length === 0) return;
     if (topic.decks.length === 1) {
-        deleteSavedDeck(topic.decks[0]);
+        await deleteSavedDeck(topic.decks[0]);
         return;
     }
     const sourceList = topic.decks.map((d) => `• ${d}`).join('\n');
     const msg = `Möchtest du das Thema "${topic.title}" mit allen ${topic.decks.length} Quelldateien wirklich löschen?\n\n${sourceList}`;
-    if (!confirm(msg)) return;
+    const ok = await uiConfirm(msg, { confirmText: 'Löschen', danger: true });
+    if (!ok) return;
     let incorrectChanged = false;
     for (const deckName of topic.decks) {
         delete savedDecks[deckName];
@@ -1806,10 +1805,7 @@ function deleteSavedTopic(topic) {
     }
     persistToStorage('flashcardDecks', JSON.stringify(savedDecks));
     if (incorrectChanged) {
-        persistToStorage(
-            'flashcardIncorrectIndices',
-            JSON.stringify(previousIncorrectIndices)
-        );
+        persistToStorage('flashcardIncorrectIndices', JSON.stringify(previousIncorrectIndices));
     }
     displaySavedDecks();
 }
@@ -1973,7 +1969,7 @@ function showCurrentCard() {
 
     isAnswered = false;
     selectedOptionIndices = []; // Reset selected options
-    matchingPairs = [];          // Reset matching state
+    matchingPairs = []; // Reset matching state
     selectedLeftIndex = null;
     selectedRightIndex = null;
     shuffledRightItems = [];
@@ -2111,15 +2107,19 @@ function renderMatchingPairs() {
                 if (compLefts.has(cl)) continue;
                 compLefts.add(cl);
                 visitedLeft.add(cl);
-                for (const cr of (leftNeighbors.get(cl) ?? [])) {
+                for (const cr of leftNeighbors.get(cl) ?? []) {
                     if (compRights.has(cr)) continue;
                     compRights.add(cr);
-                    for (const cl2 of (rightNeighbors.get(cr) ?? [])) bfsQueue.push(cl2);
+                    for (const cl2 of rightNeighbors.get(cr) ?? []) bfsQueue.push(cl2);
                 }
             }
             const compPairs = matchingPairs.filter(([l]) => compLefts.has(l));
-            const multiLefts = unpairedLeftOrder.filter((l) => compLefts.has(l) && leftRightCount.get(l) > 1);
-            const multiRights = unpairedRightOrder.filter((r) => compRights.has(r) && rightLeftCount.get(r) > 1);
+            const multiLefts = unpairedLeftOrder.filter(
+                (l) => compLefts.has(l) && leftRightCount.get(l) > 1
+            );
+            const multiRights = unpairedRightOrder.filter(
+                (r) => compRights.has(r) && rightLeftCount.get(r) > 1
+            );
             components.push({ compPairs, multiLefts, multiRights });
         }
 
@@ -2135,17 +2135,22 @@ function renderMatchingPairs() {
                 for (const rIdx of multiRights) {
                     for (const [l, r] of compPairs) {
                         if (r === rIdx && !multiLeftSet.has(l) && !rowKeys.has(`${l},${r}`)) {
-                            rowPairs.push([l, r]); rowKeys.add(`${l},${r}`);
+                            rowPairs.push([l, r]);
+                            rowKeys.add(`${l},${r}`);
                         }
                     }
                     for (const [l, r] of compPairs) {
                         if (r === rIdx && multiLeftSet.has(l) && !rowKeys.has(`${l},${r}`)) {
-                            rowPairs.push([l, r]); rowKeys.add(`${l},${r}`);
+                            rowPairs.push([l, r]);
+                            rowKeys.add(`${l},${r}`);
                         }
                     }
                 }
                 for (const [l, r] of compPairs) {
-                    if (!rowKeys.has(`${l},${r}`)) { rowPairs.push([l, r]); rowKeys.add(`${l},${r}`); }
+                    if (!rowKeys.has(`${l},${r}`)) {
+                        rowPairs.push([l, r]);
+                        rowKeys.add(`${l},${r}`);
+                    }
                 }
                 // Compute contiguous span info for left and right items
                 const leftSpanInfo = new Map();
@@ -2158,7 +2163,8 @@ function renderMatchingPairs() {
                 const rightSpanInfo = new Map();
                 for (const [i, [, ri]] of rowPairs.entries()) {
                     if ((rightLeftCount.get(ri) ?? 0) > 1) {
-                        if (!rightSpanInfo.has(ri)) rightSpanInfo.set(ri, { start: i + 1, count: 0 });
+                        if (!rightSpanInfo.has(ri))
+                            rightSpanInfo.set(ri, { start: i + 1, count: 0 });
                         rightSpanInfo.get(ri).count++;
                     }
                 }
@@ -2222,7 +2228,10 @@ function renderMatchingPairs() {
             for (const lIdx of multiLefts) {
                 const pRights = [];
                 for (const [l, r] of compPairs) {
-                    if (l === lIdx) { pRights.push(r); handledKeys.add(`${l},${r}`); }
+                    if (l === lIdx) {
+                        pRights.push(r);
+                        handledKeys.add(`${l},${r}`);
+                    }
                 }
                 const group = document.createElement('div');
                 group.className = 'matching-paired-group';
@@ -2518,7 +2527,9 @@ function updateCardContent(card) {
         }
 
         // Set required pairing counts indexed by shuffled position
-        rightRequiredCount = shuffledRightItems.map((item) => rightRequiredCounts.get(item.text) ?? 0);
+        rightRequiredCount = shuffledRightItems.map(
+            (item) => rightRequiredCounts.get(item.text) ?? 0
+        );
 
         // Required pairings per left value (count occurrences in pairs with non-null right)
         const leftRequiredCounts = new Map();
@@ -2548,7 +2559,8 @@ function updateCardContent(card) {
         if (isMultiCard) {
             const hint = document.createElement('div');
             hint.className = 'matching-multi-hint';
-            hint.textContent = 'Hinweis: Einige Begriffe und/oder Zuordnungen können mehrfach vergeben werden.';
+            hint.textContent =
+                'Hinweis: Einige Begriffe und/oder Zuordnungen können mehrfach vergeben werden.';
             matchingContainer.append(hint);
         }
 
@@ -2938,7 +2950,8 @@ function showAnswer() {
 
     const card = cards[currentCardIndex];
     const isMatching = Array.isArray(card.pairs) && card.pairs.length > 0;
-    const isMultipleChoice = !isMatching && Array.isArray(card.options) && Array.isArray(card.correct);
+    const isMultipleChoice =
+        !isMatching && Array.isArray(card.options) && Array.isArray(card.correct);
 
     if (isMatching) {
         // Evaluate matching pairs
@@ -3232,7 +3245,12 @@ function markAnswer(scoreOrBool) {
                 previousIncorrectIndices[deckName].push(originalIndex);
             }
         }
-    } else if (isFullyCorrect && deckName && savedDecks[deckName] && previousIncorrectIndices[deckName]?.length > 0) {
+    } else if (
+        isFullyCorrect &&
+        deckName &&
+        savedDecks[deckName] &&
+        previousIncorrectIndices[deckName]?.length > 0
+    ) {
         // Remove from incorrect indices when answered correctly
         const originalDeckCards = savedDecks[deckName].cards;
         const originalIndex = originalDeckCards.findIndex(
@@ -3662,6 +3680,8 @@ function handleDeckSearch(event) {
 function showMessage(message) {
     const messageEl = document.createElement('div');
     messageEl.className = 'message-popup';
+    // Announce to assistive tech without stealing focus.
+    messageEl.setAttribute('role', 'status');
     messageEl.textContent = message;
     document.body.append(messageEl);
 
@@ -3675,6 +3695,161 @@ function showMessage(message) {
             messageEl.remove();
         }, 300);
     }, 3000);
+}
+
+/**
+ * Accessible modal dialog — a themed, focus-trapped replacement for the native
+ * blocking `confirm()` / `prompt()`. Returns a Promise resolving to:
+ *   - confirm: `true` (confirmed) / `false` (cancelled)
+ *   - prompt:  the entered string (confirmed) / `null` (cancelled)
+ * Esc and backdrop click cancel; Enter confirms (from a prompt's input or the
+ * focused confirm button); focus is trapped while open and restored on close.
+ * @param {object} opts
+ * @param {string} opts.message
+ * @param {'confirm'|'prompt'} [opts.kind]
+ * @param {string} [opts.defaultValue]
+ * @param {string} [opts.confirmText]
+ * @param {string} [opts.cancelText]
+ * @param {boolean} [opts.danger] - Style the confirm button as destructive.
+ * @returns {Promise<boolean|string|null>}
+ */
+function uiDialog(opts) {
+    const {
+        message,
+        kind = 'confirm',
+        defaultValue = '',
+        confirmText = 'OK',
+        cancelText = 'Abbrechen',
+        danger = false,
+    } = opts;
+
+    return new Promise((resolve) => {
+        const previouslyFocused = document.activeElement;
+
+        const backdrop = document.createElement('div');
+        backdrop.className = 'ui-modal-backdrop';
+
+        const modal = document.createElement('div');
+        modal.className = 'ui-modal';
+        modal.setAttribute('role', kind === 'prompt' ? 'dialog' : 'alertdialog');
+        modal.setAttribute('aria-modal', 'true');
+
+        const msgEl = document.createElement('p');
+        msgEl.className = 'ui-modal-message';
+        msgEl.id = `ui-modal-msg-${Date.now()}`;
+        msgEl.textContent = message;
+        modal.setAttribute('aria-labelledby', msgEl.id);
+        modal.append(msgEl);
+
+        let input = null;
+        if (kind === 'prompt') {
+            input = document.createElement('input');
+            input.type = 'text';
+            input.className = 'ui-modal-input';
+            input.value = defaultValue;
+            input.setAttribute('aria-label', message);
+            modal.append(input);
+        }
+
+        const actions = document.createElement('div');
+        actions.className = 'ui-modal-actions';
+
+        const cancelBtn = document.createElement('button');
+        cancelBtn.type = 'button';
+        cancelBtn.className = 'ui-modal-btn ui-modal-cancel';
+        cancelBtn.textContent = cancelText;
+
+        const confirmBtn = document.createElement('button');
+        confirmBtn.type = 'button';
+        confirmBtn.className = `ui-modal-btn ui-modal-confirm${danger ? ' ui-modal-danger' : ''}`;
+        confirmBtn.textContent = confirmText;
+
+        actions.append(cancelBtn, confirmBtn);
+        modal.append(actions);
+        backdrop.append(modal);
+        document.body.append(backdrop);
+
+        const prevBodyOverflow = document.body.style.overflow;
+        document.body.style.overflow = 'hidden';
+
+        const cancelResult = kind === 'prompt' ? null : false;
+        let settled = false;
+        /**
+         * @param {boolean|string|null} result
+         */
+        function close(result) {
+            if (settled) return;
+            settled = true;
+            document.removeEventListener('keydown', onKeydown, true);
+            document.body.style.overflow = prevBodyOverflow;
+            backdrop.remove();
+            if (previouslyFocused && typeof previouslyFocused.focus === 'function') {
+                previouslyFocused.focus();
+            }
+            resolve(result);
+        }
+
+        /**
+         * @param {KeyboardEvent} e
+         */
+        function onKeydown(e) {
+            if (e.key === 'Escape') {
+                e.preventDefault();
+                close(cancelResult);
+            } else if (e.key === 'Enter' && input && document.activeElement === input) {
+                // Buttons handle their own Enter/Space natively; only the prompt
+                // input needs Enter wired to confirm.
+                e.preventDefault();
+                close(input.value);
+            } else if (e.key === 'Tab') {
+                const order = input ? [input, cancelBtn, confirmBtn] : [cancelBtn, confirmBtn];
+                const first = order[0];
+                const last = order[order.length - 1];
+                if (e.shiftKey && document.activeElement === first) {
+                    e.preventDefault();
+                    last.focus();
+                } else if (!e.shiftKey && document.activeElement === last) {
+                    e.preventDefault();
+                    first.focus();
+                }
+            }
+        }
+
+        cancelBtn.addEventListener('click', () => close(cancelResult));
+        confirmBtn.addEventListener('click', () => close(input ? input.value : true));
+        backdrop.addEventListener('mousedown', (e) => {
+            if (e.target === backdrop) close(cancelResult);
+        });
+        document.addEventListener('keydown', onKeydown, true);
+
+        if (input) {
+            input.focus();
+            input.select();
+        } else {
+            confirmBtn.focus();
+        }
+    });
+}
+
+/**
+ * Themed confirm dialog. @see uiDialog
+ * @param {string} message
+ * @param {object} [options]
+ * @returns {Promise<boolean>}
+ */
+function uiConfirm(message, options = {}) {
+    return uiDialog({ ...options, message, kind: 'confirm' });
+}
+
+/**
+ * Themed prompt dialog. @see uiDialog
+ * @param {string} message
+ * @param {string} [defaultValue]
+ * @param {object} [options]
+ * @returns {Promise<string|null>}
+ */
+function uiPrompt(message, defaultValue = '', options = {}) {
+    return uiDialog({ ...options, message, defaultValue, kind: 'prompt' });
 }
 
 // ============================================================================
@@ -4413,7 +4588,7 @@ function displaySpacedRepetitionBuckets() {
         const cards = buckets[interval];
         const intervalLabel = getIntervalLabel(interval);
         const overdueCount = cards.filter((c) => c.isOverdue).length;
-        
+
         const isExpanded = expandedIntervals.has(interval) ? 'expanded' : '';
         const isSelected = selectedIntervals.has(interval) ? 'selected' : '';
         const isChecked = selectedIntervals.has(interval) ? 'checked' : '';
@@ -4630,10 +4805,11 @@ function handleDeleteSRCard(button) {
  * @param cardKey
  * @param currentInterval
  */
-function moveSRCard(cardKey, currentInterval) {
-    const newInterval = prompt(
+async function moveSRCard(cardKey, currentInterval) {
+    const newInterval = await uiPrompt(
         `Karte zu welchem Intervall (in Tagen) verschieben?\nAktuell: ${currentInterval} Tag${currentInterval === 1 ? '' : 'e'}`,
-        currentInterval
+        String(currentInterval),
+        { confirmText: 'Verschieben' }
     );
 
     if (newInterval === null) return; // Cancelled
@@ -4670,10 +4846,12 @@ function moveSRCard(cardKey, currentInterval) {
  * Delete a card from the SR system
  * @param cardKey
  */
-function deleteSRCard(cardKey) {
-    if (!confirm('Diese Karte aus dem Spaced Repetition System entfernen?')) {
-        return;
-    }
+async function deleteSRCard(cardKey) {
+    const ok = await uiConfirm('Diese Karte aus dem Spaced Repetition System entfernen?', {
+        confirmText: 'Entfernen',
+        danger: true,
+    });
+    if (!ok) return;
 
     delete spacedRepetitionData[cardKey];
     saveSpacedRepetitionData();
@@ -4688,7 +4866,7 @@ function deleteSRCard(cardKey) {
  *      (e.g. after re-importing an updated library deck), so the old
  *      "deckName|||oldQuestionText" key no longer matches any card.
  */
-function cleanupOrphanedSRData() {
+async function cleanupOrphanedSRData() {
     const orphanedKeys = [];
     const deckQuestionSets = new Map();
 
@@ -4719,13 +4897,11 @@ function cleanupOrphanedSRData() {
         return;
     }
 
-    if (
-        !confirm(
-            `${orphanedKeys.length} verwaiste Einträge gefunden (gelöschte Decks oder geänderte Fragen). Jetzt entfernen?`
-        )
-    ) {
-        return;
-    }
+    const ok = await uiConfirm(
+        `${orphanedKeys.length} verwaiste Einträge gefunden (gelöschte Decks oder geänderte Fragen). Jetzt entfernen?`,
+        { confirmText: 'Entfernen', danger: true }
+    );
+    if (!ok) return;
 
     for (const key of orphanedKeys) {
         delete spacedRepetitionData[key];

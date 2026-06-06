@@ -26,6 +26,8 @@ function showMessage(message, type = 'info') {
     const toast = document.createElement('div');
     toast.id = 'toast-notification';
     toast.className = `toast-notification toast-${type}`;
+    // Announce to assistive tech: errors assertively, everything else politely.
+    toast.setAttribute('role', type === 'error' ? 'alert' : 'status');
     toast.textContent = message;
     document.body.append(toast);
 
@@ -71,21 +73,21 @@ const LOBBY_AVATAR_BASES = [
 const LOBBY_AVATAR_BASE_DEFAULT = 'person';
 // Every accessory below is an RGI ZWJ partner for all three bases above.
 const LOBBY_AVATAR_ACCESSORIES = [
-    { id: 'rocket',     emoji: '🚀',  label: 'Astronaut*in' },
-    { id: 'firetruck',  emoji: '🚒',  label: 'Feuerwehr' },
-    { id: 'plane',      emoji: '✈️',  label: 'Pilot*in' },
-    { id: 'microscope', emoji: '🔬',  label: 'Forscher*in' },
-    { id: 'palette',    emoji: '🎨',  label: 'Kunst' },
-    { id: 'mic',        emoji: '🎤',  label: 'Gesang' },
-    { id: 'cooking',    emoji: '🍳',  label: 'Kochen' },
-    { id: 'medical',    emoji: '⚕️',  label: 'Medizin' },
-    { id: 'justice',    emoji: '⚖️',  label: 'Justiz' },
-    { id: 'farm',       emoji: '🌾',  label: 'Landwirtschaft' },
-    { id: 'wrench',     emoji: '🔧',  label: 'Mechanik' },
-    { id: 'computer',   emoji: '💻',  label: 'Computer' },
-    { id: 'factory',    emoji: '🏭',  label: 'Fabrik' },
-    { id: 'office',     emoji: '💼',  label: 'Büro' },
-    { id: 'baby',       emoji: '🍼',  label: 'Pflege' },
+    { id: 'rocket', emoji: '🚀', label: 'Astronaut*in' },
+    { id: 'firetruck', emoji: '🚒', label: 'Feuerwehr' },
+    { id: 'plane', emoji: '✈️', label: 'Pilot*in' },
+    { id: 'microscope', emoji: '🔬', label: 'Forscher*in' },
+    { id: 'palette', emoji: '🎨', label: 'Kunst' },
+    { id: 'mic', emoji: '🎤', label: 'Gesang' },
+    { id: 'cooking', emoji: '🍳', label: 'Kochen' },
+    { id: 'medical', emoji: '⚕️', label: 'Medizin' },
+    { id: 'justice', emoji: '⚖️', label: 'Justiz' },
+    { id: 'farm', emoji: '🌾', label: 'Landwirtschaft' },
+    { id: 'wrench', emoji: '🔧', label: 'Mechanik' },
+    { id: 'computer', emoji: '💻', label: 'Computer' },
+    { id: 'factory', emoji: '🏭', label: 'Fabrik' },
+    { id: 'office', emoji: '💼', label: 'Büro' },
+    { id: 'baby', emoji: '🍼', label: 'Pflege' },
 ];
 const LOBBY_AVATAR_BASE_SET = new Set(LOBBY_AVATAR_BASES.map((b) => b.id));
 const LOBBY_AVATAR_ACCESSORY_SET = new Set(LOBBY_AVATAR_ACCESSORIES.map((a) => a.id));
@@ -138,7 +140,9 @@ function commitAvatar() {
             LOBBY_AVATAR_STORAGE_KEY,
             JSON.stringify({ base: playerAvatarBase, accessory: playerAvatarAccessory })
         );
-    } catch { /* private mode */ }
+    } catch {
+        /* private mode */
+    }
     if (playerWs && playerWs.readyState === WebSocket.OPEN) {
         playerWs.send(JSON.stringify({ type: 'update_avatar', avatar: playerAvatar }));
     }
@@ -146,10 +150,10 @@ function commitAvatar() {
 
 // Themes mirror audio/themes/<id>/ folders. Keep ids in sync with the server.
 const LOBBY_MUSIC_THEMES = [
-    { id: 'arcade',         label: 'Arcade',    icon: '🕹️', tagline: 'Schnell & spielerisch' },
-    { id: 'cinematic',      label: 'Cinematic', icon: '🎬', tagline: 'Episch & dramatisch' },
-    { id: 'modern_minimal', label: 'Minimal',   icon: '📱', tagline: 'Klar & ruhig' },
-    { id: 'classical',      label: 'Klassik',   icon: '🎻', tagline: 'Elegant & akademisch' },
+    { id: 'arcade', label: 'Arcade', icon: '🕹️', tagline: 'Schnell & spielerisch' },
+    { id: 'cinematic', label: 'Cinematic', icon: '🎬', tagline: 'Episch & dramatisch' },
+    { id: 'modern_minimal', label: 'Minimal', icon: '📱', tagline: 'Klar & ruhig' },
+    { id: 'classical', label: 'Klassik', icon: '🎻', tagline: 'Elegant & akademisch' },
 ];
 const LOBBY_HOST_MUSIC_DEFAULT = 'modern_minimal';
 const LOBBY_HOST_MUSIC_STORAGE_KEY = 'quiz_host_lobby_music';
@@ -647,7 +651,9 @@ function reconnectBackoffMs(attempt) {
  *
  * @returns {{setTheme:Function, play:Function, stop:Function, getTheme:Function}}
  */
-function clamp01(v) { return Math.max(0, Math.min(1, v)); }
+function clamp01(v) {
+    return Math.max(0, Math.min(1, v));
+}
 
 // --- Phase veil + fly-in helpers ---
 // One persistent #phase-veil overlay in the document; we just toggle the
@@ -729,7 +735,9 @@ function preloadAudioCache() {
     for (const url of urls) {
         // Same-origin → no CORS. `force-cache` serves from cache if already
         // present, otherwise the request still populates it for later loads.
-        fetch(url, { cache: 'force-cache' }).catch(() => { /* ignore */ });
+        fetch(url, { cache: 'force-cache' }).catch(() => {
+            /* ignore */
+        });
     }
 }
 
@@ -751,7 +759,9 @@ function createMusicEngine() {
         a.loop = false; // manual loop management with crossfade
         a.preload = 'auto';
         a.volume = 0;
-        a.addEventListener('error', () => { /* silent fallback */ });
+        a.addEventListener('error', () => {
+            /* silent fallback */
+        });
         return a;
     }
 
@@ -859,7 +869,9 @@ function createMusicEngine() {
         incoming.volume = 0;
         const p = incoming.play();
         if (p && typeof p.catch === 'function') {
-            p.catch(() => { /* autoplay blocked or empty file */ });
+            p.catch(() => {
+                /* autoplay blocked or empty file */
+            });
         }
 
         rampVolume(incoming, LOOP_VOLUME, FADE_MS);
@@ -902,7 +914,11 @@ function createMusicEngine() {
         const remaining = Math.max(0, MIN_STINGER_HOLD_MS - elapsed);
         const finish = () => {
             if (cb) {
-                try { cb(); } catch { /* swallow */ }
+                try {
+                    cb();
+                } catch {
+                    /* swallow */
+                }
             }
             if (next) crossfadeToTrack(next);
         };
@@ -914,8 +930,12 @@ function createMusicEngine() {
     stinger.addEventListener('error', flushPending);
 
     return {
-        getTheme() { return theme; },
-        getCurrentTrack() { return activeTrack; },
+        getTheme() {
+            return theme;
+        },
+        getCurrentTrack() {
+            return activeTrack;
+        },
         setTheme(newTheme) {
             if (newTheme === theme) return;
             theme = newTheme;
@@ -968,9 +988,7 @@ function createMusicEngine() {
                 }
             }
             activeTrack = null;
-            stinger.src = isUniversal
-                ? HOST_AUDIO_FINAL_PATH
-                : audioFilePath(theme, track);
+            stinger.src = isUniversal ? HOST_AUDIO_FINAL_PATH : audioFilePath(theme, track);
             stinger.currentTime = 0;
             stinger.volume = STINGER_VOLUME;
             pendingLoop = followLoop || null;
@@ -1008,7 +1026,11 @@ function createMusicEngine() {
 
 let hostMusicEngine = null;
 let hostMusicVoteTally = {
-    arcade: 0, cinematic: 0, modern_minimal: 0, classical: 0, none: 0,
+    arcade: 0,
+    cinematic: 0,
+    modern_minimal: 0,
+    classical: 0,
+    none: 0,
 };
 let hostMusicLocked = false;
 let hostMusicWinner = null;
@@ -1154,7 +1176,8 @@ async function initializeHostFeatures(reconnectInfo) {
         };
 
         // Extracts MC questions from a parsed JSON blob (array or {cards:[...]})
-        const extractMCQuestions = (data) => getCandidates(data).filter((q) => isValidMCQuestion(q));
+        const extractMCQuestions = (data) =>
+            getCandidates(data).filter((q) => isValidMCQuestion(q));
 
         // Reads a single File as text
         const readFileText = (file) => file.text();
@@ -1282,7 +1305,7 @@ async function initializeHostFeatures(reconnectInfo) {
             const newIndex = optionGroups.length + 1;
             const optionGroup = document.createElement('div');
             optionGroup.className = 'option-group';
-            optionGroup.innerHTML = `<input type="text" class="option-input" placeholder="Option ${newIndex}"><input type="checkbox" class="correct-checkbox"><label>Richtig</label>`;
+            optionGroup.innerHTML = `<input type="text" class="option-input" placeholder="Option ${newIndex}" aria-label="Option ${newIndex}"><label><input type="checkbox" class="correct-checkbox" aria-label="Option ${newIndex} ist richtig"> Richtig</label>`;
             addOptionBtn.before(optionGroup);
         });
 
@@ -1738,8 +1761,8 @@ async function initializeHostFeatures(reconnectInfo) {
                 // questions before kicking the quiz off.
                 if (
                     !quizState.isQuestionActive &&
-                    (quizState.shuffledQuestions.length === 0) &&
-                    (quizState.questions.length === 0)
+                    quizState.shuffledQuestions.length === 0 &&
+                    quizState.questions.length === 0
                 ) {
                     showMessage(
                         'Nach dem Reload sind die Fragen verloren — bitte lade sie erneut hoch.',
@@ -1888,7 +1911,11 @@ async function initializeHostFeatures(reconnectInfo) {
                 }
                 hostHeartbeat = stopHeartbeat(hostHeartbeat);
                 if (hostWs) {
-                    try { hostWs.close(); } catch { /* ignore */ }
+                    try {
+                        hostWs.close();
+                    } catch {
+                        /* ignore */
+                    }
                 }
                 hostWs = null;
                 hostRoomId = null;
@@ -2194,10 +2221,7 @@ async function initializeHostFeatures(reconnectInfo) {
         const el = document.querySelector('#host-lobby-music-options');
         if (!el) return;
         el.innerHTML = '';
-        const options = [
-            { id: 'none', label: 'Keine' },
-            ...LOBBY_MUSIC_THEMES,
-        ];
+        const options = [{ id: 'none', label: 'Keine' }, ...LOBBY_MUSIC_THEMES];
         for (const opt of options) {
             const btn = document.createElement('button');
             btn.type = 'button';
@@ -2219,7 +2243,11 @@ async function initializeHostFeatures(reconnectInfo) {
         if (hostMusicLocked) return;
         if (themeId !== 'none' && !LOBBY_MUSIC_THEMES.some((t) => t.id === themeId)) return;
         hostLobbyMusicTheme = themeId;
-        try { localStorage.setItem(LOBBY_HOST_MUSIC_STORAGE_KEY, themeId); } catch { /* private mode */ }
+        try {
+            localStorage.setItem(LOBBY_HOST_MUSIC_STORAGE_KEY, themeId);
+        } catch {
+            /* private mode */
+        }
         if (hostMusicEngine) {
             hostMusicEngine.setTheme(themeId);
             if (themeId === 'none') hostMusicEngine.stop();
@@ -2238,7 +2266,11 @@ async function initializeHostFeatures(reconnectInfo) {
     function startHostLobbyMusic() {
         if (hostMusicLocked) return;
         let saved = null;
-        try { saved = localStorage.getItem(LOBBY_HOST_MUSIC_STORAGE_KEY); } catch { /* private mode */ }
+        try {
+            saved = localStorage.getItem(LOBBY_HOST_MUSIC_STORAGE_KEY);
+        } catch {
+            /* private mode */
+        }
         if (saved && (saved === 'none' || LOBBY_MUSIC_THEMES.some((t) => t.id === saved))) {
             hostLobbyMusicTheme = saved;
         }
@@ -2627,8 +2659,7 @@ async function initializeHostFeatures(reconnectInfo) {
         // with the scoreboard flying in. The leaderboard loop crossfades in
         // right after, queued via the stinger's followLoop.
         const veilTheme = hostMusicWinner || hostLobbyMusicTheme || 'none';
-        const isFinal =
-            quizState.currentQuestionIndex >= quizState.shuffledQuestions.length - 1;
+        const isFinal = quizState.currentQuestionIndex >= quizState.shuffledQuestions.length - 1;
 
         const goToLeaderboard = () => {
             // No category priming on the question→leaderboard veil; this is
@@ -2823,9 +2854,18 @@ async function initializeHostFeatures(reconnectInfo) {
             const i = document.createElement('div');
             i.className = 'leaderboard-item';
             switch (idx) {
-                case 0: { i.classList.add('rank-1'); break; }
-                case 1: { i.classList.add('rank-2'); break; }
-                case 2: { i.classList.add('rank-3'); break; }
+                case 0: {
+                    i.classList.add('rank-1');
+                    break;
+                }
+                case 1: {
+                    i.classList.add('rank-2');
+                    break;
+                }
+                case 2: {
+                    i.classList.add('rank-3');
+                    break;
+                }
             }
             const avatarHtml = p.avatar
                 ? `<span class="player-avatar" aria-hidden="true">${sanitizeHTML(p.avatar)}</span>`
@@ -2853,7 +2893,11 @@ let playerAvatarAccessory = null; // null = bare base
 let playerAvatar = composeAvatar(playerAvatarBase, playerAvatarAccessory);
 let playerVote = null; // theme id ('arcade' | 'cinematic' | 'modern_minimal' | 'classical' | 'none') or null
 let playerLobbyTally = {
-    arcade: 0, cinematic: 0, modern_minimal: 0, classical: 0, none: 0,
+    arcade: 0,
+    cinematic: 0,
+    modern_minimal: 0,
+    classical: 0,
+    none: 0,
 };
 let playerLobbyMusicLocked = false;
 let playerLobbyMusicWinner = null;
@@ -3133,8 +3177,7 @@ function initializePlayerFeatures(reconnectInfo) {
         if (lobbyAvatarBaseEl) {
             // Center shows the composed result: base alone if no accessory,
             // or `base + ZWJ + accessory` (e.g. man + rocket = 👨‍🚀).
-            lobbyAvatarBaseEl.textContent =
-                composeAvatar(playerAvatarBase, playerAvatarAccessory);
+            lobbyAvatarBaseEl.textContent = composeAvatar(playerAvatarBase, playerAvatarAccessory);
             lobbyAvatarBaseEl.dataset.baseId = playerAvatarBase;
         }
         if (lobbyAvatarBasePickerEl) {
@@ -3194,8 +3237,7 @@ function initializePlayerFeatures(reconnectInfo) {
         // center glyph (e.g. switching man → woman with rocket selected
         // recomposes 👩‍🚀 instead of leaving the center on a bare 👨).
         if (lobbyAvatarBaseEl) {
-            lobbyAvatarBaseEl.textContent =
-                composeAvatar(playerAvatarBase, playerAvatarAccessory);
+            lobbyAvatarBaseEl.textContent = composeAvatar(playerAvatarBase, playerAvatarAccessory);
             lobbyAvatarBaseEl.dataset.baseId = playerAvatarBase;
         }
         if (lobbyAvatarBasePickerEl) {
@@ -3217,8 +3259,7 @@ function initializePlayerFeatures(reconnectInfo) {
         playerAvatarAccessory = accessoryId;
         commitAvatar();
         if (lobbyAvatarBaseEl) {
-            lobbyAvatarBaseEl.textContent =
-                composeAvatar(playerAvatarBase, playerAvatarAccessory);
+            lobbyAvatarBaseEl.textContent = composeAvatar(playerAvatarBase, playerAvatarAccessory);
         }
         if (lobbyAvatarAccessoriesEl) {
             for (const el of lobbyAvatarAccessoriesEl.querySelectorAll('.avatar-accessory-tile')) {
@@ -3321,8 +3362,7 @@ function initializePlayerFeatures(reconnectInfo) {
                     ? `Spielmusik: <strong>${sanitizeHTML(winner.icon)} ${sanitizeHTML(winner.label)}</strong>`
                     : 'Spielmusik: <strong>Keine Musik</strong>';
             } else {
-                lobbyMusicStatusEl.textContent =
-                    'Mehrheit entscheidet · Gleichstand → Keine Musik';
+                lobbyMusicStatusEl.textContent = 'Mehrheit entscheidet · Gleichstand → Keine Musik';
             }
         }
     }
@@ -3386,7 +3426,8 @@ function initializePlayerFeatures(reconnectInfo) {
         }
         // Click outside the base picker to dismiss.
         document.addEventListener('click', (e) => {
-            if (!lobbyAvatarBasePickerEl || lobbyAvatarBasePickerEl.classList.contains('hidden')) return;
+            if (!lobbyAvatarBasePickerEl || lobbyAvatarBasePickerEl.classList.contains('hidden'))
+                return;
             if (lobbyAvatarBasePickerEl.contains(e.target)) return;
             if (lobbyAvatarBaseEl && lobbyAvatarBaseEl.contains(e.target)) return;
             closeBasePicker();
@@ -3406,7 +3447,9 @@ function initializePlayerFeatures(reconnectInfo) {
                     playerAvatar = composeAvatar(playerAvatarBase, playerAvatarAccessory);
                 }
             }
-        } catch { /* private mode or stale schema */ }
+        } catch {
+            /* private mode or stale schema */
+        }
 
         joinBtn.addEventListener('click', async () => {
             const roomCode = roomCodeInput.value.trim().replaceAll(/\s/g, ''); // Remove spaces
@@ -3578,12 +3621,7 @@ function initializePlayerFeatures(reconnectInfo) {
                     // out the counter.
                     playerWsReconnectAttempts = 0;
                     savePlayerSession(roomCode, msg.sessionId, msg.playerName || pName);
-                    saveActiveSession(
-                        'player',
-                        roomCode,
-                        msg.sessionId,
-                        msg.playerName || pName
-                    );
+                    saveActiveSession('player', roomCode, msg.sessionId, msg.playerName || pName);
                     {
                         const parsed = parseAvatarString(msg.avatar);
                         if (parsed) {
@@ -3675,9 +3713,10 @@ function initializePlayerFeatures(reconnectInfo) {
                     // local clock is never compared against the server epoch.
                     // For initial broadcasts remaining === duration; for
                     // reconnects the server pre-calculates the true remainder.
-                    const remaining = typeof msg.remaining === 'number'
-                        ? Math.max(0, msg.remaining)
-                        : msg.duration;
+                    const remaining =
+                        typeof msg.remaining === 'number'
+                            ? Math.max(0, msg.remaining)
+                            : msg.duration;
                     startPlayerTimer(remaining);
                     if (msg.alreadySubmitted) {
                         showMessage('Antwort wurde bereits gesendet.', 'info');
@@ -4055,8 +4094,7 @@ function initializePlayerFeatures(reconnectInfo) {
             );
         }
         if (tallyParts.length > 0) {
-            correctHtml +=
-                `<p class="result-pick-tally">${sanitizeHTML(tallyParts.join(' · '))}</p>`;
+            correctHtml += `<p class="result-pick-tally">${sanitizeHTML(tallyParts.join(' · '))}</p>`;
         }
         if (playerWasAutoSubmitted && !noAnswer) {
             correctHtml +=
@@ -4091,9 +4129,18 @@ function initializePlayerFeatures(reconnectInfo) {
                 for (const [idx, p] of frData.leaderboard.entries()) {
                     const li = document.createElement('li');
                     switch (idx) {
-                        case 0: { li.classList.add('rank-1'); break; }
-                        case 1: { li.classList.add('rank-2'); break; }
-                        case 2: { li.classList.add('rank-3'); break; }
+                        case 0: {
+                            li.classList.add('rank-1');
+                            break;
+                        }
+                        case 1: {
+                            li.classList.add('rank-2');
+                            break;
+                        }
+                        case 2: {
+                            li.classList.add('rank-3');
+                            break;
+                        }
                     }
                     li.textContent = `${idx + 1}. ${p.name}: ${Math.round(p.score)} Punkte`;
                     ol.append(li);

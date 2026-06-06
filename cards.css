@@ -562,7 +562,88 @@ body {
     transition: all 0.3s;
     flex: 1;
     min-width: 80px;
+    /* >=44px tap target (WCAG 2.5.5 / mobile guidelines). */
+    min-height: 44px;
     font-size: 1.05rem;
+}
+
+/* ── Accessible confirm/prompt dialog (replaces native confirm/prompt) ─────── */
+.ui-modal-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 10000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0, 0, 0, 0.5);
+    padding: max(1rem, env(safe-area-inset-top)) max(1rem, env(safe-area-inset-right))
+        max(1rem, env(safe-area-inset-bottom)) max(1rem, env(safe-area-inset-left));
+}
+
+.ui-modal {
+    width: 100%;
+    max-width: 26rem;
+    padding: 1.25rem;
+    border-radius: 10px;
+    background: var(--surface-color, #fff);
+    color: var(--text-color, #333);
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.35);
+}
+
+.ui-modal-message {
+    margin: 0 0 1rem;
+    font-size: 1.05rem;
+    line-height: 1.45;
+    white-space: pre-wrap;
+}
+
+.ui-modal-input {
+    width: 100%;
+    box-sizing: border-box;
+    margin: 0 0 1rem;
+    padding: 0.55rem 0.75rem;
+    font-size: 1rem;
+    border: 1px solid var(--input-border, #ced4da);
+    border-radius: 6px;
+    background: var(--input-bg, #fff);
+    color: var(--text-color, #333);
+}
+
+.ui-modal-actions {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 0.5rem;
+}
+
+.ui-modal-btn {
+    min-height: 44px;
+    padding: 0.5rem 1.1rem;
+    border: none;
+    border-radius: 6px;
+    font-size: 1rem;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.ui-modal-cancel {
+    background: var(--surface-secondary, #e9ecef);
+    color: var(--text-color, #333);
+}
+
+.ui-modal-confirm {
+    background: var(--primary-color, var(--primary, #4a6fa5));
+    color: #fff;
+}
+
+.ui-modal-danger {
+    background: var(--danger, #dc3545);
+    color: #fff;
+}
+
+.ui-modal-btn:focus-visible {
+    outline: 3px solid #1a73e8;
+    outline-offset: 2px;
 }
 
 .btn-primary {
@@ -1934,7 +2015,9 @@ body {
     color: var(--text-muted, #888);
     opacity: 0.45;
     border-radius: 2px;
-    transition: opacity 0.15s ease, color 0.15s ease;
+    transition:
+        opacity 0.15s ease,
+        color 0.15s ease;
 }
 
 .matching-unlink-btn:hover::before {

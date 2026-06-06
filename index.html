@@ -2,7 +2,7 @@
 <html lang="de">
     <head>
         <meta charset="UTF-8" />
-        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
         <meta
             http-equiv="Content-Security-Policy"
             content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com; font-src 'self' https://cdnjs.cloudflare.com; base-uri 'self'; form-action 'self';"
@@ -169,7 +169,8 @@
                 gap: 10px;
                 padding: 10px 20px;
                 background-color: transparent;
-                color: #0d8a8a;
+                /* Darkened from #0d8a8a (~4.2:1) to clear WCAG AA 4.5:1 on white. */
+                color: #0a7575;
                 border: 2px solid #14a8a8;
                 border-radius: 25px;
                 text-decoration: none;
@@ -183,7 +184,7 @@
             }
 
             .poll-link:hover {
-                background-color: #0d8a8a;
+                background-color: #0a7575;
                 color: white;
                 transform: translateY(-2px);
                 box-shadow: 0 4px 10px rgba(13, 138, 138, 0.3);
@@ -398,9 +399,7 @@
             </div>
 
             <div class="secondary-action">
-                <p class="secondary-hint">
-                    Für Wahl oder spontane Umfrage:
-                </p>
+                <p class="secondary-hint">Für Wahl oder spontane Umfrage:</p>
                 <a href="poll.html" id="poll-btn" class="poll-link">
                     <i class="fas fa-check-to-slot"></i>
                     <span>Live-Umfrage / Abstimmung starten</span>

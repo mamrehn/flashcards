@@ -82,6 +82,8 @@ function showMessage(message, type = 'info') {
     const toast = document.createElement('div');
     toast.id = 'toast-notification';
     toast.className = `toast-notification toast-${type}`;
+    // Announce to assistive tech: errors assertively, everything else politely.
+    toast.setAttribute('role', type === 'error' ? 'alert' : 'status');
     toast.textContent = message;
     document.body.append(toast);
 
@@ -93,6 +95,117 @@ function showMessage(message, type = 'info') {
             if (toast.parentNode) toast.remove();
         }, 300);
     }, 4000);
+}
+
+/**
+ * Accessible modal dialog — a themed, focus-trapped replacement for the native
+ * blocking `confirm()`. Resolves to `true` (confirmed) / `false` (cancelled).
+ * Esc and backdrop click cancel; Enter on the focused confirm button confirms;
+ * focus is trapped while open and restored on close.
+ * @param {object} opts
+ * @param {string} opts.message
+ * @param {string} [opts.confirmText]
+ * @param {string} [opts.cancelText]
+ * @param {boolean} [opts.danger] - Style the confirm button as destructive.
+ * @returns {Promise<boolean>}
+ */
+function uiDialog(opts) {
+    const { message, confirmText = 'OK', cancelText = 'Abbrechen', danger = false } = opts;
+
+    return new Promise((resolve) => {
+        const previouslyFocused = document.activeElement;
+
+        const backdrop = document.createElement('div');
+        backdrop.className = 'ui-modal-backdrop';
+
+        const modal = document.createElement('div');
+        modal.className = 'ui-modal';
+        modal.setAttribute('role', 'alertdialog');
+        modal.setAttribute('aria-modal', 'true');
+
+        const msgEl = document.createElement('p');
+        msgEl.className = 'ui-modal-message';
+        msgEl.id = `ui-modal-msg-${Date.now()}`;
+        msgEl.textContent = message;
+        modal.setAttribute('aria-labelledby', msgEl.id);
+        modal.append(msgEl);
+
+        const actions = document.createElement('div');
+        actions.className = 'ui-modal-actions';
+
+        const cancelBtn = document.createElement('button');
+        cancelBtn.type = 'button';
+        cancelBtn.className = 'ui-modal-btn ui-modal-cancel';
+        cancelBtn.textContent = cancelText;
+
+        const confirmBtn = document.createElement('button');
+        confirmBtn.type = 'button';
+        confirmBtn.className = `ui-modal-btn ui-modal-confirm${danger ? ' ui-modal-danger' : ''}`;
+        confirmBtn.textContent = confirmText;
+
+        actions.append(cancelBtn, confirmBtn);
+        modal.append(actions);
+        backdrop.append(modal);
+        document.body.append(backdrop);
+
+        const prevBodyOverflow = document.body.style.overflow;
+        document.body.style.overflow = 'hidden';
+
+        let settled = false;
+        /**
+         * @param {boolean} result
+         */
+        function close(result) {
+            if (settled) return;
+            settled = true;
+            document.removeEventListener('keydown', onKeydown, true);
+            document.body.style.overflow = prevBodyOverflow;
+            backdrop.remove();
+            if (previouslyFocused && typeof previouslyFocused.focus === 'function') {
+                previouslyFocused.focus();
+            }
+            resolve(result);
+        }
+
+        /**
+         * @param {KeyboardEvent} e
+         */
+        function onKeydown(e) {
+            if (e.key === 'Escape') {
+                e.preventDefault();
+                close(false);
+            } else if (e.key === 'Tab') {
+                const first = cancelBtn;
+                const last = confirmBtn;
+                if (e.shiftKey && document.activeElement === first) {
+                    e.preventDefault();
+                    last.focus();
+                } else if (!e.shiftKey && document.activeElement === last) {
+                    e.preventDefault();
+                    first.focus();
+                }
+            }
+        }
+
+        cancelBtn.addEventListener('click', () => close(false));
+        confirmBtn.addEventListener('click', () => close(true));
+        backdrop.addEventListener('mousedown', (e) => {
+            if (e.target === backdrop) close(false);
+        });
+        document.addEventListener('keydown', onKeydown, true);
+
+        confirmBtn.focus();
+    });
+}
+
+/**
+ * Themed confirm dialog. @see uiDialog
+ * @param {string} message
+ * @param {object} [options]
+ * @returns {Promise<boolean>}
+ */
+function uiConfirm(message, options = {}) {
+    return uiDialog({ ...options, message });
 }
 
 /**
@@ -331,10 +444,7 @@ function clearActiveSession() {
  */
 function saveLastPicks(roomId, questionKey, picks) {
     try {
-        sessionStorage.setItem(
-            PICKS_STORAGE_KEY,
-            JSON.stringify({ roomId, questionKey, picks })
-        );
+        sessionStorage.setItem(PICKS_STORAGE_KEY, JSON.stringify({ roomId, questionKey, picks }));
     } catch {
         /* private mode */
     }
@@ -461,21 +571,81 @@ const composerFixedOptions = ['', ''];
 // All are source: "players" polls (voting for someone in the room). The host
 // can always type their own question instead; suggestions are unobtrusive.
 const POLL_SUGGESTIONS = [
-    { title: 'Mebis-Sherpa',                       question: 'Mebis-Sherpa: Wer hat die eigene Gruppe durch die tiefsten Mebis-Kapitel gecarried und alle mit Lösungen versorgt?' },
-    { title: 'Koffein-Reaktor',                    question: 'Koffein-Reaktor: Wer besteht nach drei Jahren eigentlich zu 80 % aus Energydrinks und Mate statt aus Wasser?' },
-    { title: 'Linux-Prediger*in',                  question: 'Linux-Prediger*in: Wer lässt keine Gelegenheit aus zu betonen, dass Windows Müll ist und Arch das einzig Wahre ist? (I use Arch, btw)' },
-    { title: 'Git-Poet*in',                        question: 'Git-Poet*in: Wer schreibt die wildesten Commit-Messages? (z. B. "update", "fix", "asdasd", "jetzt gehts")' },
-    { title: 'Stealth-Gamer*in',                   question: 'Stealth-Gamer*in: Wer hat im Unterricht völlig unbemerkt hunderte Stunden in Games versenkt?' },
-    { title: 'Zukünftige*r Start-up-Milliardär*in', question: 'Zukünftige*r Start-up-Milliardär*in: Wer gründet als Erstes ein Start-up für ein überkomplexes Gadget, das absolut niemand braucht?' },
-    { title: 'Chief Hydration Officer (CHO)',      question: 'Chief Hydration Officer (CHO): Wer hat heldenhaft die Klasse am Wasserspender versorgt und vor dem Dehydrieren bewahrt?' },
-    { title: 'ChatGPT-Magier*in',                  question: 'ChatGPT-Magier*in: Wer hat die gesamte schulische Existenz aus perfekten Prompts zusammengeklebt – und es hat funktioniert?' },
-    { title: 'Bullshit-Bingo-Legende',             question: 'Bullshit-Bingo-Legende: Schlecht gelernt, perfekt verkauft: Wer referiert souverän über Themen, die erst 5 Minuten vorher gegoogelt wurden?' },
-    { title: 'Heimliche*r 1st-Level-Support',      question: 'Heimliche*r 1st-Level-Support: Wer ist die unfreiwillige Dauer-Hotline für die ByCS- und WLAN-Probleme der kompletten Klasse?' },
-    { title: 'Berichtsheft-Pedant*in',             question: 'Berichtsheft-Pedant*in: Wer führt das Berichtsheft wie ein Git-Repo – mit fix:-Einträgen und einem Branch pro Quartal?' },
-    { title: 'IHK-Stoiker*in',                     question: 'IHK-Stoiker*in: Wer hat in der Abschlussprüfung eiskalt vier Sekunden vor Abgabe das letzte Kreuz gesetzt?' },
-    { title: 'Hardware-Jünger*in',                 question: 'Hardware-Jünger*in: Wer investiert das allererste richtige Gehalt sofort in eine RTX 5090?' },
-    { title: 'Meme-Beauftragte*r',                 question: 'Meme-Beauftragte*r: Wer postet im Klassenchat deutlich mehr Memes und :wq-Jokes als ernsthafte Nachrichten?' },
-    { title: 'Open-Source-Philanthrop*in',         question: 'Open-Source-Philanthrop*in: Wer hat während des Unterrichts heimlich Bug-Bounties gesammelt oder Pull Requests eingereicht?' },
+    {
+        title: 'Mebis-Sherpa',
+        question:
+            'Mebis-Sherpa: Wer hat die eigene Gruppe durch die tiefsten Mebis-Kapitel gecarried und alle mit Lösungen versorgt?',
+    },
+    {
+        title: 'Koffein-Reaktor',
+        question:
+            'Koffein-Reaktor: Wer besteht nach drei Jahren eigentlich zu 80 % aus Energydrinks und Mate statt aus Wasser?',
+    },
+    {
+        title: 'Linux-Prediger*in',
+        question:
+            'Linux-Prediger*in: Wer lässt keine Gelegenheit aus zu betonen, dass Windows Müll ist und Arch das einzig Wahre ist? (I use Arch, btw)',
+    },
+    {
+        title: 'Git-Poet*in',
+        question:
+            'Git-Poet*in: Wer schreibt die wildesten Commit-Messages? (z. B. "update", "fix", "asdasd", "jetzt gehts")',
+    },
+    {
+        title: 'Stealth-Gamer*in',
+        question:
+            'Stealth-Gamer*in: Wer hat im Unterricht völlig unbemerkt hunderte Stunden in Games versenkt?',
+    },
+    {
+        title: 'Zukünftige*r Start-up-Milliardär*in',
+        question:
+            'Zukünftige*r Start-up-Milliardär*in: Wer gründet als Erstes ein Start-up für ein überkomplexes Gadget, das absolut niemand braucht?',
+    },
+    {
+        title: 'Chief Hydration Officer (CHO)',
+        question:
+            'Chief Hydration Officer (CHO): Wer hat heldenhaft die Klasse am Wasserspender versorgt und vor dem Dehydrieren bewahrt?',
+    },
+    {
+        title: 'ChatGPT-Magier*in',
+        question:
+            'ChatGPT-Magier*in: Wer hat die gesamte schulische Existenz aus perfekten Prompts zusammengeklebt – und es hat funktioniert?',
+    },
+    {
+        title: 'Bullshit-Bingo-Legende',
+        question:
+            'Bullshit-Bingo-Legende: Schlecht gelernt, perfekt verkauft: Wer referiert souverän über Themen, die erst 5 Minuten vorher gegoogelt wurden?',
+    },
+    {
+        title: 'Heimliche*r 1st-Level-Support',
+        question:
+            'Heimliche*r 1st-Level-Support: Wer ist die unfreiwillige Dauer-Hotline für die ByCS- und WLAN-Probleme der kompletten Klasse?',
+    },
+    {
+        title: 'Berichtsheft-Pedant*in',
+        question:
+            'Berichtsheft-Pedant*in: Wer führt das Berichtsheft wie ein Git-Repo – mit fix:-Einträgen und einem Branch pro Quartal?',
+    },
+    {
+        title: 'IHK-Stoiker*in',
+        question:
+            'IHK-Stoiker*in: Wer hat in der Abschlussprüfung eiskalt vier Sekunden vor Abgabe das letzte Kreuz gesetzt?',
+    },
+    {
+        title: 'Hardware-Jünger*in',
+        question:
+            'Hardware-Jünger*in: Wer investiert das allererste richtige Gehalt sofort in eine RTX 5090?',
+    },
+    {
+        title: 'Meme-Beauftragte*r',
+        question:
+            'Meme-Beauftragte*r: Wer postet im Klassenchat deutlich mehr Memes und :wq-Jokes als ernsthafte Nachrichten?',
+    },
+    {
+        title: 'Open-Source-Philanthrop*in',
+        question:
+            'Open-Source-Philanthrop*in: Wer hat während des Unterrichts heimlich Bug-Bounties gesammelt oder Pull Requests eingereicht?',
+    },
 ];
 
 // Cycle state: the host walks a single shuffled order of all suggestions
@@ -783,50 +953,50 @@ async function reconnectHostWs() {
  */
 function handleHostPlayerUpdate(msg) {
     switch (msg.type) {
-    case 'player_joined': {
-        hostPlayers.set(msg.sessionId, { name: msg.name, isConnected: true });
-        // If a poll is in progress and it's voting on people in the room,
-        // append the new joiner's name to the options so others can rank
-        // them too. Appending (never inserting) keeps previously-submitted
-        // indices valid.
-        if (hostActivePoll && hostActivePoll.source === 'players' && !hostPollEnding) {
-            appendPlayerToActivePoll(msg.name, msg.sessionId);
-        }
-
-    break;
-    }
-    case 'player_reconnected': {
-        // Cancel any pending grace-period auto-end: a reconnect could mean
-        // the player is back at the voting screen and about to submit.
-        if (hostDisconnectGraceTimeout) {
-            clearTimeout(hostDisconnectGraceTimeout);
-            hostDisconnectGraceTimeout = null;
-        }
-        const existing = hostPlayers.get(msg.sessionId);
-        if (existing) {
-            existing.isConnected = true;
-            existing.name = msg.name || existing.name;
-        } else {
+        case 'player_joined': {
             hostPlayers.set(msg.sessionId, { name: msg.name, isConnected: true });
-        }
-        // The reconnecting player may not be in the poll's options yet —
-        // they could have been disconnected at vote-start, or originally
-        // joined during a host outage and thus never propagated to our
-        // local poll state. appendPlayerToActivePoll's optionPlayerIds
-        // check makes this idempotent if they're already represented.
-        if (hostActivePoll && hostActivePoll.source === 'players' && !hostPollEnding) {
-            appendPlayerToActivePoll(msg.name, msg.sessionId);
-        }
+            // If a poll is in progress and it's voting on people in the room,
+            // append the new joiner's name to the options so others can rank
+            // them too. Appending (never inserting) keeps previously-submitted
+            // indices valid.
+            if (hostActivePoll && hostActivePoll.source === 'players' && !hostPollEnding) {
+                appendPlayerToActivePoll(msg.name, msg.sessionId);
+            }
 
-    break;
-    }
-    case 'player_left': {
-        const existing = hostPlayers.get(msg.sessionId);
-        if (existing) existing.isConnected = false;
+            break;
+        }
+        case 'player_reconnected': {
+            // Cancel any pending grace-period auto-end: a reconnect could mean
+            // the player is back at the voting screen and about to submit.
+            if (hostDisconnectGraceTimeout) {
+                clearTimeout(hostDisconnectGraceTimeout);
+                hostDisconnectGraceTimeout = null;
+            }
+            const existing = hostPlayers.get(msg.sessionId);
+            if (existing) {
+                existing.isConnected = true;
+                existing.name = msg.name || existing.name;
+            } else {
+                hostPlayers.set(msg.sessionId, { name: msg.name, isConnected: true });
+            }
+            // The reconnecting player may not be in the poll's options yet —
+            // they could have been disconnected at vote-start, or originally
+            // joined during a host outage and thus never propagated to our
+            // local poll state. appendPlayerToActivePoll's optionPlayerIds
+            // check makes this idempotent if they're already represented.
+            if (hostActivePoll && hostActivePoll.source === 'players' && !hostPollEnding) {
+                appendPlayerToActivePoll(msg.name, msg.sessionId);
+            }
 
-    break;
-    }
-    // No default
+            break;
+        }
+        case 'player_left': {
+            const existing = hostPlayers.get(msg.sessionId);
+            if (existing) existing.isConnected = false;
+
+            break;
+        }
+        // No default
     }
     refreshPlayersUI();
     // Voting view: the count denominator changes too; refresh and check if
@@ -875,7 +1045,11 @@ function scheduleDisconnectGraceEnd() {
  */
 function appendPlayerToActivePoll(rawName, sessionId) {
     if (!hostActivePoll) return;
-    if (sessionId && hostActivePoll.optionPlayerIds && hostActivePoll.optionPlayerIds.has(sessionId)) {
+    if (
+        sessionId &&
+        hostActivePoll.optionPlayerIds &&
+        hostActivePoll.optionPlayerIds.has(sessionId)
+    ) {
         return;
     }
     if (!hostWs || hostWs.readyState !== WebSocket.OPEN) return;
@@ -944,11 +1118,7 @@ function maybeAutoEndVote() {
     endVote();
 }
 
-const HOST_PLAYER_UPDATE_TYPES = new Set([
-    'player_joined',
-    'player_reconnected',
-    'player_left',
-]);
+const HOST_PLAYER_UPDATE_TYPES = new Set(['player_joined', 'player_reconnected', 'player_left']);
 
 /**
  * Host-side message dispatcher.
@@ -1123,10 +1293,7 @@ function refreshPlayersUI() {
  * Switch from the lobby into the question composer.
  */
 function openComposer() {
-    showOnly(
-        ['host-lobby', 'host-composer', 'host-voting', 'host-reveal'],
-        'host-composer'
-    );
+    showOnly(['host-lobby', 'host-composer', 'host-voting', 'host-reveal'], 'host-composer');
     // Default to player-source on a fresh composer (typical use case is voting
     // on people in the room); preserve choice on subsequent openings.
     renderComposerOptionsList();
@@ -1160,10 +1327,7 @@ function suggestionMatches(idx, q) {
     if (!q) return true;
     if (idx === null) return false;
     const s = POLL_SUGGESTIONS[idx];
-    return (
-        s.title.toLowerCase().includes(q) ||
-        s.question.toLowerCase().includes(q)
-    );
+    return s.title.toLowerCase().includes(q) || s.question.toLowerCase().includes(q);
 }
 
 /**
@@ -1356,10 +1520,7 @@ function collectRealOptions(source) {
     if (source === 'players') {
         const entries = snapshotPlayerOptions();
         if (entries.length < 2) {
-            showMessage(
-                'Mindestens 2 verbundene Spieler nötig, um über sie abzustimmen.',
-                'error'
-            );
+            showMessage('Mindestens 2 verbundene Spieler nötig, um über sie abzustimmen.', 'error');
             return null;
         }
         return entries;
@@ -1490,10 +1651,7 @@ function startVote() {
 
     hostWs.send(JSON.stringify(payload));
 
-    showOnly(
-        ['host-lobby', 'host-composer', 'host-voting', 'host-reveal'],
-        'host-voting'
-    );
+    showOnly(['host-lobby', 'host-composer', 'host-voting', 'host-reveal'], 'host-voting');
     renderHostVotingView();
     startHostTimer(duration);
 }
@@ -1590,24 +1748,15 @@ function endVote() {
             hostWs.send(JSON.stringify(resultsPayload));
         } catch {
             hostPendingResults = resultsPayload;
-            showMessage(
-                'Keine Verbindung — Ergebnisse werden nach Reconnect gesendet.',
-                'info'
-            );
+            showMessage('Keine Verbindung — Ergebnisse werden nach Reconnect gesendet.', 'info');
         }
     } else {
         hostPendingResults = resultsPayload;
-        showMessage(
-            'Keine Verbindung — Ergebnisse werden nach Reconnect gesendet.',
-            'info'
-        );
+        showMessage('Keine Verbindung — Ergebnisse werden nach Reconnect gesendet.', 'info');
     }
 
     renderHostReveal(podium);
-    showOnly(
-        ['host-lobby', 'host-composer', 'host-voting', 'host-reveal'],
-        'host-reveal'
-    );
+    showOnly(['host-lobby', 'host-composer', 'host-voting', 'host-reveal'], 'host-reveal');
 }
 
 /**
@@ -1623,8 +1772,8 @@ function endVote() {
 function computeBordaPodium(poll) {
     const realOpts = poll.realOptions;
     const N = poll.picksPerVoter;
-    const scores = Array.from({length: realOpts.length}).fill(0);
-    const mentions = Array.from({length: realOpts.length}).fill(0);
+    const scores = Array.from({ length: realOpts.length }).fill(0);
+    const mentions = Array.from({ length: realOpts.length }).fill(0);
 
     for (const ans of hostAnswers.values()) {
         const seen = new Set();
@@ -1692,7 +1841,11 @@ function renderHostReveal(podium) {
     dom.hostPodiumList.classList.toggle('single-result', hostActivePoll.revealCount === 1);
     for (const entry of podium) {
         dom.hostPodiumList.append(
-            buildPodiumItem(entry.rank, entry.label, `${entry.points} Pkt · ${entry.mentions}× genannt`)
+            buildPodiumItem(
+                entry.rank,
+                entry.label,
+                `${entry.points} Pkt · ${entry.mentions}× genannt`
+            )
         );
     }
 
@@ -1724,8 +1877,12 @@ function nextQuestion() {
 /**
  * Host terminates the session entirely.
  */
-function endSession() {
-    if (!confirm('Sitzung wirklich beenden?')) return;
+async function endSession() {
+    const ok = await uiConfirm('Sitzung wirklich beenden?', {
+        confirmText: 'Beenden',
+        danger: true,
+    });
+    if (!ok) return;
     hostSuppressReconnect = true;
     if (hostWs && hostWs.readyState === WebSocket.OPEN) {
         hostWs.send(JSON.stringify({ type: 'terminate' }));
@@ -1944,13 +2101,7 @@ function handlePlayerMessage(msg) {
             // the next message will be the question payload itself; we just
             // need to land on the waiting view in the meantime.
             showOnly(
-                [
-                    'join-form',
-                    'player-waiting',
-                    'player-vote',
-                    'player-submitted',
-                    'player-reveal',
-                ],
+                ['join-form', 'player-waiting', 'player-vote', 'player-submitted', 'player-reveal'],
                 'player-waiting'
             );
             dom.playerWaitingStatus.textContent = msg.isReconnect
@@ -2010,10 +2161,7 @@ function onQuestionReceived(msg) {
     if (!meta) {
         // This room is running a quiz, not a poll. Refuse loudly rather than
         // silently render a malformed picker.
-        showMessage(
-            'Dieser Raum ist keine Umfrage. Bitte tritt über quiz.html bei.',
-            'error'
-        );
+        showMessage('Dieser Raum ist keine Umfrage. Bitte tritt über quiz.html bei.', 'error');
         return;
     }
     playerCurrentMeta = meta;
@@ -2033,9 +2181,7 @@ function onQuestionReceived(msg) {
     playerSelectedRanks = [];
     renderVoteView();
     const remaining =
-        typeof msg.remaining === 'number'
-            ? Math.max(0, msg.remaining)
-            : Number(msg.duration) || 45;
+        typeof msg.remaining === 'number' ? Math.max(0, msg.remaining) : Number(msg.duration) || 45;
     startPlayerTimer(remaining);
 }
 
@@ -2379,10 +2525,7 @@ document.addEventListener('DOMContentLoaded', () => {
     });
     dom.startVoteBtn.addEventListener('click', startVote);
     dom.backToLobbyBtn.addEventListener('click', () => {
-        showOnly(
-            ['host-lobby', 'host-composer', 'host-voting', 'host-reveal'],
-            'host-lobby'
-        );
+        showOnly(['host-lobby', 'host-composer', 'host-voting', 'host-reveal'], 'host-lobby');
     });
     dom.endVoteBtn.addEventListener('click', endVote);
     dom.nextQuestionBtn.addEventListener('click', nextQuestion);
@@ -2439,10 +2582,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const roomFromUrl = (initialParams.get('room') || '').toUpperCase();
     const bootRoomId = bootSession ? (bootSession.roomId || '').toUpperCase() : '';
     const urlOverridesSession =
-        roomFromUrl &&
-        bootSession &&
-        bootSession.role === 'player' &&
-        roomFromUrl !== bootRoomId;
+        roomFromUrl && bootSession && bootSession.role === 'player' && roomFromUrl !== bootRoomId;
 
     if (urlOverridesSession) {
         clearActiveSession();

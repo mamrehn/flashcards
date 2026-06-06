@@ -9,8 +9,13 @@
  */
 function triggerConfettiTo(url) {
     const confettiContainer = document.querySelector('#confetti-container');
-    if (!confettiContainer) {
-        console.warn('Confetti-Container nicht gefunden.');
+    const prefersReducedMotion =
+        globalThis.matchMedia && globalThis.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    // Skip the celebratory confetti (and its 1.25 s navigation delay) when the
+    // container is missing or the user asked for reduced motion — go straight
+    // to the destination instead of making them wait for an animation.
+    if (!confettiContainer || prefersReducedMotion) {
+        if (!confettiContainer) console.warn('Confetti-Container nicht gefunden.');
         globalThis.location.href = url;
         return;
     }

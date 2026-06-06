@@ -487,9 +487,7 @@ function handleReconnectHost(ws, msg) {
             isConnected: p.isConnected,
             hasAnswered: !!p.hasAnswered,
             currentAnswer:
-                p.hasAnswered && Array.isArray(p.currentAnswer)
-                    ? [...p.currentAnswer]
-                    : null,
+                p.hasAnswered && Array.isArray(p.currentAnswer) ? [...p.currentAnswer] : null,
         });
     }
 
@@ -820,9 +818,7 @@ function handleSubmitAnswer(ws, msg) {
     // non-integer values can't score on the host anyway, so reject them here.
     if (!Array.isArray(msg.answerData) || msg.answerData.length > 20) return;
     if (
-        !msg.answerData.every(
-            (i) => Number.isInteger(i) && i >= 0 && i < MAX_OPTIONS_PER_QUESTION
-        )
+        !msg.answerData.every((i) => Number.isInteger(i) && i >= 0 && i < MAX_OPTIONS_PER_QUESTION)
     ) {
         return;
     }
@@ -938,7 +934,8 @@ function handleSendResults(ws, msg) {
     if (Array.isArray(msg.leaderboard)) {
         leaderboard = msg.leaderboard.slice(0, MAX_PLAYERS_PER_ROOM).map((entry) => ({
             name: typeof entry.name === 'string' ? entry.name.slice(0, 50) : 'Spieler',
-            score: typeof entry.score === 'number' && Number.isFinite(entry.score) ? entry.score : 0,
+            score:
+                typeof entry.score === 'number' && Number.isFinite(entry.score) ? entry.score : 0,
         }));
     }
 

@@ -131,6 +131,8 @@ header h1 {
     color: white;
     border: none;
     padding: 0.5rem 1rem;
+    /* >=44px tap target (WCAG 2.5.5 / mobile guidelines). */
+    min-height: 44px;
     border-radius: 4px;
     cursor: pointer;
     font-size: 1.05rem;
@@ -430,16 +432,16 @@ select:focus {
     letter-spacing: 0.02em;
 }
 
-.result-status[data-state="correct"] .result-icon {
+.result-status[data-state='correct'] .result-icon {
     background-color: rgba(40, 167, 69, 0.18);
     color: var(--correct-color);
     box-shadow: 0 0 0 4px rgba(40, 167, 69, 0.08);
 }
-.result-status[data-state="correct"] .result-label {
+.result-status[data-state='correct'] .result-label {
     color: var(--correct-color);
 }
 
-.result-status[data-state="partial"] .result-icon {
+.result-status[data-state='partial'] .result-icon {
     background-color: rgba(255, 184, 0, 0.2);
     color: #b07f00;
     box-shadow: 0 0 0 4px rgba(255, 184, 0, 0.08);
@@ -449,24 +451,24 @@ select:focus {
     font-size: 1.5rem;
     font-variant-numeric: tabular-nums;
 }
-.result-status[data-state="partial"] .result-label {
+.result-status[data-state='partial'] .result-label {
     color: #8c6500;
 }
 
-.result-status[data-state="incorrect"] .result-icon {
+.result-status[data-state='incorrect'] .result-icon {
     background-color: rgba(220, 53, 69, 0.18);
     color: var(--wrong-color);
     box-shadow: 0 0 0 4px rgba(220, 53, 69, 0.08);
 }
-.result-status[data-state="incorrect"] .result-label {
+.result-status[data-state='incorrect'] .result-label {
     color: var(--wrong-color);
 }
 
-.result-status[data-state="none"] .result-icon {
+.result-status[data-state='none'] .result-icon {
     background-color: rgba(128, 128, 128, 0.15);
     color: var(--text-muted);
 }
-.result-status[data-state="none"] .result-label {
+.result-status[data-state='none'] .result-label {
     color: var(--text-muted);
 }
 
@@ -484,9 +486,18 @@ select:focus {
 }
 
 @keyframes result-points-pop {
-    0% { transform: scale(0.4); opacity: 0; }
-    55% { transform: scale(1.2); opacity: 1; }
-    100% { transform: scale(1); opacity: 1; }
+    0% {
+        transform: scale(0.4);
+        opacity: 0;
+    }
+    55% {
+        transform: scale(1.2);
+        opacity: 1;
+    }
+    100% {
+        transform: scale(1);
+        opacity: 1;
+    }
 }
 
 .result-score {
@@ -760,93 +771,250 @@ select:focus {
 }
 
 @keyframes confetti-avatar-pop {
-    0%   { transform: translate(-50%, -50%) scale(0);   opacity: 0; }
-    25%  { transform: translate(-50%, -50%) scale(1.4); opacity: 1; }
-    40%  { transform: translate(-50%, -50%) scale(0.85); }
-    55%  { transform: translate(-50%, -50%) scale(1.1); }
-    70%  { transform: translate(-50%, -50%) scale(1);   opacity: 1; }
-    100% { transform: translate(-50%, -50%) scale(1);   opacity: 0; }
+    0% {
+        transform: translate(-50%, -50%) scale(0);
+        opacity: 0;
+    }
+    25% {
+        transform: translate(-50%, -50%) scale(1.4);
+        opacity: 1;
+    }
+    40% {
+        transform: translate(-50%, -50%) scale(0.85);
+    }
+    55% {
+        transform: translate(-50%, -50%) scale(1.1);
+    }
+    70% {
+        transform: translate(-50%, -50%) scale(1);
+        opacity: 1;
+    }
+    100% {
+        transform: translate(-50%, -50%) scale(1);
+        opacity: 0;
+    }
 }
 
 @keyframes confetti-avatar-launch {
-    0%   { transform: translate(-50%, -50%) translateY(55vh) rotate(0deg);     opacity: 0; }
-    10%  { opacity: 1; }
-    50%  { transform: translate(-50%, -50%) translateY(-25vh) rotate(720deg);  opacity: 1; }
-    100% { transform: translate(-50%, -50%) translateY(60vh)  rotate(1440deg); opacity: 0; }
+    0% {
+        transform: translate(-50%, -50%) translateY(55vh) rotate(0deg);
+        opacity: 0;
+    }
+    10% {
+        opacity: 1;
+    }
+    50% {
+        transform: translate(-50%, -50%) translateY(-25vh) rotate(720deg);
+        opacity: 1;
+    }
+    100% {
+        transform: translate(-50%, -50%) translateY(60vh) rotate(1440deg);
+        opacity: 0;
+    }
 }
 
 @keyframes confetti-avatar-wiggle {
-    0%   { transform: translate(-50%, -50%) scale(0)   rotate(0deg);   opacity: 0; }
-    20%  { transform: translate(-50%, -50%) scale(1)   rotate(-15deg); opacity: 1; }
-    35%  { transform: translate(-50%, -50%) scale(1)   rotate(15deg); }
-    50%  { transform: translate(-50%, -50%) scale(1)   rotate(-15deg); }
-    65%  { transform: translate(-50%, -50%) scale(1)   rotate(15deg); }
-    80%  { transform: translate(-50%, -50%) scale(1)   rotate(0deg);   opacity: 1; }
-    100% { transform: translate(-50%, -50%) scale(1)   rotate(0deg);   opacity: 0; }
+    0% {
+        transform: translate(-50%, -50%) scale(0) rotate(0deg);
+        opacity: 0;
+    }
+    20% {
+        transform: translate(-50%, -50%) scale(1) rotate(-15deg);
+        opacity: 1;
+    }
+    35% {
+        transform: translate(-50%, -50%) scale(1) rotate(15deg);
+    }
+    50% {
+        transform: translate(-50%, -50%) scale(1) rotate(-15deg);
+    }
+    65% {
+        transform: translate(-50%, -50%) scale(1) rotate(15deg);
+    }
+    80% {
+        transform: translate(-50%, -50%) scale(1) rotate(0deg);
+        opacity: 1;
+    }
+    100% {
+        transform: translate(-50%, -50%) scale(1) rotate(0deg);
+        opacity: 0;
+    }
 }
 
 @keyframes confetti-avatar-bubble {
-    0%   { transform: translate(-50%, -50%) translate(0,    40vh) scale(0.6); opacity: 0; }
-    15%  { opacity: 1; }
-    30%  { transform: translate(-50%, -50%) translate(-30px, 20vh) scale(1);   opacity: 1; }
-    50%  { transform: translate(-50%, -50%) translate(20px,  0)    scale(1);   opacity: 1; }
-    70%  { transform: translate(-50%, -50%) translate(-15px, -20vh) scale(1);  opacity: 1; }
-    100% { transform: translate(-50%, -50%) translate(0,    -45vh) scale(1);   opacity: 0; }
+    0% {
+        transform: translate(-50%, -50%) translate(0, 40vh) scale(0.6);
+        opacity: 0;
+    }
+    15% {
+        opacity: 1;
+    }
+    30% {
+        transform: translate(-50%, -50%) translate(-30px, 20vh) scale(1);
+        opacity: 1;
+    }
+    50% {
+        transform: translate(-50%, -50%) translate(20px, 0) scale(1);
+        opacity: 1;
+    }
+    70% {
+        transform: translate(-50%, -50%) translate(-15px, -20vh) scale(1);
+        opacity: 1;
+    }
+    100% {
+        transform: translate(-50%, -50%) translate(0, -45vh) scale(1);
+        opacity: 0;
+    }
 }
 
 @keyframes confetti-avatar-drop {
-    0%   { transform: translate(-50%, -50%) translateY(-55vh) scaleX(0.9) scaleY(1.1); opacity: 0; }
-    10%  { opacity: 1; }
-    45%  { transform: translate(-50%, -50%) translateY(0)     scaleX(0.9) scaleY(1.1); opacity: 1; }
-    55%  { transform: translate(-50%, -50%) translateY(0)     scaleX(1.3) scaleY(0.6); }
-    72%  { transform: translate(-50%, -50%) translateY(-22vh) scaleX(0.9) scaleY(1.1); }
-    87%  { transform: translate(-50%, -50%) translateY(0)     scaleX(1.1) scaleY(0.85); }
-    100% { transform: translate(-50%, -50%) translateY(0)     scaleX(1)   scaleY(1);   opacity: 0; }
+    0% {
+        transform: translate(-50%, -50%) translateY(-55vh) scaleX(0.9) scaleY(1.1);
+        opacity: 0;
+    }
+    10% {
+        opacity: 1;
+    }
+    45% {
+        transform: translate(-50%, -50%) translateY(0) scaleX(0.9) scaleY(1.1);
+        opacity: 1;
+    }
+    55% {
+        transform: translate(-50%, -50%) translateY(0) scaleX(1.3) scaleY(0.6);
+    }
+    72% {
+        transform: translate(-50%, -50%) translateY(-22vh) scaleX(0.9) scaleY(1.1);
+    }
+    87% {
+        transform: translate(-50%, -50%) translateY(0) scaleX(1.1) scaleY(0.85);
+    }
+    100% {
+        transform: translate(-50%, -50%) translateY(0) scaleX(1) scaleY(1);
+        opacity: 0;
+    }
 }
 
 @keyframes confetti-avatar-spin {
-    0%   { transform: translate(-50%, -50%) scale(0) rotate(0deg);      opacity: 0; }
-    20%  { transform: translate(-50%, -50%) scale(1) rotate(180deg);    opacity: 1; }
-    80%  { transform: translate(-50%, -50%) scale(1) rotate(900deg);    opacity: 1; }
-    100% { transform: translate(-50%, -50%) scale(1) rotate(1080deg);   opacity: 0; }
+    0% {
+        transform: translate(-50%, -50%) scale(0) rotate(0deg);
+        opacity: 0;
+    }
+    20% {
+        transform: translate(-50%, -50%) scale(1) rotate(180deg);
+        opacity: 1;
+    }
+    80% {
+        transform: translate(-50%, -50%) scale(1) rotate(900deg);
+        opacity: 1;
+    }
+    100% {
+        transform: translate(-50%, -50%) scale(1) rotate(1080deg);
+        opacity: 0;
+    }
 }
 
 @keyframes confetti-avatar-pulse {
-    0%   { transform: translate(-50%, -50%) scale(0);   opacity: 0; }
-    10%  { transform: translate(-50%, -50%) scale(1);   opacity: 1; }
-    25%  { transform: translate(-50%, -50%) scale(1.3); }
-    40%  { transform: translate(-50%, -50%) scale(1);   }
-    55%  { transform: translate(-50%, -50%) scale(1.35); }
-    70%  { transform: translate(-50%, -50%) scale(1);   }
-    85%  { transform: translate(-50%, -50%) scale(1.25); opacity: 1; }
-    100% { transform: translate(-50%, -50%) scale(1);   opacity: 0; }
+    0% {
+        transform: translate(-50%, -50%) scale(0);
+        opacity: 0;
+    }
+    10% {
+        transform: translate(-50%, -50%) scale(1);
+        opacity: 1;
+    }
+    25% {
+        transform: translate(-50%, -50%) scale(1.3);
+    }
+    40% {
+        transform: translate(-50%, -50%) scale(1);
+    }
+    55% {
+        transform: translate(-50%, -50%) scale(1.35);
+    }
+    70% {
+        transform: translate(-50%, -50%) scale(1);
+    }
+    85% {
+        transform: translate(-50%, -50%) scale(1.25);
+        opacity: 1;
+    }
+    100% {
+        transform: translate(-50%, -50%) scale(1);
+        opacity: 0;
+    }
 }
 
 @keyframes confetti-avatar-comet {
-    0%   { transform: translate(-50%, -50%) translate(-55vw, 35vh)  rotate(-25deg); opacity: 0; }
-    15%  { opacity: 1; }
-    85%  { opacity: 1; }
-    100% { transform: translate(-50%, -50%) translate(55vw,  -35vh) rotate(-25deg); opacity: 0; }
+    0% {
+        transform: translate(-50%, -50%) translate(-55vw, 35vh) rotate(-25deg);
+        opacity: 0;
+    }
+    15% {
+        opacity: 1;
+    }
+    85% {
+        opacity: 1;
+    }
+    100% {
+        transform: translate(-50%, -50%) translate(55vw, -35vh) rotate(-25deg);
+        opacity: 0;
+    }
 }
 
 @keyframes confetti-avatar-multibounce {
-    0%   { transform: translate(-50%, -50%) translateY(-50vh) scale(1);              opacity: 0; }
-    10%  { opacity: 1; }
-    25%  { transform: translate(-50%, -50%) translateY(0)     scaleX(1.25) scaleY(0.7); }
-    42%  { transform: translate(-50%, -50%) translateY(-28vh) scale(1); }
-    58%  { transform: translate(-50%, -50%) translateY(0)     scaleX(1.2)  scaleY(0.75); }
-    72%  { transform: translate(-50%, -50%) translateY(-14vh) scale(1); }
-    86%  { transform: translate(-50%, -50%) translateY(0)     scaleX(1.1)  scaleY(0.85); }
-    100% { transform: translate(-50%, -50%) translateY(0)     scale(1);              opacity: 0; }
+    0% {
+        transform: translate(-50%, -50%) translateY(-50vh) scale(1);
+        opacity: 0;
+    }
+    10% {
+        opacity: 1;
+    }
+    25% {
+        transform: translate(-50%, -50%) translateY(0) scaleX(1.25) scaleY(0.7);
+    }
+    42% {
+        transform: translate(-50%, -50%) translateY(-28vh) scale(1);
+    }
+    58% {
+        transform: translate(-50%, -50%) translateY(0) scaleX(1.2) scaleY(0.75);
+    }
+    72% {
+        transform: translate(-50%, -50%) translateY(-14vh) scale(1);
+    }
+    86% {
+        transform: translate(-50%, -50%) translateY(0) scaleX(1.1) scaleY(0.85);
+    }
+    100% {
+        transform: translate(-50%, -50%) translateY(0) scale(1);
+        opacity: 0;
+    }
 }
 
 @keyframes confetti-avatar-orbit {
-    0%   { transform: translate(-50%, -50%) translate(0,     32vh)  scale(0); opacity: 0; }
-    15%  { transform: translate(-50%, -50%) translate(32vh,  0)     scale(1); opacity: 1; }
-    35%  { transform: translate(-50%, -50%) translate(0,     -32vh) scale(1); opacity: 1; }
-    55%  { transform: translate(-50%, -50%) translate(-32vh, 0)     scale(1); opacity: 1; }
-    78%  { transform: translate(-50%, -50%) translate(0,     32vh)  scale(1); opacity: 1; }
-    100% { transform: translate(-50%, -50%) translate(22vh,  22vh)  scale(0); opacity: 0; }
+    0% {
+        transform: translate(-50%, -50%) translate(0, 32vh) scale(0);
+        opacity: 0;
+    }
+    15% {
+        transform: translate(-50%, -50%) translate(32vh, 0) scale(1);
+        opacity: 1;
+    }
+    35% {
+        transform: translate(-50%, -50%) translate(0, -32vh) scale(1);
+        opacity: 1;
+    }
+    55% {
+        transform: translate(-50%, -50%) translate(-32vh, 0) scale(1);
+        opacity: 1;
+    }
+    78% {
+        transform: translate(-50%, -50%) translate(0, 32vh) scale(1);
+        opacity: 1;
+    }
+    100% {
+        transform: translate(-50%, -50%) translate(22vh, 22vh) scale(0);
+        opacity: 0;
+    }
 }
 
 #leaderboard {
@@ -947,7 +1115,7 @@ select:focus {
     display: flex;
     align-items: center;
     gap: 0.5rem;
-    min-width: 0;        /* let `.player-name` ellipsis kick in inside grid */
+    min-width: 0; /* let `.player-name` ellipsis kick in inside grid */
     /* Subtle accent on the leading edge so connected players still read as
        "active". Drops to muted grey when .disconnected (handled below). */
     box-shadow: inset 3px 0 0 0 var(--primary-color);
@@ -1270,7 +1438,7 @@ body.player-in-game footer {
 }
 
 #waiting-room.in-game #waiting-message::before {
-    content: "";
+    content: '';
     display: inline-block;
     width: 0.6rem;
     height: 0.6rem;
@@ -1282,8 +1450,15 @@ body.player-in-game footer {
 }
 
 @keyframes in-game-pulse {
-    0%, 100% { opacity: 0.3; transform: scale(0.85); }
-    50% { opacity: 1; transform: scale(1); }
+    0%,
+    100% {
+        opacity: 0.3;
+        transform: scale(0.85);
+    }
+    50% {
+        opacity: 1;
+        transform: scale(1);
+    }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -1350,7 +1525,9 @@ body.player-in-game footer {
 }
 
 @media (max-width: 420px) {
-    .music-poll-grid { grid-template-columns: 1fr; }
+    .music-poll-grid {
+        grid-template-columns: 1fr;
+    }
 }
 
 .music-poll-card {
@@ -1367,17 +1544,36 @@ body.player-in-game footer {
     color: var(--text-color, #222);
     cursor: pointer;
     text-align: left;
-    transition: transform 0.08s ease, border-color 0.15s, background-color 0.15s, box-shadow 0.2s;
+    transition:
+        transform 0.08s ease,
+        border-color 0.15s,
+        background-color 0.15s,
+        box-shadow 0.2s;
 }
 
 /* Per-theme palette + typography, mirroring the README vibes:
    arcade=hot-pink chiptune, cinematic=violet trailer, modern_minimal=clean
    cyan app, classical=warm gold chamber. */
-.music-poll-card[data-theme='arcade']         { --theme-color: #e91e63; --theme-tint: rgba(233, 30, 99, 0.12); }
-.music-poll-card[data-theme='cinematic']      { --theme-color: #6b42a6; --theme-tint: rgba(107, 66, 166, 0.14); }
-.music-poll-card[data-theme='modern_minimal'] { --theme-color: #4dabf7; --theme-tint: rgba(77, 171, 247, 0.12); }
-.music-poll-card[data-theme='classical']      { --theme-color: #b8860b; --theme-tint: rgba(184, 134, 11, 0.14); }
-.music-poll-card[data-theme='none']           { --theme-color: #6c7480; --theme-tint: rgba(108, 116, 128, 0.14); }
+.music-poll-card[data-theme='arcade'] {
+    --theme-color: #e91e63;
+    --theme-tint: rgba(233, 30, 99, 0.12);
+}
+.music-poll-card[data-theme='cinematic'] {
+    --theme-color: #6b42a6;
+    --theme-tint: rgba(107, 66, 166, 0.14);
+}
+.music-poll-card[data-theme='modern_minimal'] {
+    --theme-color: #4dabf7;
+    --theme-tint: rgba(77, 171, 247, 0.12);
+}
+.music-poll-card[data-theme='classical'] {
+    --theme-color: #b8860b;
+    --theme-tint: rgba(184, 134, 11, 0.14);
+}
+.music-poll-card[data-theme='none'] {
+    --theme-color: #6c7480;
+    --theme-tint: rgba(108, 116, 128, 0.14);
+}
 
 /* Subtle typographic flair so each card *feels* like its theme without
    shouting. Names only — taglines stay in the system font for legibility. */
@@ -1465,7 +1661,8 @@ body.player-in-game footer {
 }
 
 @keyframes music-poll-now-pulse {
-    0%, 100% {
+    0%,
+    100% {
         box-shadow: 0 0 0 0 color-mix(in srgb, var(--theme-color) 55%, transparent);
     }
     50% {
@@ -1518,7 +1715,9 @@ body.player-in-game footer {
     justify-content: center;
     opacity: 0;
     transform: scale(0.7);
-    transition: opacity 0.15s, transform 0.15s;
+    transition:
+        opacity 0.15s,
+        transform 0.15s;
 }
 
 .music-poll-card.selected .music-poll-check,
@@ -1598,7 +1797,9 @@ body.player-in-game footer {
     display: flex;
     align-items: center;
     justify-content: center;
-    transition: transform 0.1s, box-shadow 0.15s;
+    transition:
+        transform 0.1s,
+        box-shadow 0.15s;
 }
 
 @media (hover: hover) {
@@ -1657,7 +1858,10 @@ body.player-in-game footer {
     display: flex;
     align-items: center;
     justify-content: center;
-    transition: background-color 0.1s, border-color 0.1s, transform 0.05s;
+    transition:
+        background-color 0.1s,
+        border-color 0.1s,
+        transform 0.05s;
 }
 
 @media (hover: hover) {
@@ -1700,11 +1904,13 @@ body.player-in-game footer {
     display: flex;
     align-items: center;
     justify-content: center;
-    transform:
-        rotate(var(--angle))
-        translateY(calc(-1 * var(--radius)))
+    transform: rotate(var(--angle)) translateY(calc(-1 * var(--radius)))
         rotate(calc(-1 * var(--angle)));
-    transition: background-color 0.1s, border-color 0.1s, box-shadow 0.15s, transform 0.1s;
+    transition:
+        background-color 0.1s,
+        border-color 0.1s,
+        box-shadow 0.15s,
+        transform 0.1s;
     transform-origin: center;
 }
 
@@ -1716,11 +1922,8 @@ body.player-in-game footer {
 }
 
 .avatar-accessory-tile:active {
-    transform:
-        rotate(var(--angle))
-        translateY(calc(-1 * var(--radius)))
-        rotate(calc(-1 * var(--angle)))
-        scale(0.92);
+    transform: rotate(var(--angle)) translateY(calc(-1 * var(--radius)))
+        rotate(calc(-1 * var(--angle))) scale(0.92);
 }
 
 .avatar-accessory-tile.selected {
@@ -1730,23 +1933,43 @@ body.player-in-game footer {
 }
 
 @media (max-width: 480px) {
-    .avatar-radial { width: 22rem; max-width: 100%; }
-    .avatar-base-center { width: 6.4rem; height: 6.4rem; font-size: 3.6rem; border-width: 3px; }
-    .avatar-base-center::after { width: 1.25rem; height: 1.25rem; font-size: 0.9rem; }
+    .avatar-radial {
+        width: 22rem;
+        max-width: 100%;
+    }
+    .avatar-base-center {
+        width: 6.4rem;
+        height: 6.4rem;
+        font-size: 3.6rem;
+        border-width: 3px;
+    }
+    .avatar-base-center::after {
+        width: 1.25rem;
+        height: 1.25rem;
+        font-size: 0.9rem;
+    }
     .avatar-accessory-tile {
         --radius: 8.5rem;
-        width: 3rem; height: 3rem;
+        width: 3rem;
+        height: 3rem;
         margin: -1.5rem 0 0 -1.5rem;
         font-size: 1.8rem;
     }
 }
 
 @media (max-width: 360px) {
-    .avatar-radial { width: 100%; }
-    .avatar-base-center { width: 5.6rem; height: 5.6rem; font-size: 3.2rem; }
+    .avatar-radial {
+        width: 100%;
+    }
+    .avatar-base-center {
+        width: 5.6rem;
+        height: 5.6rem;
+        font-size: 3.2rem;
+    }
     .avatar-accessory-tile {
         --radius: 7.4rem;
-        width: 2.6rem; height: 2.6rem;
+        width: 2.6rem;
+        height: 2.6rem;
         margin: -1.3rem 0 0 -1.3rem;
         font-size: 1.5rem;
     }
@@ -1793,7 +2016,9 @@ body.player-in-game footer {
     color: var(--text-color, #222);
     cursor: pointer;
     font-size: 0.95rem;
-    transition: border-color 0.1s, background-color 0.1s;
+    transition:
+        border-color 0.1s,
+        background-color 0.1s;
 }
 
 .host-music-option:hover {
@@ -1822,8 +2047,8 @@ body.player-in-game footer {
    transition at all. `prefers-reduced-motion` keeps only the opacity
    change. Decorative — aria-hidden in markup. */
 .phase-veil {
-    --veil-bg: #1a1428;   /* deep violet — readable fade-to-dark on light pages */
-    --veil-fg: #fdf6e3;   /* warm parchment text on the deep-violet bg */
+    --veil-bg: #1a1428; /* deep violet — readable fade-to-dark on light pages */
+    --veil-fg: #fdf6e3; /* warm parchment text on the deep-violet bg */
     position: fixed;
     top: 0;
     left: 0;
@@ -1846,19 +2071,49 @@ body.player-in-game footer {
 
 /* Light-mode tints — strong, theme-flavoured darks. The matching --veil-fg
    is the *inverse* tonal palette, so foreground text always reads cleanly. */
-.phase-veil[data-theme='arcade']         { --veil-bg: #5d0f30; --veil-fg: #ffd4e0; }
-.phase-veil[data-theme='cinematic']      { --veil-bg: #0a0612; --veil-fg: #f4e8ff; }
-.phase-veil[data-theme='modern_minimal'] { --veil-bg: #1a3552; --veil-fg: #d8e6f0; }
-.phase-veil[data-theme='classical']      { --veil-bg: #3a2410; --veil-fg: #f5e6c8; }
-.phase-veil[data-theme='none']           { --veil-bg: #1a1428; --veil-fg: #fdf6e3; }
+.phase-veil[data-theme='arcade'] {
+    --veil-bg: #5d0f30;
+    --veil-fg: #ffd4e0;
+}
+.phase-veil[data-theme='cinematic'] {
+    --veil-bg: #0a0612;
+    --veil-fg: #f4e8ff;
+}
+.phase-veil[data-theme='modern_minimal'] {
+    --veil-bg: #1a3552;
+    --veil-fg: #d8e6f0;
+}
+.phase-veil[data-theme='classical'] {
+    --veil-bg: #3a2410;
+    --veil-fg: #f5e6c8;
+}
+.phase-veil[data-theme='none'] {
+    --veil-bg: #1a1428;
+    --veil-fg: #fdf6e3;
+}
 
 /* Dark-mode tints — invert to a light wash so the veil still contrasts;
    foreground flips to deep colour for legibility. */
-[data-theme='dark'] .phase-veil                                    { --veil-bg: #f5efe0; --veil-fg: #1a1428; }
-[data-theme='dark'] .phase-veil[data-theme='arcade']               { --veil-bg: #ffd4e0; --veil-fg: #5d0f30; }
-[data-theme='dark'] .phase-veil[data-theme='cinematic']            { --veil-bg: #efe6ff; --veil-fg: #0a0612; }
-[data-theme='dark'] .phase-veil[data-theme='modern_minimal']       { --veil-bg: #d8e6f0; --veil-fg: #1a3552; }
-[data-theme='dark'] .phase-veil[data-theme='classical']            { --veil-bg: #f5e6c8; --veil-fg: #3a2410; }
+[data-theme='dark'] .phase-veil {
+    --veil-bg: #f5efe0;
+    --veil-fg: #1a1428;
+}
+[data-theme='dark'] .phase-veil[data-theme='arcade'] {
+    --veil-bg: #ffd4e0;
+    --veil-fg: #5d0f30;
+}
+[data-theme='dark'] .phase-veil[data-theme='cinematic'] {
+    --veil-bg: #efe6ff;
+    --veil-fg: #0a0612;
+}
+[data-theme='dark'] .phase-veil[data-theme='modern_minimal'] {
+    --veil-bg: #d8e6f0;
+    --veil-fg: #1a3552;
+}
+[data-theme='dark'] .phase-veil[data-theme='classical'] {
+    --veil-bg: #f5e6c8;
+    --veil-fg: #3a2410;
+}
 
 .phase-veil-content {
     position: absolute;
@@ -1892,7 +2147,9 @@ body.player-in-game footer {
     color: var(--veil-fg);
 }
 
-.phase-veil-eyebrow:empty { display: none; }
+.phase-veil-eyebrow:empty {
+    display: none;
+}
 
 .phase-veil-categories {
     display: flex;
@@ -1914,13 +2171,23 @@ body.player-in-game footer {
 }
 
 @keyframes phase-fly-up {
-    from { opacity: 0; transform: translateY(18px); }
-    to   { opacity: 1; transform: translateY(0); }
+    from {
+        opacity: 0;
+        transform: translateY(18px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
 }
 
 @keyframes phase-fade-in {
-    from { opacity: 0; }
-    to   { opacity: 1; }
+    from {
+        opacity: 0;
+    }
+    to {
+        opacity: 1;
+    }
 }
 
 .phase-fly-up {
@@ -1931,8 +2198,14 @@ body.player-in-game footer {
    with a small scale-up, so the reveal reads as a "podium drop" rather
    than a subtle slide. */
 @keyframes phase-burst-up {
-    from { opacity: 0; transform: translateY(60px) scale(0.94); }
-    to   { opacity: 1; transform: translateY(0) scale(1); }
+    from {
+        opacity: 0;
+        transform: translateY(60px) scale(0.94);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
 }
 
 .phase-burst-up {
@@ -1945,14 +2218,29 @@ body.player-in-game footer {
    top-to-bottom as they appear. The leader (.rank-1) gets an overshoot
    pop so the winner feels rewarded. */
 @keyframes phase-stagger-up {
-    from { opacity: 0; transform: translateY(28px); }
-    to   { opacity: 1; transform: translateY(0); }
+    from {
+        opacity: 0;
+        transform: translateY(28px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
 }
 
 @keyframes phase-stagger-pop {
-    0%   { opacity: 0; transform: translateY(28px) scale(0.85); }
-    65%  { opacity: 1; transform: translateY(-4px) scale(1.07); }
-    100% { opacity: 1; transform: translateY(0) scale(1); }
+    0% {
+        opacity: 0;
+        transform: translateY(28px) scale(0.85);
+    }
+    65% {
+        opacity: 1;
+        transform: translateY(-4px) scale(1.07);
+    }
+    100% {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
 }
 
 .phase-stagger > * {
@@ -1964,16 +2252,36 @@ body.player-in-game footer {
     transform-origin: center;
 }
 
-.phase-stagger > *:nth-child(1)  { animation-delay:  60ms; }
-.phase-stagger > *:nth-child(2)  { animation-delay: 140ms; }
-.phase-stagger > *:nth-child(3)  { animation-delay: 220ms; }
-.phase-stagger > *:nth-child(4)  { animation-delay: 300ms; }
-.phase-stagger > *:nth-child(5)  { animation-delay: 380ms; }
-.phase-stagger > *:nth-child(6)  { animation-delay: 460ms; }
-.phase-stagger > *:nth-child(7)  { animation-delay: 540ms; }
-.phase-stagger > *:nth-child(8)  { animation-delay: 620ms; }
-.phase-stagger > *:nth-child(9)  { animation-delay: 700ms; }
-.phase-stagger > *:nth-child(10) { animation-delay: 780ms; }
+.phase-stagger > *:nth-child(1) {
+    animation-delay: 60ms;
+}
+.phase-stagger > *:nth-child(2) {
+    animation-delay: 140ms;
+}
+.phase-stagger > *:nth-child(3) {
+    animation-delay: 220ms;
+}
+.phase-stagger > *:nth-child(4) {
+    animation-delay: 300ms;
+}
+.phase-stagger > *:nth-child(5) {
+    animation-delay: 380ms;
+}
+.phase-stagger > *:nth-child(6) {
+    animation-delay: 460ms;
+}
+.phase-stagger > *:nth-child(7) {
+    animation-delay: 540ms;
+}
+.phase-stagger > *:nth-child(8) {
+    animation-delay: 620ms;
+}
+.phase-stagger > *:nth-child(9) {
+    animation-delay: 700ms;
+}
+.phase-stagger > *:nth-child(10) {
+    animation-delay: 780ms;
+}
 
 @media (prefers-reduced-motion: reduce) {
     .phase-veil {
@@ -1984,5 +2292,7 @@ body.player-in-game footer {
     .phase-stagger > * {
         animation: phase-fade-in 120ms linear both;
     }
-    .phase-stagger > * { animation-delay: 0ms !important; }
+    .phase-stagger > * {
+        animation-delay: 0ms !important;
+    }
 }
