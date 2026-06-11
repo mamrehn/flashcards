@@ -124,7 +124,23 @@ let deckStats = {};
 /** @type {string} Current study mode: 'spaced-repetition', 'incorrect-only' */
 let studyMode = 'spaced-repetition';
 
-/** @type {{[cardKey: string]: {interval: number, easeFactor: number, repetitions: number, nextReview: Date}}} Spaced repetition data per card */
+/**
+ * Cram-oriented repetition ladder. Students typically repeat decks intensively
+ * over the few days before an exam, so the steps expand from minutes to days
+ * instead of the classic SM-2 day/week/month scale.
+ */
+const SR_STEP_MINUTES = [10, 30, 120, 480, 1440, 4320, 10080];
+
+/** Human-readable duration per ladder step (parallel to SR_STEP_MINUTES) */
+const SR_STEP_LABELS = ['10 Min', '30 Min', '2 Std', '8 Std', '1 Tag', '3 Tage', '7 Tage'];
+
+/** Score at or above which an answer advances the card one ladder step */
+const SR_PASS_SCORE = 0.8;
+
+/** Score below which the card falls back to the first ladder step */
+const SR_FAIL_SCORE = 0.5;
+
+/** @type {{[cardKey: string]: {step: number, repetitions: number, nextReview: Date, lastReview?: Date, history: number[]}}} Spaced repetition data per card */
 let spacedRepetitionData = {};
 
 // ============================================================================
@@ -1058,6 +1074,7 @@ async function handleBackupImport(backup) {
 
         if (backup.spacedRepetitionData) {
             spacedRepetitionData = backup.spacedRepetitionData;
+            reviveSRData();
             localStorage.setItem('spacedRepetitionData', JSON.stringify(spacedRepetitionData));
         }
 
@@ -1433,7 +1450,10 @@ function displaySavedDecks(searchTerm = '', preselectDeckNames = []) {
             deleteSavedTopic(topic);
         });
 
-        header.append(checkbox, chevron, folderIcon, titleBlock, cardCount, deleteButton);
+        header.append(checkbox, chevron, folderIcon, titleBlock, cardCount);
+        const knowledgeBadge = buildKnowledgeBadge(topic.decks);
+        if (knowledgeBadge) header.append(knowledgeBadge);
+        header.append(deleteButton);
         folder.append(header);
 
         const catsContainer = document.createElement('div');
@@ -1842,8 +1862,13 @@ function initializeQuiz(loadedCards) {
         // Randomize initial card order
         shuffleArray(cards);
 
-        // Prioritize incorrectly answered cards if available
-        prioritizeIncorrectCards();
+        if (studyMode === 'spaced-repetition') {
+            // Order by review urgency so even a short session is spent optimally
+            orderCardsForReview();
+        } else {
+            // Prioritize incorrectly answered cards if available
+            prioritizeIncorrectCards();
+        }
 
         // Apply "Nur falsche wiederholen" filter at quiz start — the dropdown
         // is hidden during active quizzes, so this can only take effect here.
@@ -1892,6 +1917,38 @@ function initializeQuiz(loadedCards) {
     // Update UI
     updateStatistics();
     showCurrentCard();
+}
+
+/**
+ * Order the session for spaced-repetition mode. Nothing is excluded — students
+ * cram whole decks repeatedly before an exam — but the order puts review time
+ * where it pays off most:
+ *   1. due cards (nextReview reached), weakest knowledge first
+ *   2. cards never seen before
+ *   3. not-yet-due cards, soonest due first
+ * Ties keep the previous shuffle order (Array.sort is stable).
+ */
+function orderCardsForReview() {
+    const now = new Date();
+    const rankOf = (card) => {
+        const data = spacedRepetitionData[getCardKey(card)];
+        if (!data?.history?.length) return { group: 1, value: 0 };
+        if (data.nextReview <= now) return { group: 0, value: cardKnowledge(data) };
+        return { group: 2, value: data.nextReview.getTime() };
+    };
+    const ranked = cards.map((card) => ({ card, rank: rankOf(card) }));
+    ranked.sort((a, b) => a.rank.group - b.rank.group || a.rank.value - b.rank.value);
+    cards = ranked.map((r) => r.card);
+
+    // Tell the student what this session looks like (only once cards are known)
+    const dueCount = ranked.filter((r) => r.rank.group === 0).length;
+    const newCount = ranked.filter((r) => r.rank.group === 1).length;
+    if (dueCount + newCount < cards.length) {
+        const laterCount = cards.length - dueCount - newCount;
+        showMessage(
+            `📅 ${dueCount} fällig · ${newCount} neu · ${laterCount} erst später fällig (kommen zuletzt)`
+        );
+    }
 }
 
 /**
@@ -3345,7 +3402,7 @@ function markAnswer(scoreOrBool) {
     // Update spaced repetition data
     const isFromSRBuckets = activeDecks.length === 1 && activeDecks[0] === 'SR Buckets';
     if (studyMode === 'spaced-repetition' || isFromSRBuckets) {
-        updateSpacedRepetition(card, isFullyCorrect, score);
+        updateSpacedRepetition(card, score);
     }
 
     // Accumulate fractional scores
@@ -3494,6 +3551,27 @@ function showFeedback() {
     feedbackElement.classList.remove('hidden');
     cardContainer.classList.add('hidden');
 
+    // Overall knowledge estimate for the studied decks (after this session's
+    // answers are recorded) — gives crammers a "bin ich bereit?" readout.
+    let knowledgeLine = document.querySelector('#feedback-knowledge');
+    if (!knowledgeLine) {
+        knowledgeLine = document.createElement('div');
+        knowledgeLine.id = 'feedback-knowledge';
+        knowledgeLine.className = 'feedback-knowledge';
+        // final-score is a <span> inside a <p> — insert after the paragraph
+        finalScoreElement.parentElement.after(knowledgeLine);
+    }
+    const realDecks = activeDecks.filter((d) => savedDecks[d]);
+    const knowledge = computeDeckKnowledge(realDecks);
+    if (knowledge.total > 0) {
+        const level = knowledge.percent >= 80 ? 'high' : knowledge.percent >= 50 ? 'mid' : 'low';
+        knowledgeLine.className = `feedback-knowledge feedback-knowledge-${level}`;
+        knowledgeLine.textContent = `📈 Lernstand: ${knowledge.percent} % (${knowledge.attempted} von ${knowledge.total} Karten geübt)`;
+        knowledgeLine.classList.remove('hidden');
+    } else {
+        knowledgeLine.classList.add('hidden');
+    }
+
     // Show/hide buttons based on whether we're in SR bucket mode
     const isFromSRBuckets = activeDecks.length === 1 && activeDecks[0] === 'SR Buckets';
     if (isFromSRBuckets) {
@@ -3524,6 +3602,11 @@ function showFeedback() {
             if (totalAnswered === 0) continue;
 
             const deckAccuracy = Math.round((stats.correct / totalAnswered) * 100);
+            const deckKnowledge = savedDecks[deckName] ? computeDeckKnowledge([deckName]) : null;
+            const knowledgeSuffix =
+                deckKnowledge && deckKnowledge.total > 0
+                    ? `, Lernstand ${deckKnowledge.percent}%`
+                    : '';
 
             const deckStatItem = document.createElement('div');
             deckStatItem.className = 'deck-stat-item';
@@ -3531,7 +3614,7 @@ function showFeedback() {
                 <strong>${sanitizeHTML(deckName)}:</strong>
                 ${formatScore(stats.correct)} richtig,
                 ${formatScore(stats.incorrect)} falsch,
-                ${deckAccuracy}% Genauigkeit
+                ${deckAccuracy}% Genauigkeit${knowledgeSuffix}
             `;
 
             deckStatsList.append(deckStatItem);
@@ -3735,47 +3818,146 @@ function getCardKey(card) {
  * @param {boolean} wasCorrect - Whether answer was correct
  * @param score
  */
-function updateSpacedRepetition(card, wasCorrect, score) {
+function updateSpacedRepetition(card, score) {
     const key = getCardKey(card);
-    let data = spacedRepetitionData[key] || {
-        interval: 1,
-        easeFactor: 2.5,
+    const now = new Date();
+    const data = spacedRepetitionData[key] ?? {
+        step: 0,
         repetitions: 0,
-        nextReview: new Date(),
+        nextReview: now,
         history: [],
     };
 
-    // Ensure history array exists (backward compat with old data)
+    // Backward compat with entries created before the cram ladder
     if (!data.history) data.history = [];
+    if (data.step === undefined) data.step = migrateLegacyInterval(data.interval);
 
-    // Record attempt (score: 0.0-1.0, or 1/0 for text cards)
-    let recordedScore = score;
-    if (recordedScore === undefined) recordedScore = wasCorrect ? 1 : 0;
-    data.history.push(recordedScore);
+    data.history.push(score);
+    data.repetitions = (data.repetitions ?? 0) + 1;
 
-    if (wasCorrect) {
-        if (data.repetitions === 0) {
-            data.interval = 1;
-        } else if (data.repetitions === 1) {
-            data.interval = 6;
-        } else {
-            data.interval = Math.round(data.interval * data.easeFactor);
-        }
-        data.repetitions++;
-        data.easeFactor = Math.min(3, Math.max(1.3, data.easeFactor + 0.1));
+    let waitMinutes;
+    if (score >= SR_PASS_SCORE) {
+        data.step = Math.min(data.step + 1, SR_STEP_MINUTES.length - 1);
+        waitMinutes = SR_STEP_MINUTES[data.step];
+    } else if (score >= SR_FAIL_SCORE) {
+        // Partially correct: keep the step, but review sooner than usual.
+        // (The old SM-2 logic reset everything on any score < 1, which punished
+        // matching/MC cards where partial scores are the norm.)
+        waitMinutes = Math.max(SR_STEP_MINUTES[data.step] / 2, SR_STEP_MINUTES[0]);
     } else {
-        data.repetitions = 0;
-        data.interval = 1;
-        data.easeFactor = Math.max(1.3, data.easeFactor - 0.2);
+        data.step = 0;
+        waitMinutes = SR_STEP_MINUTES[0];
     }
 
-    // Calculate next review date
-    const nextReview = new Date();
-    nextReview.setDate(nextReview.getDate() + data.interval);
-    data.nextReview = nextReview;
+    data.lastReview = now;
+    data.nextReview = new Date(now.getTime() + waitMinutes * 60 * 1000);
 
     spacedRepetitionData[key] = data;
     saveSpacedRepetitionData();
+}
+
+/**
+ * Map a legacy SM-2 day interval onto the cram ladder.
+ * @param {number|undefined} days
+ * @returns {number} ladder step index
+ */
+function migrateLegacyInterval(days) {
+    if (!days || days <= 1) return 4; // legacy "1 Tag"
+    if (days <= 4) return 5; // legacy short intervals → "3 Tage"
+    return 6; // anything longer → "7 Tage"
+}
+
+/**
+ * Revive and migrate raw SR data (from localStorage or a backup import):
+ * date strings become Date objects, legacy SM-2 entries get a ladder step.
+ */
+function reviveSRData() {
+    for (const data of Object.values(spacedRepetitionData)) {
+        data.nextReview = new Date(data.nextReview);
+        if (data.lastReview) data.lastReview = new Date(data.lastReview);
+        if (data.step === undefined) data.step = migrateLegacyInterval(data.interval);
+    }
+}
+
+/**
+ * Estimate how well one card is known right now (0..1).
+ * Blend of the recency-weighted last scores (how well the student answers)
+ * and ladder progress (how often the card was already repeated successfully).
+ * Step 4 (1 Tag) counts as fully consolidated — adequate for an exam within days.
+ * @param {object} data - SR entry for the card
+ * @returns {number}
+ */
+function cardKnowledge(data) {
+    if (!data?.history?.length) return 0;
+    const recent = data.history.slice(-3).reverse();
+    const weights = [0.6, 0.25, 0.15];
+    let sum = 0;
+    let weightSum = 0;
+    for (const [i, s] of recent.entries()) {
+        sum += s * weights[i];
+        weightSum += weights[i];
+    }
+    const recentScore = sum / weightSum;
+    const consolidation = Math.min((data.step ?? 0) / 4, 1);
+    return 0.7 * recentScore + 0.3 * consolidation;
+}
+
+/**
+ * Aggregate knowledge estimate over all cards of the given decks.
+ * Cards never attempted count as 0, so the percentage reflects both
+ * coverage and mastery — a deck is only "green" once everything sits.
+ * @param {string[]} deckNames
+ * @returns {{percent: number, attempted: number, total: number}}
+ */
+function computeDeckKnowledge(deckNames) {
+    let sum = 0;
+    let total = 0;
+    let attempted = 0;
+    for (const deckName of deckNames) {
+        const deck = savedDecks[deckName];
+        if (!deck?.cards) continue;
+        for (const c of deck.cards) {
+            total++;
+            const data = spacedRepetitionData[`${deckName}|||${c.question}`];
+            if (data?.history?.length) {
+                attempted++;
+                sum += cardKnowledge(data);
+            }
+        }
+    }
+    return { percent: total > 0 ? Math.round((sum / total) * 100) : 0, attempted, total };
+}
+
+/**
+ * Build the small "Lernstand" badge (mini progress bar + percent) shown in
+ * deck rows. Returns null when no card of the decks was ever attempted.
+ * @param {string[]} deckNames
+ * @returns {HTMLElement|null}
+ */
+function buildKnowledgeBadge(deckNames) {
+    const knowledge = computeDeckKnowledge(deckNames);
+    if (knowledge.attempted === 0) return null;
+
+    const badge = document.createElement('span');
+    const level = knowledge.percent >= 80 ? 'high' : knowledge.percent >= 50 ? 'mid' : 'low';
+    badge.className = `topic-knowledge topic-knowledge-${level}`;
+    badge.title =
+        `Lernstand: berücksichtigt deine letzten Antworten und wie sicher die Karten ` +
+        `bereits wiederholt wurden (${knowledge.attempted} von ${knowledge.total} Karten geübt).`;
+
+    const bar = document.createElement('span');
+    bar.className = 'topic-knowledge-bar';
+    const fill = document.createElement('span');
+    fill.className = 'topic-knowledge-fill';
+    fill.style.width = `${knowledge.percent}%`;
+    bar.append(fill);
+
+    const text = document.createElement('span');
+    text.className = 'topic-knowledge-text';
+    text.textContent = `${knowledge.percent} %`;
+
+    badge.append(bar, text);
+    return badge;
 }
 
 /**
@@ -3797,12 +3979,7 @@ function loadSpacedRepetitionData() {
         const data = localStorage.getItem('spacedRepetitionData');
         if (data) {
             spacedRepetitionData = JSON.parse(data);
-            // Convert date strings back to Date objects
-            for (const key of Object.keys(spacedRepetitionData)) {
-                spacedRepetitionData[key].nextReview = new Date(
-                    spacedRepetitionData[key].nextReview
-                );
-            }
+            reviveSRData();
         }
     } catch (error) {
         console.error('Error loading spaced repetition data:', error);
@@ -4531,11 +4708,11 @@ function startBookViewFromDecks() {
  * Open book view for a specific SR bucket interval
  * @param {number} interval - The bucket interval in days
  */
-function openBookViewForBucket(interval) {
+function openBookViewForBucket(step) {
     const cardsInBucket = [];
 
     for (const [key, data] of Object.entries(spacedRepetitionData)) {
-        if (data.interval === interval) {
+        if ((data.step ?? 0) === step) {
             const card = getCardFromKey(key);
             if (card) {
                 cardsInBucket.push(card);
@@ -4548,7 +4725,7 @@ function openBookViewForBucket(interval) {
         return;
     }
 
-    const label = getIntervalLabel(interval);
+    const label = getStepLabel(step);
     srManagerContainer.classList.add('hidden');
     openBookView(cardsInBucket, `${label} — ${cardsInBucket.length} Karten`);
 }
@@ -4618,16 +4795,16 @@ function renderSRDashboard() {
     }
     const avgScore = totalAttempts > 0 ? Math.round((totalScore / totalAttempts) * 100) : 0;
 
-    // Bucket distribution for bar chart
+    // Ladder distribution for bar chart (steps grouped into 5 stages)
     const bucketColors = ['#e74c3c', '#e67e22', '#f1c40f', '#2ecc71', '#27ae60'];
-    const bucketLabels = ['Neu (1d)', '2-7d', '8-30d', '1-3M', '3M+'];
+    const bucketLabels = ['Wackelig (Minuten)', 'Im Aufbau (Stunden)', '1 Tag', '3 Tage', '7 Tage'];
     const bucketCounts = [0, 0, 0, 0, 0];
     for (const data of srEntries) {
-        const interval = data.interval;
-        if (interval <= 1) bucketCounts[0]++;
-        else if (interval <= 7) bucketCounts[1]++;
-        else if (interval <= 30) bucketCounts[2]++;
-        else if (interval <= 90) bucketCounts[3]++;
+        const step = data.step ?? 0;
+        if (step <= 1) bucketCounts[0]++;
+        else if (step <= 3) bucketCounts[1]++;
+        else if (step === 4) bucketCounts[2]++;
+        else if (step === 5) bucketCounts[3]++;
         else bucketCounts[4]++;
     }
 
@@ -4671,14 +4848,14 @@ function displaySpacedRepetitionBuckets() {
     renderSRDashboard();
 
     // Save current expanded and selected state before overwriting
-    const expandedIntervals = new Set(
+    const expandedSteps = new Set(
         [...document.querySelectorAll('.sr-bucket-cards.expanded')].map((el) =>
             Number.parseInt(el.id.replace('bucket-cards-', ''))
         )
     );
-    const selectedIntervals = new Set(
+    const selectedSteps = new Set(
         [...document.querySelectorAll('.sr-bucket.selected')].map((el) =>
-            Number.parseInt(el.dataset.interval)
+            Number.parseInt(el.dataset.step)
         )
     );
 
@@ -4690,19 +4867,19 @@ function displaySpacedRepetitionBuckets() {
         return;
     }
 
-    // Group cards by interval
+    // Group cards by ladder step
     const buckets = {};
     const now = new Date();
     for (const [key, data] of Object.entries(spacedRepetitionData)) {
-        const intervalKey = data.interval;
-        if (!buckets[intervalKey]) {
-            buckets[intervalKey] = [];
+        const stepKey = data.step ?? 0;
+        if (!buckets[stepKey]) {
+            buckets[stepKey] = [];
         }
 
         // Parse the card from the key
         const card = getCardFromKey(key);
         if (card) {
-            buckets[intervalKey].push({
+            buckets[stepKey].push({
                 key,
                 card,
                 data,
@@ -4711,7 +4888,7 @@ function displaySpacedRepetitionBuckets() {
         } else {
             console.warn('Card not found for key:', key);
             // Still add it with the key as the question
-            buckets[intervalKey].push({
+            buckets[stepKey].push({
                 key,
                 card: {
                     question: key.split('|||')[1] || 'Unbekannte Frage',
@@ -4723,34 +4900,34 @@ function displaySpacedRepetitionBuckets() {
         }
     }
 
-    // Sort buckets by interval
-    const sortedIntervals = Object.keys(buckets)
+    // Sort buckets by step
+    const sortedSteps = Object.keys(buckets)
         .map(Number)
         .toSorted((a, b) => a - b);
 
     // Build HTML
     let html = '';
-    for (const interval of sortedIntervals) {
-        const cards = buckets[interval];
-        const intervalLabel = getIntervalLabel(interval);
+    for (const step of sortedSteps) {
+        const cards = buckets[step];
+        const stepLabel = getStepLabel(step);
         const overdueCount = cards.filter((c) => c.isOverdue).length;
 
-        const isExpanded = expandedIntervals.has(interval) ? 'expanded' : '';
-        const isSelected = selectedIntervals.has(interval) ? 'selected' : '';
-        const isChecked = selectedIntervals.has(interval) ? 'checked' : '';
+        const isExpanded = expandedSteps.has(step) ? 'expanded' : '';
+        const isSelected = selectedSteps.has(step) ? 'selected' : '';
+        const isChecked = selectedSteps.has(step) ? 'checked' : '';
 
         html += `
-            <div class="sr-bucket ${isSelected}" data-interval="${interval}">
-                <div class="sr-bucket-header" onclick="toggleBucketExpansion(${interval})">
+            <div class="sr-bucket ${isSelected}" data-step="${step}">
+                <div class="sr-bucket-header" onclick="toggleBucketExpansion(${step})">
                     <div class="sr-bucket-info">
-                        <input type="checkbox" class="sr-bucket-checkbox" onclick="event.stopPropagation(); toggleBucketSelection(${interval})" data-interval="${interval}" ${isChecked}>
-                        <span class="sr-bucket-title">${intervalLabel}</span>
+                        <input type="checkbox" class="sr-bucket-checkbox" onclick="event.stopPropagation(); toggleBucketSelection(${step})" data-step="${step}" ${isChecked}>
+                        <span class="sr-bucket-title">${stepLabel}</span>
                         <span class="sr-bucket-count">${cards.length} Karten${overdueCount > 0 ? ` (${overdueCount} fällig)` : ''}</span>
                     </div>
-                    <button class="sr-bucket-book-btn" onclick="event.stopPropagation(); openBookViewForBucket(${interval})" title="Buchansicht">📖</button>
-                    <span class="sr-bucket-interval">${interval} Tag${interval === 1 ? '' : 'e'}</span>
+                    <button class="sr-bucket-book-btn" onclick="event.stopPropagation(); openBookViewForBucket(${step})" title="Buchansicht">📖</button>
+                    <span class="sr-bucket-interval">${SR_STEP_LABELS[step] ?? ''}</span>
                 </div>
-                <div class="sr-bucket-cards ${isExpanded}" id="bucket-cards-${interval}">
+                <div class="sr-bucket-cards ${isExpanded}" id="bucket-cards-${step}">
                     ${cards
                         .map(
                             ({ key, card, data, isOverdue }) => `
@@ -4761,7 +4938,7 @@ function displaySpacedRepetitionBuckets() {
                                     ${isOverdue ? '⚠️ Fällig' : '✓'} ${formatDate(data.nextReview)}
                                 </span>
                                 <div class="sr-card-actions">
-                                    <button class="sr-move-btn" onclick="handleMoveSRCard(this)" data-interval="${interval}" title="Zu anderem Bucket verschieben">
+                                    <button class="sr-move-btn" onclick="handleMoveSRCard(this)" data-step="${step}" title="Zu anderer Stufe verschieben">
                                         Verschieben
                                     </button>
                                     <button class="sr-delete-btn" onclick="handleDeleteSRCard(this)" title="Aus SR-System entfernen">
@@ -4783,33 +4960,37 @@ function displaySpacedRepetitionBuckets() {
 }
 
 /**
- * Get human-readable interval label
- * Maps intervals to 5 semantic learning stages
- * @param interval
+ * Human-readable label for a ladder step
+ * @param {number} step
  */
-function getIntervalLabel(interval) {
-    if (interval === 1) return 'Neu (Tag 1)';
-    if (interval <= 7) return 'Anfänger (2-7 Tage)';
-    if (interval <= 30) return 'In Übung (8-30 Tage)';
-    if (interval <= 90) return 'Fortgeschritten (1-3 Monate)';
-    return 'Gut gelernt (3+ Monate)';
+function getStepLabel(step) {
+    const names = [
+        'Wackelig',
+        'Frisch gelernt',
+        'Im Aufbau',
+        'Fast sicher',
+        'Sicher',
+        'Sehr sicher',
+        'Langzeit',
+    ];
+    return `Stufe ${step + 1}: ${names[step] ?? 'Unbekannt'}`;
 }
 
 /**
  * Toggle bucket expansion
- * @param interval
+ * @param step
  */
-function toggleBucketExpansion(interval) {
-    const cardsContainer = document.querySelector(`#bucket-cards-${interval}`);
+function toggleBucketExpansion(step) {
+    const cardsContainer = document.querySelector(`#bucket-cards-${step}`);
     cardsContainer.classList.toggle('expanded');
 }
 
 /**
  * Toggle bucket selection
- * @param interval
+ * @param step
  */
-function toggleBucketSelection(interval) {
-    const bucket = document.querySelector(`.sr-bucket[data-interval="${interval}"]`);
+function toggleBucketSelection(step) {
+    const bucket = document.querySelector(`.sr-bucket[data-step="${step}"]`);
     bucket.classList.toggle('selected');
     updateStartBucketButton();
 }
@@ -4864,9 +5045,9 @@ function startSelectedBuckets() {
     // Collect all cards from selected buckets
     const selectedCards = [];
     for (const bucket of selectedBuckets) {
-        const interval = Number.parseInt(bucket.dataset.interval);
+        const step = Number.parseInt(bucket.dataset.step);
         for (const [key, data] of Object.entries(spacedRepetitionData)) {
-            if (data.interval === interval) {
+            if ((data.step ?? 0) === step) {
                 const card = getCardFromKey(key);
                 if (card) {
                     // Add sourceDeck to maintain compatibility with quiz system
@@ -4884,19 +5065,16 @@ function startSelectedBuckets() {
         return;
     }
 
-    // Sort cards by interval (bucket order) then by nextReview date within each bucket
+    // Sort cards by ladder step (bucket order) then by nextReview within each bucket
     selectedCards.sort((a, b) => {
-        const aKey = getCardKey(a);
-        const bKey = getCardKey(b);
-        const aData = spacedRepetitionData[aKey];
-        const bData = spacedRepetitionData[bKey];
+        const aData = spacedRepetitionData[getCardKey(a)];
+        const bData = spacedRepetitionData[getCardKey(b)];
 
-        // First sort by interval (bucket)
-        if (aData.interval !== bData.interval) {
-            return aData.interval - bData.interval;
+        if ((aData.step ?? 0) !== (bData.step ?? 0)) {
+            return (aData.step ?? 0) - (bData.step ?? 0);
         }
 
-        // Within same interval, sort by nextReview date (most overdue first)
+        // Within same step, sort by nextReview date (most overdue first)
         return new Date(aData.nextReview) - new Date(bData.nextReview);
     });
 
@@ -4932,8 +5110,8 @@ function startSelectedBuckets() {
 function handleMoveSRCard(button) {
     const cardItem = button.closest('.sr-card-item');
     const cardKey = decodeURIComponent(cardItem.dataset.cardKey);
-    const currentInterval = Number.parseInt(button.dataset.interval);
-    moveSRCard(cardKey, currentInterval);
+    const currentStep = Number.parseInt(button.dataset.step);
+    moveSRCard(cardKey, currentStep);
 }
 
 /**
@@ -4951,38 +5129,32 @@ function handleDeleteSRCard(button) {
  * @param cardKey
  * @param currentInterval
  */
-async function moveSRCard(cardKey, currentInterval) {
-    const newInterval = await uiPrompt(
-        `Karte zu welchem Intervall (in Tagen) verschieben?\nAktuell: ${currentInterval} Tag${currentInterval === 1 ? '' : 'e'}`,
-        String(currentInterval),
+async function moveSRCard(cardKey, currentStep) {
+    const legend = SR_STEP_LABELS.map((label, i) => `${i + 1} = ${label}`).join(' · ');
+    const input = await uiPrompt(
+        `Karte zu welcher Stufe verschieben? (1-${SR_STEP_MINUTES.length})\n${legend}`,
+        String(currentStep + 1),
         { confirmText: 'Verschieben' }
     );
 
-    if (newInterval === null) return; // Cancelled
+    if (input === null) return; // Cancelled
 
-    const trimmed = newInterval.trim();
-    if (trimmed === '') {
-        showError('Bitte gib eine gültige Anzahl von Tagen ein.');
-        return;
-    }
-
-    const interval = Number.parseInt(trimmed);
-    if (Number.isNaN(interval) || interval < 1 || interval > 365) {
-        showError('Bitte gib eine gültige Anzahl von Tagen ein (1-365).');
+    const stepNumber = Number.parseInt(input.trim());
+    if (Number.isNaN(stepNumber) || stepNumber < 1 || stepNumber > SR_STEP_MINUTES.length) {
+        showError(`Bitte gib eine Stufe von 1 bis ${SR_STEP_MINUTES.length} ein.`);
         return;
     }
 
     if (spacedRepetitionData[cardKey]) {
-        spacedRepetitionData[cardKey].interval = interval;
-
-        // Recalculate next review date
-        const nextReview = new Date();
-        nextReview.setDate(nextReview.getDate() + interval);
-        spacedRepetitionData[cardKey].nextReview = nextReview;
+        const step = stepNumber - 1;
+        spacedRepetitionData[cardKey].step = step;
+        spacedRepetitionData[cardKey].nextReview = new Date(
+            Date.now() + SR_STEP_MINUTES[step] * 60 * 1000
+        );
 
         saveSpacedRepetitionData();
         displaySpacedRepetitionBuckets();
-        showMessage(`Karte zu ${interval}-Tage-Intervall verschoben.`);
+        showMessage(`Karte zu Stufe ${stepNumber} (${SR_STEP_LABELS[step]}) verschoben.`);
     } else {
         showError('Karte wurde nicht gefunden.');
     }
@@ -5094,11 +5266,13 @@ function getCardFromKey(key) {
  * @param date
  */
 function formatDate(date) {
-    const now = new Date();
-    const diffDays = Math.floor((date - now) / (1000 * 60 * 60 * 24));
+    const diffMinutes = Math.round((date - Date.now()) / 60000);
 
-    if (diffDays < 0) return 'Überfällig';
-    if (diffDays === 0) return 'Heute';
+    if (diffMinutes <= 0) return 'Überfällig';
+    if (diffMinutes < 60) return `in ${diffMinutes} Min`;
+    const diffHours = Math.round(diffMinutes / 60);
+    if (diffHours < 24) return `in ${diffHours} Std`;
+    const diffDays = Math.round(diffHours / 24);
     if (diffDays === 1) return 'Morgen';
     return `in ${diffDays} Tagen`;
 }

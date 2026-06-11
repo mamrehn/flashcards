@@ -188,6 +188,78 @@ body {
     white-space: nowrap;
 }
 
+/* "Lernstand" badge: mini progress bar + percent in the topic header */
+.topic-knowledge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    margin-left: 0.4rem;
+    white-space: nowrap;
+}
+
+.topic-knowledge-bar {
+    display: inline-block;
+    width: 42px;
+    height: 7px;
+    border-radius: 4px;
+    background-color: var(--input-border);
+    overflow: hidden;
+}
+
+.topic-knowledge-fill {
+    display: block;
+    height: 100%;
+    border-radius: 4px;
+}
+
+.topic-knowledge-text {
+    font-size: 0.82rem;
+    font-weight: 600;
+}
+
+.topic-knowledge-low .topic-knowledge-fill {
+    background-color: var(--danger, #dc3545);
+}
+
+.topic-knowledge-low .topic-knowledge-text {
+    color: var(--danger, #dc3545);
+}
+
+.topic-knowledge-mid .topic-knowledge-fill {
+    background-color: var(--warning, #e67e22);
+}
+
+.topic-knowledge-mid .topic-knowledge-text {
+    color: var(--warning, #e67e22);
+}
+
+.topic-knowledge-high .topic-knowledge-fill {
+    background-color: var(--success, #28a745);
+}
+
+.topic-knowledge-high .topic-knowledge-text {
+    color: var(--success, #28a745);
+}
+
+/* Knowledge estimate line on the session feedback screen */
+.feedback-knowledge {
+    margin: 0.4rem 0 0.6rem;
+    font-size: 1.05rem;
+    font-weight: 600;
+}
+
+.feedback-knowledge-low {
+    color: var(--danger, #dc3545);
+}
+
+.feedback-knowledge-mid {
+    color: var(--warning, #e67e22);
+}
+
+.feedback-knowledge-high {
+    color: var(--success, #28a745);
+}
+
 .topic-categories {
     display: none;
     padding: 0.25rem 0.5rem 0.5rem 2.4rem;
@@ -1139,6 +1211,11 @@ body {
 
     .topic-card-count {
         font-size: 0.8rem;
+    }
+
+    /* Narrow screens: keep only the percent, drop the mini bar */
+    .topic-knowledge-bar {
+        display: none;
     }
 
     .topic-categories {
