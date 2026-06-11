@@ -2081,7 +2081,11 @@ body {
     background-color: var(--surface-color);
     color: var(--text-color);
     cursor: pointer;
+    -webkit-user-select: none;
     user-select: none;
+    /* Vertical swipes scroll the page; horizontal movement or a short hold
+       starts a pairing drag (handled via pointer events) */
+    touch-action: pan-y;
     font-size: 0.92rem;
     line-height: 1.35;
     transition:
@@ -2120,6 +2124,31 @@ body {
 .matching-item.paired:hover {
     border-color: var(--primary);
     transform: none;
+}
+
+/* --- Drag & drop --- */
+
+/* Source tile while its ghost is being dragged */
+.matching-item.dragging {
+    opacity: 0.35;
+}
+
+/* Floating clone that follows the pointer during a drag */
+.matching-drag-ghost {
+    position: fixed;
+    z-index: 1000;
+    margin: 0;
+    pointer-events: none;
+    transition: none;
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.25);
+    cursor: grabbing;
+}
+
+/* Valid pairing partner currently under the dragged tile */
+.matching-item.drop-target {
+    border-color: var(--primary);
+    background-color: rgba(74, 111, 165, 0.18);
+    transform: scale(1.03);
 }
 
 /* Paired group: 3-col grid (left | unlink | right); items may span several rows.

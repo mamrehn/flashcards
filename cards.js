@@ -265,6 +265,7 @@ function initializeApp() {
     matchingContainer = document.querySelector('#matching-container');
     matchingResultContainer = document.querySelector('#matching-result-container');
     matchingContainer.addEventListener('keydown', (e) => {
+        if (matchingDrag) return; // never re-render mid-drag (would break pointer capture)
         if (e.key === 'Escape' && (selectedLeftIndex !== null || selectedRightIndex !== null)) {
             selectedLeftIndex = null;
             selectedRightIndex = null;
@@ -2240,11 +2241,16 @@ function renderMatchingPairs() {
     }
 
     if (matchingProgressEl) {
-        matchingProgressEl.textContent = `${matchingPairs.length} von ${matchingRequiredCount} Zuordnungen`;
+        matchingProgressEl.textContent =
+            matchingPairs.length === 0
+                ? 'Tippe nacheinander zwei passende Begriffe an – oder ziehe sie aufeinander.'
+                : `${matchingPairs.length} von ${matchingRequiredCount} Zuordnungen`;
     }
 }
 
 function createPair(leftIndex, shuffledRightIndex) {
+    if (isAnswered) return;
+
     // On any rejected pairing, still release the selection so the UI never
     // appears stuck with a stale (possibly invisible) selection.
     const rejectPairing = () => {
@@ -2306,7 +2312,7 @@ function createPair(leftIndex, shuffledRightIndex) {
 }
 
 function handleMatchingLeftClick(leftIndex) {
-    if (isAnswered) return;
+    if (isAnswered || matchingDrag?.started || matchingDragJustEnded) return;
     if (selectedRightIndex === null) {
         selectedLeftIndex = selectedLeftIndex === leftIndex ? null : leftIndex;
         renderMatchingPairs();
@@ -2316,7 +2322,7 @@ function handleMatchingLeftClick(leftIndex) {
 }
 
 function handleMatchingRightClick(shuffledRightIndex) {
-    if (isAnswered) return;
+    if (isAnswered || matchingDrag?.started || matchingDragJustEnded) return;
     if (selectedLeftIndex === null) {
         selectedRightIndex = selectedRightIndex === shuffledRightIndex ? null : shuffledRightIndex;
         renderMatchingPairs();
@@ -2326,7 +2332,7 @@ function handleMatchingRightClick(shuffledRightIndex) {
 }
 
 function unlinkPair(leftIndex, rightIndex) {
-    if (isAnswered) return;
+    if (isAnswered || matchingDrag?.started) return;
     const prevLength = matchingPairs.length;
     matchingPairs = matchingPairs.filter(([l, r]) => !(l === leftIndex && r === rightIndex));
     if (matchingPairs.length === prevLength) return;
@@ -2342,6 +2348,242 @@ function unlinkPair(leftIndex, rightIndex) {
         unpairedRightOrder.sort((a, b) => a - b);
     }
     renderMatchingPairs();
+}
+
+// ----------------------------------------------------------------------------
+// Pointer-based drag & drop for matching (touch-first; tap-to-pair still works)
+// ----------------------------------------------------------------------------
+
+/** @type {object|null} Active matching drag gesture state (null when idle) */
+let matchingDrag = null;
+
+/** @type {boolean} True briefly after a drop so the synthesized click on the source tile is ignored */
+let matchingDragJustEnded = false;
+
+/** Movement in px beyond which a press counts as a drag rather than a tap */
+const MATCHING_DRAG_SLOP = 8;
+
+/** Hold duration in ms after which a touch press lifts the tile for dragging */
+const MATCHING_DRAG_HOLD_MS = 220;
+
+function blockTouchScroll(e) {
+    if (e.cancelable) e.preventDefault();
+}
+
+function blockContextMenu(e) {
+    e.preventDefault();
+}
+
+/**
+ * Wire pointer handlers so a column tile can be dragged onto the opposite
+ * column to create a pair. A plain tap falls through to the click handler.
+ * Tiles keep `touch-action: pan-y`: vertical swipes scroll the page, while
+ * horizontal movement (toward the other column) or a short hold starts a drag.
+ * @param {HTMLElement} item
+ * @param {'left'|'right'} side
+ * @param {number} index - leftIndex or shuffledRightIndex depending on side
+ */
+function attachMatchingDragHandlers(item, side, index) {
+    item.addEventListener('pointerdown', (e) => {
+        if (isAnswered || matchingDrag || !e.isPrimary) return;
+        if (e.pointerType === 'mouse' && e.button !== 0) return;
+        matchingDrag = {
+            side,
+            index,
+            item,
+            pointerId: e.pointerId,
+            isTouch: e.pointerType === 'touch',
+            startX: e.clientX,
+            startY: e.clientY,
+            lastX: e.clientX,
+            lastY: e.clientY,
+            started: false,
+            moved: false,
+            ghost: null,
+            dropEl: null,
+            dropIndex: null,
+            scroller: null,
+            rafId: null,
+            holdTimer: null,
+        };
+        if (matchingDrag.isTouch) {
+            matchingDrag.holdTimer = setTimeout(() => {
+                if (matchingDrag && !matchingDrag.started) startMatchingDrag();
+            }, MATCHING_DRAG_HOLD_MS);
+        }
+        try {
+            item.setPointerCapture(e.pointerId);
+        } catch {
+            /* synthetic events (tests) have no active pointer to capture */
+        }
+    });
+    item.addEventListener('pointermove', handleMatchingDragMove);
+    item.addEventListener('pointerup', handleMatchingDragEnd);
+    item.addEventListener('pointercancel', cancelMatchingDrag);
+}
+
+function startMatchingDrag() {
+    const d = matchingDrag;
+    clearTimeout(d.holdTimer);
+    d.started = true;
+
+    // Floating ghost that follows the pointer; the source tile stays dimmed
+    const rect = d.item.getBoundingClientRect();
+    const ghost = d.item.cloneNode(true);
+    ghost.classList.remove('selected');
+    ghost.classList.add('matching-drag-ghost');
+    ghost.style.width = `${rect.width}px`;
+    ghost.style.left = `${rect.left}px`;
+    ghost.style.top = `${rect.top}px`;
+    ghost.setAttribute('aria-hidden', 'true');
+    document.body.append(ghost);
+    d.ghost = ghost;
+    d.item.classList.add('dragging');
+    d.scroller = findMatchingScroller();
+
+    // While a tile is lifted the finger must move it, not scroll the page
+    document.addEventListener('touchmove', blockTouchScroll, { passive: false });
+    document.addEventListener('contextmenu', blockContextMenu, true);
+    navigator.vibrate?.(15);
+
+    updateMatchingDragVisuals();
+    d.rafId = requestAnimationFrame(matchingAutoScrollStep);
+}
+
+function updateMatchingDragVisuals() {
+    const d = matchingDrag;
+    d.ghost.style.transform = `translate(${d.lastX - d.startX}px, ${d.lastY - d.startY}px) scale(1.05)`;
+
+    // Highlight the tile under the pointer when it is a valid pairing partner
+    const under = document.elementFromPoint(d.lastX, d.lastY);
+    const candidate = under?.closest('.matching-item');
+    let dropEl = null;
+    let dropIndex = null;
+    if (candidate) {
+        const targetCol = d.side === 'left' ? matchingUnpairedRightCol : matchingUnpairedLeftCol;
+        if (candidate.parentElement === targetCol) {
+            const idx =
+                d.side === 'left'
+                    ? Number(candidate.dataset.rightShuffledIndex)
+                    : Number(candidate.dataset.leftIndex);
+            const [l, r] = d.side === 'left' ? [d.index, idx] : [idx, d.index];
+            const isDuplicate = matchingPairs.some(([pl, pr]) => pl === l && pr === r);
+            if (!isDuplicate) {
+                dropEl = candidate;
+                dropIndex = idx;
+            }
+        }
+    }
+    if (d.dropEl !== dropEl) {
+        d.dropEl?.classList.remove('drop-target');
+        dropEl?.classList.add('drop-target');
+    }
+    d.dropEl = dropEl;
+    d.dropIndex = dropIndex;
+}
+
+function handleMatchingDragMove(e) {
+    const d = matchingDrag;
+    if (!d || e.pointerId !== d.pointerId) return;
+    d.lastX = e.clientX;
+    d.lastY = e.clientY;
+    const dx = e.clientX - d.startX;
+    const dy = e.clientY - d.startY;
+    if (!d.moved && Math.hypot(dx, dy) > MATCHING_DRAG_SLOP) d.moved = true;
+
+    if (!d.started) {
+        if (!d.isTouch) {
+            if (Math.hypot(dx, dy) > 4) startMatchingDrag();
+        } else if (Math.abs(dx) > MATCHING_DRAG_SLOP && Math.abs(dx) > Math.abs(dy)) {
+            // Horizontal-first movement on touch: drag toward the other column
+            startMatchingDrag();
+        } else if (Math.abs(dy) > MATCHING_DRAG_SLOP && Math.abs(dy) > Math.abs(dx)) {
+            // Vertical-first movement on touch: this gesture is a scroll
+            cancelMatchingDrag(e);
+            return;
+        }
+        if (!d.started) return;
+    }
+    updateMatchingDragVisuals();
+}
+
+function handleMatchingDragEnd(e) {
+    const d = matchingDrag;
+    if (!d || e.pointerId !== d.pointerId) return;
+    const commit = d.started && d.dropIndex !== null && !isAnswered;
+    const suppressClick = d.started && d.moved;
+    const { side, index, dropIndex } = d;
+    cleanupMatchingDrag();
+    if (suppressClick) {
+        // The browser may still synthesize a click on the source tile
+        matchingDragJustEnded = true;
+        setTimeout(() => {
+            matchingDragJustEnded = false;
+        }, 0);
+    }
+    if (commit) {
+        if (side === 'left') createPair(index, dropIndex);
+        else createPair(dropIndex, index);
+    }
+}
+
+function cancelMatchingDrag(e) {
+    const d = matchingDrag;
+    if (!d || (e && e.pointerId !== d.pointerId)) return;
+    cleanupMatchingDrag();
+}
+
+function cleanupMatchingDrag() {
+    const d = matchingDrag;
+    if (!d) return;
+    clearTimeout(d.holdTimer);
+    if (d.rafId !== null) cancelAnimationFrame(d.rafId);
+    d.ghost?.remove();
+    d.item.classList.remove('dragging');
+    d.dropEl?.classList.remove('drop-target');
+    try {
+        d.item.releasePointerCapture(d.pointerId);
+    } catch {
+        /* capture may already be gone */
+    }
+    document.removeEventListener('touchmove', blockTouchScroll);
+    document.removeEventListener('contextmenu', blockContextMenu, true);
+    matchingDrag = null;
+}
+
+/**
+ * Find the element that actually scrolls the matching UI, for edge auto-scroll
+ * while dragging. Falls back to the page scroller.
+ * @returns {Element}
+ */
+function findMatchingScroller() {
+    let node = matchingContainer;
+    while (node && node !== document.body) {
+        const style = getComputedStyle(node);
+        if (/(auto|scroll)/.test(style.overflowY) && node.scrollHeight > node.clientHeight + 1) {
+            return node;
+        }
+        node = node.parentElement;
+    }
+    return document.scrollingElement ?? document.documentElement;
+}
+
+// Scroll when the lifted tile hovers near the top/bottom viewport edge, so
+// off-screen tiles are reachable on small phone screens
+function matchingAutoScrollStep() {
+    const d = matchingDrag;
+    if (!d?.started) return;
+    const margin = 64;
+    const viewportH = window.innerHeight;
+    let dy = 0;
+    if (d.lastY < margin) dy = -Math.ceil((margin - d.lastY) / 6);
+    else if (d.lastY > viewportH - margin) dy = Math.ceil((d.lastY - (viewportH - margin)) / 6);
+    if (dy !== 0) {
+        const before = d.scroller.scrollTop;
+        d.scroller.scrollTop = before + dy;
+        if (d.scroller.scrollTop !== before) updateMatchingDragVisuals();
+    }
+    d.rafId = requestAnimationFrame(matchingAutoScrollStep);
 }
 
 /**
@@ -2367,6 +2609,7 @@ function updateCardContent(card) {
         showAnswerBtn.classList.remove('hidden');
 
         // Reset matching state for this new card
+        cleanupMatchingDrag();
         matchingPairs = [];
         selectedLeftIndex = null;
         selectedRightIndex = null;
@@ -2522,6 +2765,7 @@ function updateCardContent(card) {
                     handleMatchingLeftClick(i);
                 }
             });
+            attachMatchingDragHandlers(item, 'left', i);
             leftItemEls.push(item);
         }
 
@@ -2541,6 +2785,7 @@ function updateCardContent(card) {
                     handleMatchingRightClick(k);
                 }
             });
+            attachMatchingDragHandlers(item, 'right', k);
             rightItemEls.push(item);
         }
 
