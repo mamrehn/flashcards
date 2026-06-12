@@ -1106,6 +1106,12 @@ async function initializeHostFeatures(reconnectInfo) {
             durationMin: 20, // Minimum question duration in seconds
             durationMax: 40, // Maximum question duration in seconds
             questionDurations: [], // Per-question durations (computed at quiz start)
+            // Category filter (post-import). `selectedCategories` is the active
+            // subset of labels the host kept; `knownCategories` tracks every
+            // label seen so a follow-up import defaults brand-new ones to "on".
+            // Both null until first reconciled.
+            selectedCategories: null,
+            knownCategories: null,
         };
     }
     if (!hostMusicEngine) hostMusicEngine = createMusicEngine();
@@ -1260,8 +1266,10 @@ async function initializeHostFeatures(reconnectInfo) {
                 fileStatus.textContent =
                     'Keine gültigen MC-Fragen gefunden. Nur Multiple-Choice-Fragen werden importiert.';
             }
-            sendCategoriesToServer();
+            // Render first so the category filter reconciles against the new
+            // pool, then push the (reconciled) selection to the server.
             renderQuestionsList();
+            sendCategoriesToServer();
         };
 
         // File input change
@@ -1297,6 +1305,12 @@ async function initializeHostFeatures(reconnectInfo) {
                     importFiles([...files]);
                 }
             });
+        }
+
+        // Category filter: "select all / deselect all" toggle
+        const categoryToggleAllBtn = document.querySelector('#category-filter-toggle-all');
+        if (categoryToggleAllBtn) {
+            categoryToggleAllBtn.addEventListener('click', toggleAllCategories);
         }
 
         // Event listener for adding new option input fields
@@ -1364,6 +1378,16 @@ async function initializeHostFeatures(reconnectInfo) {
                 showMessage('Bitte füge mindestens eine Frage hinzu.', 'error');
                 return;
             }
+            // Apply the category filter: only the selected categories' cards
+            // are played. Empty selection means nothing to quiz on.
+            const activeQuestions = getActiveQuestions();
+            if (activeQuestions.length === 0) {
+                showMessage(
+                    'Keine Fragen in den gewählten Kategorien. Bitte wähle mindestens eine Kategorie aus.',
+                    'error'
+                );
+                return;
+            }
             const dMin = Number.parseInt(durationMinInput.value, 10);
             const dMax = Number.parseInt(durationMaxInput.value, 10);
             if (Number.isNaN(dMin) || Number.isNaN(dMax) || dMin < 5 || dMax > 80 || dMin > dMax) {
@@ -1374,8 +1398,8 @@ async function initializeHostFeatures(reconnectInfo) {
             const MAX_QUESTION_LENGTH = 4000;
             const MAX_OPTION_LENGTH = 500;
             const MAX_OPTIONS = 20;
-            for (let i = 0; i < quizState.questions.length; i++) {
-                const q = quizState.questions[i];
+            for (let i = 0; i < activeQuestions.length; i++) {
+                const q = activeQuestions[i];
                 if (q.question.length > MAX_QUESTION_LENGTH) {
                     showMessage(
                         `Frage ${i + 1} ist zu lang (${q.question.length}/${MAX_QUESTION_LENGTH} Zeichen).`,
@@ -1403,8 +1427,8 @@ async function initializeHostFeatures(reconnectInfo) {
             quizState.durationMin = dMin;
             quizState.durationMax = dMax;
 
-            // Shuffle questions once when quiz starts
-            quizState.shuffledQuestions = [...quizState.questions]; // Create a copy
+            // Shuffle questions once when quiz starts (only the filtered set)
+            quizState.shuffledQuestions = [...activeQuestions]; // Create a copy
             shuffleArray(quizState.shuffledQuestions);
 
             // Pre-compute per-question durations based on character count
@@ -1638,6 +1662,8 @@ async function initializeHostFeatures(reconnectInfo) {
      * Renders the list of added questions in the host setup view.
      */
     function renderQuestionsList() {
+        // Reconciles + (re)renders the category filter for the current pool.
+        renderCategoryFilter();
         questionsContainer.innerHTML = '';
         if (quizState.questions.length === 0) {
             questionsContainer.innerHTML = '<p>Noch keine Fragen hinzugefügt</p>';
@@ -1663,10 +1689,176 @@ async function initializeHostFeatures(reconnectInfo) {
                 const index = Number.parseInt(e.target.dataset.index);
                 quizState.questions.splice(index, 1);
                 renderQuestionsList();
+                // Removing the last card of a category drops it from the pool;
+                // keep the lobby's topic preview in sync.
+                sendCategoriesToServer();
             });
         }
 
         startQuizBtn.classList.remove('hidden');
+    }
+
+    // --- Category filter (post-import) ---
+    // Sentinel key for cards carrying no category labels, so manually-added or
+    // untagged questions can still be explicitly included/excluded.
+    const UNCATEGORIZED_KEY = '__uncategorized__';
+
+    /**
+     * Tallies how many cards fall under each category label, plus the count of
+     * cards with no category at all. A card listing multiple categories counts
+     * once toward each of them.
+     * @returns {{counts: Map<string, number>, uncategorized: number}}
+     */
+    function computeCategoryStats() {
+        const counts = new Map();
+        let uncategorized = 0;
+        for (const q of quizState.questions || []) {
+            const raw = Array.isArray(q.categories) ? q.categories : [];
+            const seen = new Set();
+            for (const c of raw) {
+                if (typeof c !== 'string') continue;
+                const cleaned = c.trim();
+                if (!cleaned || seen.has(cleaned)) continue;
+                seen.add(cleaned);
+                counts.set(cleaned, (counts.get(cleaned) || 0) + 1);
+            }
+            if (seen.size === 0) uncategorized++;
+        }
+        return { counts, uncategorized };
+    }
+
+    /**
+     * Reconciles the selected-category set against the current question pool:
+     * brand-new labels default to selected, vanished labels are dropped, and
+     * the host's existing choices are preserved. Returns the stats so the
+     * caller can render without recomputing.
+     * @returns {{counts: Map<string, number>, uncategorized: number, allKeys: Array<string>}}
+     */
+    function reconcileSelectedCategories() {
+        const { counts, uncategorized } = computeCategoryStats();
+        const allKeys = [...counts.keys()];
+        if (uncategorized > 0) allKeys.push(UNCATEGORIZED_KEY);
+        const prevKnown =
+            quizState.knownCategories instanceof Set ? quizState.knownCategories : null;
+        const sel =
+            quizState.selectedCategories instanceof Set ? quizState.selectedCategories : new Set();
+        const next = new Set();
+        for (const key of allKeys) {
+            // Select when: first reconcile, brand-new label, or kept by host.
+            if (prevKnown === null || !prevKnown.has(key) || sel.has(key)) next.add(key);
+        }
+        quizState.selectedCategories = next;
+        quizState.knownCategories = new Set(allKeys);
+        return { counts, uncategorized, allKeys };
+    }
+
+    /**
+     * The questions actually used for the quiz after applying the filter. With
+     * no category metadata anywhere, every question is returned unchanged.
+     * @returns {Array<object>}
+     */
+    function getActiveQuestions() {
+        const known = quizState.knownCategories;
+        if (!(known instanceof Set) || known.size === 0) return [...quizState.questions];
+        const sel =
+            quizState.selectedCategories instanceof Set ? quizState.selectedCategories : known;
+        return (quizState.questions || []).filter((q) => {
+            const raw = Array.isArray(q.categories) ? q.categories : [];
+            const cats = raw.map((c) => (typeof c === 'string' ? c.trim() : '')).filter(Boolean);
+            if (cats.length === 0) return sel.has(UNCATEGORIZED_KEY);
+            return cats.some((c) => sel.has(c));
+        });
+    }
+
+    /** Flips one category on/off, then re-renders + syncs the lobby preview. */
+    function toggleCategory(key) {
+        const sel =
+            quizState.selectedCategories instanceof Set ? quizState.selectedCategories : new Set();
+        if (sel.has(key)) sel.delete(key);
+        else sel.add(key);
+        quizState.selectedCategories = sel;
+        renderCategoryFilter();
+        sendCategoriesToServer();
+    }
+
+    /** Selects all categories when any are off, otherwise clears them all. */
+    function toggleAllCategories() {
+        const known =
+            quizState.knownCategories instanceof Set ? quizState.knownCategories : new Set();
+        const sel =
+            quizState.selectedCategories instanceof Set ? quizState.selectedCategories : new Set();
+        const allSelected = known.size > 0 && [...known].every((k) => sel.has(k));
+        quizState.selectedCategories = allSelected ? new Set() : new Set(known);
+        renderCategoryFilter();
+        sendCategoriesToServer();
+    }
+
+    /** Updates the "N von M Kategorien · K Fragen" line + toggle-all label. */
+    function updateCategoryFilterSummary() {
+        const summaryEl = document.querySelector('#category-filter-summary');
+        const toggleAllBtn = document.querySelector('#category-filter-toggle-all');
+        const known =
+            quizState.knownCategories instanceof Set ? quizState.knownCategories : new Set();
+        const sel =
+            quizState.selectedCategories instanceof Set ? quizState.selectedCategories : new Set();
+        const totalCats = known.size;
+        const selectedCats = [...known].filter((k) => sel.has(k)).length;
+        const activeCount = getActiveQuestions().length;
+        if (summaryEl) {
+            const catPart =
+                selectedCats === totalCats
+                    ? `Alle ${totalCats} Kategorien`
+                    : `${selectedCats} von ${totalCats} Kategorien`;
+            const fragWord = activeCount === 1 ? 'Frage' : 'Fragen';
+            summaryEl.textContent = `${catPart} · ${activeCount} ${fragWord}`;
+        }
+        if (toggleAllBtn) {
+            const allSelected = totalCats > 0 && selectedCats === totalCats;
+            toggleAllBtn.textContent = allSelected ? 'Alle abwählen' : 'Alle auswählen';
+        }
+    }
+
+    /**
+     * Renders the category filter chips below the import box. Hidden whenever
+     * there's nothing meaningful to choose between (fewer than 2 category keys).
+     */
+    function renderCategoryFilter() {
+        const containerEl = document.querySelector('#category-filter');
+        const listEl = document.querySelector('#category-filter-list');
+        if (!containerEl || !listEl) return;
+        const { counts, uncategorized, allKeys } = reconcileSelectedCategories();
+        if (allKeys.length < 2) {
+            containerEl.classList.add('hidden');
+            listEl.innerHTML = '';
+            return;
+        }
+        containerEl.classList.remove('hidden');
+        const sel = quizState.selectedCategories;
+        listEl.innerHTML = '';
+
+        const makeChip = (key, label, count) => {
+            const chip = document.createElement('button');
+            chip.type = 'button';
+            chip.className = 'category-chip';
+            const active = sel.has(key);
+            chip.classList.toggle('selected', active);
+            chip.setAttribute('aria-pressed', active ? 'true' : 'false');
+            const labelSpan = document.createElement('span');
+            labelSpan.className = 'category-chip-label';
+            labelSpan.textContent = label;
+            const countSpan = document.createElement('span');
+            countSpan.className = 'category-chip-count';
+            countSpan.textContent = String(count);
+            chip.append(labelSpan, countSpan);
+            chip.addEventListener('click', () => toggleCategory(key));
+            return chip;
+        };
+
+        for (const [cat, count] of counts) listEl.append(makeChip(cat, cat, count));
+        if (uncategorized > 0) {
+            listEl.append(makeChip(UNCATEGORIZED_KEY, 'Ohne Kategorie', uncategorized));
+        }
+        updateCategoryFilterSummary();
     }
 
     /**
@@ -2310,10 +2502,13 @@ async function initializeHostFeatures(reconnectInfo) {
     /**
      * Collects the unique category labels across all imported MC questions
      * and pushes them to the server so joining players can see the topic
-     * preview. Sent every time the question pool changes.
+     * preview. Only the host-selected categories are sent, so the lobby
+     * preview matches the filter. Sent every time the pool or filter changes.
      */
     function sendCategoriesToServer() {
         if (!hostWs || hostWs.readyState !== WebSocket.OPEN) return;
+        const sel = quizState.selectedCategories;
+        const filtering = sel instanceof Set;
         const seen = new Set();
         const ordered = [];
         for (const q of quizState.questions || []) {
@@ -2322,6 +2517,8 @@ async function initializeHostFeatures(reconnectInfo) {
                 if (typeof c !== 'string') continue;
                 const cleaned = c.trim();
                 if (!cleaned || seen.has(cleaned)) continue;
+                // Skip categories the host has filtered out.
+                if (filtering && !sel.has(cleaned)) continue;
                 seen.add(cleaned);
                 ordered.push(cleaned);
             }

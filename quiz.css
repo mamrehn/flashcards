@@ -1512,6 +1512,101 @@ body.player-in-game footer {
     border: 1px solid var(--cards-highlight-border);
 }
 
+/* --- Category filter (host setup, post-import) --- */
+.category-filter {
+    margin: 0.75rem 0;
+    padding: 0.85rem 1rem;
+    border: 1px solid var(--cards-highlight-border);
+    border-radius: 10px;
+    background-color: var(--surface-color);
+}
+
+.category-filter-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+}
+
+.category-filter-header h3 {
+    margin: 0;
+    font-size: 1.05rem;
+}
+
+.category-filter-toggle {
+    flex: 0 0 auto;
+    padding: 0.3rem 0.7rem;
+    border-radius: 999px;
+    border: 1px solid var(--cards-highlight-border);
+    background-color: var(--quiz-hover);
+    color: var(--primary-color);
+    font-size: 0.85rem;
+    cursor: pointer;
+    transition: background-color 0.15s ease;
+}
+
+.category-filter-toggle:hover {
+    background-color: var(--cards-highlight-bg);
+}
+
+.category-filter-summary {
+    margin: 0.4rem 0 0.6rem;
+    font-size: 0.9rem;
+    color: var(--text-muted, #555);
+}
+
+.category-filter-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.45rem;
+}
+
+/* Toggle chip: a selectable variant of .topic-chip. Selected chips fill with
+   the primary color; deselected ones read as muted/outlined. */
+.category-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.3rem 0.7rem;
+    border-radius: 999px;
+    border: 1px solid var(--cards-highlight-border);
+    background-color: var(--surface-color);
+    color: var(--text-muted, #666);
+    font-size: 0.9rem;
+    font-family: inherit;
+    cursor: pointer;
+    transition:
+        background-color 0.15s ease,
+        color 0.15s ease,
+        border-color 0.15s ease;
+}
+
+.category-chip:hover {
+    border-color: var(--primary-color);
+}
+
+.category-chip.selected {
+    background-color: var(--primary-color);
+    border-color: var(--primary-color);
+    color: #fff;
+}
+
+.category-chip-count {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 1.4em;
+    padding: 0 0.35em;
+    border-radius: 999px;
+    background-color: rgba(0, 0, 0, 0.12);
+    font-size: 0.78rem;
+    font-variant-numeric: tabular-nums;
+}
+
+.category-chip.selected .category-chip-count {
+    background-color: rgba(255, 255, 255, 0.28);
+}
+
 /* --- Music vote poll: rich theme cards --- */
 .lobby-music-poll h3 {
     font-size: 1.05rem;
