@@ -216,6 +216,10 @@
                 <div id="host-question-display" class="hidden">
                     <h3 id="current-question-text"></h3>
                     <ul id="host-current-options" class="host-options-list"></ul>
+                    <div class="double-points-badge hidden" id="double-points-badge" role="status">
+                        <span class="double-points-badge__multiplier">2×</span>
+                        <span class="double-points-badge__label">Doppelte Punkte!</span>
+                    </div>
                     <div class="question-counter" id="question-counter"></div>
                     <div class="timer-bar-container">
                         <div class="timer-bar" id="timer-bar"></div>
@@ -333,6 +337,14 @@
 
                 <div id="player-question" class="hidden">
                     <h3 id="player-question-text"></h3>
+                    <div
+                        class="double-points-badge hidden"
+                        id="player-double-points-badge"
+                        role="status"
+                    >
+                        <span class="double-points-badge__multiplier">2×</span>
+                        <span class="double-points-badge__label">Doppelte Punkte!</span>
+                    </div>
                     <div class="question-counter" id="player-question-counter"></div>
                     <div class="timer-bar-container">
                         <div class="timer-bar" id="player-timer-bar"></div>
@@ -400,6 +412,10 @@
         <div id="phase-veil" class="phase-veil" aria-hidden="true">
             <div class="phase-veil-content">
                 <p id="phase-veil-eyebrow" class="phase-veil-eyebrow"></p>
+                <div id="phase-veil-double" class="phase-veil-double hidden">
+                    <span class="phase-veil-double__multiplier">2×</span>
+                    <span class="phase-veil-double__label">Doppelte Punkte!</span>
+                </div>
                 <div id="phase-veil-categories" class="phase-veil-categories"></div>
             </div>
         </div>

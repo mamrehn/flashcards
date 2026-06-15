@@ -1348,6 +1348,82 @@ select:focus {
     font-weight: 500;
 }
 
+/* "Double points" badge — gold pill that announces a finale or every-Nth
+   round on both the host screen and the player card. Gold (not the violet
+   theme or magenta CTA) so the raised stakes read instantly and never get
+   confused with a button. Steady pulse keeps it noticeable without relying
+   on hover, which phones don't have. */
+.double-points-badge {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.4rem;
+    width: fit-content;
+    max-width: 100%;
+    margin: 0.25rem auto 0.6rem;
+    padding: 0.3rem 0.9rem;
+    border-radius: 999px;
+    background: linear-gradient(135deg, #ffd24d 0%, #ffb300 100%);
+    color: #5a3d00;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    text-align: center;
+    box-shadow:
+        0 2px 8px rgba(255, 160, 0, 0.45),
+        inset 0 0 0 1px rgba(255, 255, 255, 0.5);
+    animation: double-points-glow 1.4s ease-in-out infinite alternate;
+}
+
+.double-points-badge__multiplier {
+    font-size: 1.25em;
+    line-height: 1;
+    font-weight: 800;
+    text-shadow: 0 1px 0 rgba(255, 255, 255, 0.5);
+}
+
+.double-points-badge__label {
+    font-size: 0.95em;
+    text-transform: uppercase;
+}
+
+/* One-shot entrance when the badge first appears for a round. */
+.double-points-badge--pop {
+    animation:
+        double-points-pop 0.5s cubic-bezier(0.18, 0.89, 0.32, 1.28) 1,
+        double-points-glow 1.4s ease-in-out 0.5s infinite alternate;
+}
+
+@keyframes double-points-glow {
+    from {
+        box-shadow:
+            0 2px 8px rgba(255, 160, 0, 0.45),
+            inset 0 0 0 1px rgba(255, 255, 255, 0.5);
+    }
+    to {
+        box-shadow:
+            0 4px 16px rgba(255, 160, 0, 0.7),
+            inset 0 0 0 1px rgba(255, 255, 255, 0.7);
+    }
+}
+
+@keyframes double-points-pop {
+    0% {
+        opacity: 0;
+        transform: scale(0.6) translateY(6px);
+    }
+    100% {
+        opacity: 1;
+        transform: scale(1) translateY(0);
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .double-points-badge,
+    .double-points-badge--pop {
+        animation: none;
+    }
+}
+
 /* Big screen: make question text pop */
 #current-question-text {
     font-size: 1.75em;
@@ -2397,6 +2473,52 @@ body.player-in-game footer {
 
 .phase-veil-eyebrow:empty {
     display: none;
+}
+
+/* Veil tease for a double-points round — bigger sibling of the in-question
+   .double-points-badge, sized for the full-screen veil so the raised stakes
+   land before the question text appears. Same gold language as the badge. */
+.phase-veil-double {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    padding: 0.4rem 1.4rem;
+    border-radius: 999px;
+    background: linear-gradient(135deg, #ffd24d 0%, #ffb300 100%);
+    color: #5a3d00;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    box-shadow:
+        0 4px 20px rgba(255, 160, 0, 0.55),
+        inset 0 0 0 1px rgba(255, 255, 255, 0.55);
+    animation: phase-veil-double-pop 0.5s cubic-bezier(0.18, 0.89, 0.32, 1.28) both;
+}
+
+.phase-veil-double__multiplier {
+    font-size: clamp(1.8rem, 6vw, 3.4rem);
+    line-height: 1;
+}
+
+.phase-veil-double__label {
+    font-size: clamp(1rem, 3vw, 1.8rem);
+}
+
+@keyframes phase-veil-double-pop {
+    from {
+        opacity: 0;
+        transform: scale(0.7) translateY(10px);
+    }
+    to {
+        opacity: 1;
+        transform: scale(1) translateY(0);
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .phase-veil-double {
+        animation: none;
+    }
 }
 
 .phase-veil-categories {

@@ -181,6 +181,12 @@ const HOST_AUDIO_STINGERS = new Set(['time_up', 'new_question']);
 // themes (and even when the chosen theme is "none").
 const HOST_AUDIO_FINAL_PATH = 'audio/final.opus';
 
+// Scoring: every Nth question is a "double points" round (2× the progressive
+// base + speed score). The finale is always a double-points round too — see
+// isDoublePointsRound().
+const DOUBLE_POINTS_EVERY = 5;
+const DOUBLE_POINTS_MULTIPLIER = 2;
+
 /**
  * Builds the audio file URL for a (theme, track) pair.
  * @param {string} theme
@@ -687,9 +693,13 @@ function lowerPhaseVeil() {
  * @param {Array<string>|null} categories
  * @param {string} [eyebrow] — defaults to "Nächste Frage" when categories present
  */
-function setVeilCategories(categories, eyebrow = 'Nächste Frage') {
+function setVeilCategories(categories, eyebrow = 'Nächste Frage', doublePoints = false) {
     const eyebrowEl = document.querySelector('#phase-veil-eyebrow');
     const listEl = document.querySelector('#phase-veil-categories');
+    // Tease the raised stakes a beat before the question text lands, so the
+    // double-points round registers while the veil is still up.
+    const doubleEl = document.querySelector('#phase-veil-double');
+    if (doubleEl) doubleEl.classList.toggle('hidden', !doublePoints);
     if (!listEl) return;
     listEl.innerHTML = '';
     const list = Array.isArray(categories) ? categories : [];
@@ -716,6 +726,23 @@ function flyInElement(el, className = 'phase-fly-up') {
     if (!el) return;
     el.classList.remove(className);
     requestAnimationFrame(() => el.classList.add(className));
+}
+
+/**
+ * Toggles a "double points" badge on or off. Shared by the host's big screen
+ * and each player's question card so everyone sees the raised stakes for a
+ * finale or every-Nth round. Re-triggers the pop animation each time it shows.
+ * @param {HTMLElement | null} el - The badge element.
+ * @param {boolean} isDouble - Whether the current round awards double points.
+ */
+function setDoublePointsBadge(el, isDouble) {
+    if (!el) return;
+    el.classList.toggle('hidden', !isDouble);
+    if (isDouble) {
+        el.classList.remove('double-points-badge--pop');
+        void el.offsetWidth; // force reflow so the entrance animation restarts
+        el.classList.add('double-points-badge--pop');
+    }
 }
 
 /**
@@ -1145,6 +1172,7 @@ async function initializeHostFeatures(reconnectInfo) {
     const currentQuestionTextEl = document.querySelector('#current-question-text');
     const hostCurrentOptionsEl = document.querySelector('#host-current-options');
     const questionCounterEl = document.querySelector('#question-counter');
+    const doublePointsBadgeEl = document.querySelector('#double-points-badge');
     const timerBar = document.querySelector('#timer-bar');
     const answersCount = document.querySelector('#answers-count');
     const totalPlayers = document.querySelector('#total-players');
@@ -1639,6 +1667,10 @@ async function initializeHostFeatures(reconnectInfo) {
             // Options are displayed without correct indicators while question is active
             displayHostOptions(currentQuestion.shuffledOptions || currentQuestion.options, []); // Use shuffled if available
             questionCounterEl.textContent = `Frage ${quizState.currentQuestionIndex + 1} von ${quizState.shuffledQuestions.length}`;
+            setDoublePointsBadge(
+                doublePointsBadgeEl,
+                isDoublePointsRound(quizState.currentQuestionIndex)
+            );
             answersCount.textContent = quizState.answersReceived.toString();
             totalPlayers.textContent = getNonHostPlayerCount().toString();
             if (
@@ -2674,7 +2706,11 @@ async function initializeHostFeatures(reconnectInfo) {
         const upcomingCategories = Array.isArray(currentQuestion.categories)
             ? currentQuestion.categories
             : [];
-        setVeilCategories(upcomingCategories);
+        setVeilCategories(
+            upcomingCategories,
+            'Nächste Frage',
+            isDoublePointsRound(quizState.currentQuestionIndex)
+        );
         raisePhaseVeil(veilTheme);
 
         // Phase 2: when the stinger ends, the reveal callback fires the
@@ -2690,10 +2726,15 @@ async function initializeHostFeatures(reconnectInfo) {
             currentQuestionTextEl.textContent = currentQuestion.question;
             displayHostOptions(shuffledOptions, []);
             questionCounterEl.textContent = `Frage ${quizState.currentQuestionIndex + 1} von ${quizState.shuffledQuestions.length}`;
+            setDoublePointsBadge(
+                doublePointsBadgeEl,
+                isDoublePointsRound(quizState.currentQuestionIndex)
+            );
             answersCount.textContent = '0';
             totalPlayers.textContent = getNonHostPlayerCount().toString();
 
             showNextBtn.classList.add('hidden');
+            showLastBtn.classList.add('hidden');
             showResultsBtn.classList.add('hidden');
             hostScoreboardEl.classList.add('hidden');
             if (hostViewHeading) hostViewHeading.classList.add('hidden');
@@ -2759,6 +2800,7 @@ async function initializeHostFeatures(reconnectInfo) {
             total: quizState.shuffledQuestions.length,
             startTime: hostQuestionStartTime,
             duration: quizState.questionDurations[quizState.currentQuestionIndex],
+            doublePoints: isDoublePointsRound(quizState.currentQuestionIndex),
         };
 
         if (!hostWs || hostWs.readyState !== WebSocket.OPEN) {
@@ -2889,12 +2931,20 @@ async function initializeHostFeatures(reconnectInfo) {
             // DOM under the cover of full-opacity veil, then drop the veil
             // and fly-in the scoreboard.
             setTimeout(() => {
-                displayCurrentScoreboard();
                 if (isFinal) {
+                    // Finale: keep the standings hidden so the podium stays a
+                    // surprise. Rendering the Top-10 here would spoil who wins
+                    // before "Endergebnisse anzeigen" is even pressed. The host
+                    // screen holds on the just-answered question (correct
+                    // answers + counts) and only the reveal button flies in.
+                    hostScoreboardEl.classList.add('hidden');
                     showNextBtn.classList.add('hidden');
                     showLastBtn.classList.add('hidden');
                     showResultsBtn.classList.remove('hidden');
+                    lowerPhaseVeil();
+                    flyInElement(showResultsBtn, 'phase-burst-up');
                 } else {
+                    displayCurrentScoreboard();
                     showNextBtn.classList.remove('hidden');
                     showResultsBtn.classList.add('hidden');
                     // Offer the early-finish shortcut only when it would
@@ -2906,12 +2956,12 @@ async function initializeHostFeatures(reconnectInfo) {
                     } else {
                         showLastBtn.classList.add('hidden');
                     }
+                    lowerPhaseVeil();
+                    // Stronger entrance for the leaderboard panel itself —
+                    // 60 px slide + slight scale-up while the rows inside
+                    // stagger top-to-bottom with a winner pop on rank-1.
+                    flyInElement(hostScoreboardEl, 'phase-burst-up');
                 }
-                lowerPhaseVeil();
-                // Stronger entrance for the leaderboard panel itself —
-                // 60 px slide + slight scale-up while the rows inside
-                // stagger top-to-bottom with a winner pop on rank-1.
-                flyInElement(hostScoreboardEl, 'phase-burst-up');
             }, 200);
         };
 
@@ -2920,6 +2970,22 @@ async function initializeHostFeatures(reconnectInfo) {
         } else {
             setTimeout(goToLeaderboard, 250);
         }
+    }
+
+    /**
+     * Decides whether a given round awards double points. A round is a
+     * double-points round when it is the finale (the deck's last question, or
+     * the host-triggered "Letzte Frage") or roughly every Nth question. The
+     * finale rule means the *last shown* question always doubles — even when
+     * the host ends the quiz early.
+     * @param {number} index - Zero-based index of the question.
+     * @returns {boolean}
+     */
+    function isDoublePointsRound(index) {
+        const numQuestions = quizState.shuffledQuestions.length;
+        const isFinale = quizState.endRequested || index === numQuestions - 1;
+        const isEveryNth = (index + 1) % DOUBLE_POINTS_EVERY === 0;
+        return isFinale || isEveryNth;
     }
 
     /**
@@ -2944,6 +3010,12 @@ async function initializeHostFeatures(reconnectInfo) {
                 basePointsFirst + quizState.currentQuestionIndex * pointsIncreasePerQuestion;
         }
 
+        // Double-points rounds (finale + every Nth question) multiply the whole
+        // award — progressive base *and* the speed bonus — so the stakes climb.
+        const pointsMultiplier = isDoublePointsRound(quizState.currentQuestionIndex)
+            ? DOUBLE_POINTS_MULTIPLIER
+            : 1;
+
         for (const p of getNonHostPlayers()) {
             if (p.currentAnswer && p.currentAnswer.length > 0) {
                 const playerAnsSet = new Set(p.currentAnswer);
@@ -2965,7 +3037,8 @@ async function initializeHostFeatures(reconnectInfo) {
                     const timeBonus =
                         (timeRemaining / totalQuestionTime) * (currentQuestionBasePoints * 0.5);
 
-                    p.score += adjustedRatio * (currentQuestionBasePoints + timeBonus);
+                    p.score +=
+                        pointsMultiplier * adjustedRatio * (currentQuestionBasePoints + timeBonus);
                 }
             }
         }
@@ -3460,6 +3533,7 @@ function initializePlayerFeatures(reconnectInfo) {
     const playerQuestionView = document.querySelector('#player-question');
     const playerQuestionTextEl = document.querySelector('#player-question-text');
     const playerQuestionCounterEl = document.querySelector('#player-question-counter');
+    const playerDoublePointsBadgeEl = document.querySelector('#player-double-points-badge');
     const playerTimerBar = document.querySelector('#player-timer-bar');
     const optionsContainer = document.querySelector('#options-container');
     const submitAnswerBtn = document.querySelector('#submit-answer-btn');
@@ -4230,6 +4304,7 @@ function initializePlayerFeatures(reconnectInfo) {
 
         playerQuestionTextEl.textContent = qData.question;
         playerQuestionCounterEl.textContent = `Frage ${qData.index + 1} von ${qData.total}`;
+        setDoublePointsBadge(playerDoublePointsBadgeEl, Boolean(qData.doublePoints));
 
         optionsContainer.innerHTML = '';
         selectedAnswers = []; // Ensure selectedAnswers is reset for a new question

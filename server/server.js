@@ -898,6 +898,10 @@ function handleStartQuestion(ws, msg) {
         index: questionIndex,
         total: questionTotal,
         duration: duration,
+        // Relay-only flag: drives the "double points" badge on the player
+        // card. Scoring itself is computed host-side, so this is purely
+        // cosmetic — coerce to a strict boolean and never trust the value.
+        doublePoints: msg.doublePoints === true,
     };
     // Snapshot for replay on reconnect.
     room.phase = 'question';
