@@ -1102,6 +1102,11 @@ async function initializeHostFeatures(reconnectInfo) {
             players: {}, // Player structure includes score and answer time
             answersReceived: 0,
             isQuestionActive: false,
+            // Set when the host arms "Letzte Frage" — the next question to
+            // finish is treated as the final one (podium + applause), even if
+            // questions remain. Drives `isFinal`/`isFinalQ` below so players
+            // also receive the final leaderboard payload.
+            endRequested: false,
             roomId: null, // This will be the 4-digit alphanumeric code
             durationMin: 20, // Minimum question duration in seconds
             durationMax: 40, // Maximum question duration in seconds
@@ -1146,6 +1151,7 @@ async function initializeHostFeatures(reconnectInfo) {
     const hostScoreboardEl = document.querySelector('#host-scoreboard');
     const scoreboardListEl = document.querySelector('#scoreboard-list');
     const showNextBtn = document.querySelector('#show-next-btn');
+    const showLastBtn = document.querySelector('#show-last-btn');
     const showResultsBtn = document.querySelector('#show-results-btn');
     const hostResults = document.querySelector('#host-results');
     const leaderboard = document.querySelector('#leaderboard');
@@ -1494,11 +1500,22 @@ async function initializeHostFeatures(reconnectInfo) {
             // startQuestion's reveal callback (after the new_question
             // stinger ends), not here, so the veil can cover the swap.
             quizState.currentQuestionIndex = 0;
+            quizState.endRequested = false;
             await startQuestion();
         });
 
         // Event listener for moving to the next question
         showNextBtn.addEventListener('click', async () => {
+            quizState.currentQuestionIndex++;
+            await startQuestion();
+        });
+
+        // "Letzte Frage" — play one more question, then go straight to the
+        // podium. Same as "Nächste Frage" but arms the finale so the next
+        // question's results route everyone (host + players) into the final
+        // celebration instead of another round.
+        showLastBtn.addEventListener('click', async () => {
+            quizState.endRequested = true;
             quizState.currentQuestionIndex++;
             await startQuestion();
         });
@@ -1624,7 +1641,10 @@ async function initializeHostFeatures(reconnectInfo) {
             questionCounterEl.textContent = `Frage ${quizState.currentQuestionIndex + 1} von ${quizState.shuffledQuestions.length}`;
             answersCount.textContent = quizState.answersReceived.toString();
             totalPlayers.textContent = getNonHostPlayerCount().toString();
-            if (quizState.currentQuestionIndex < quizState.shuffledQuestions.length - 1)
+            if (
+                !quizState.endRequested &&
+                quizState.currentQuestionIndex < quizState.shuffledQuestions.length - 1
+            )
                 showNextBtn.classList.remove('hidden');
             else showResultsBtn.classList.remove('hidden');
         } else if (hostResults.classList.contains('active')) {
@@ -2856,7 +2876,9 @@ async function initializeHostFeatures(reconnectInfo) {
         // with the scoreboard flying in. The leaderboard loop crossfades in
         // right after, queued via the stinger's followLoop.
         const veilTheme = hostMusicWinner || hostLobbyMusicTheme || 'none';
-        const isFinal = quizState.currentQuestionIndex >= quizState.shuffledQuestions.length - 1;
+        const isFinal =
+            quizState.endRequested ||
+            quizState.currentQuestionIndex >= quizState.shuffledQuestions.length - 1;
 
         const goToLeaderboard = () => {
             // No category priming on the question→leaderboard veil; this is
@@ -2870,10 +2892,20 @@ async function initializeHostFeatures(reconnectInfo) {
                 displayCurrentScoreboard();
                 if (isFinal) {
                     showNextBtn.classList.add('hidden');
+                    showLastBtn.classList.add('hidden');
                     showResultsBtn.classList.remove('hidden');
                 } else {
                     showNextBtn.classList.remove('hidden');
                     showResultsBtn.classList.add('hidden');
+                    // Offer the early-finish shortcut only when it would
+                    // actually skip questions — i.e. the *next* question isn't
+                    // already the last one (otherwise "Nächste Frage" leads to
+                    // the finale anyway and "Letzte Frage" would be redundant).
+                    if (quizState.currentQuestionIndex < quizState.shuffledQuestions.length - 2) {
+                        showLastBtn.classList.remove('hidden');
+                    } else {
+                        showLastBtn.classList.add('hidden');
+                    }
                 }
                 lowerPhaseVeil();
                 // Stronger entrance for the leaderboard panel itself —
@@ -2946,7 +2978,9 @@ async function initializeHostFeatures(reconnectInfo) {
         if (!hostWs || hostWs.readyState !== WebSocket.OPEN) return;
 
         const currentQ = quizState.shuffledQuestions[quizState.currentQuestionIndex];
-        const isFinalQ = quizState.currentQuestionIndex === quizState.shuffledQuestions.length - 1;
+        const isFinalQ =
+            quizState.endRequested ||
+            quizState.currentQuestionIndex === quizState.shuffledQuestions.length - 1;
         // Optimize: Only send leaderboard on final question
         const leaderboardData = isFinalQ ? getLeaderboardData() : null;
 
@@ -3024,52 +3058,124 @@ async function initializeHostFeatures(reconnectInfo) {
         hostResults.classList.remove('hidden'); // Ensure host results view is shown
         if (hostViewHeading) hostViewHeading.classList.remove('hidden'); // Show "Quiz hosten" heading
 
-        displayLeaderboard();
+        displayLeaderboard(true); // animated podium reveal + confetti + applause
         flyInElement(hostResults);
-        // Universal `audio/final.opus` (theme-agnostic applause / ovation).
-        // No follow-up loop: the final screen sits in silence after the
-        // ovation finishes, which matches the README's "palate cleanser" goal.
-        if (hostMusicEngine) hostMusicEngine.playStinger('final');
 
         // No need to send 'final' broadcast here, it's already sent with the last 'result'
         // This function just handles the host UI transition
     }
 
+    // Pending reveal timers for the podium, cleared on each render so a fast
+    // re-entry (e.g. reconnect) can't fire a stale staggered reveal.
+    let podiumRevealTimers = [];
+
     /**
-     * Displays the final leaderboard on the host side.
+     * Renders the final standings on the host side as a Kahoot-style podium:
+     * the top 3 on pedestals (2nd · 1st · 3rd, tallest in the middle) with the
+     * rest of the field listed below.
+     * @param {boolean} [animate] - When true, stage the reveal 3rd → 2nd → 1st,
+     *   climaxing on the winner with confetti + the `final.opus` ovation. When
+     *   false (reconnect into a finished game, or reduced motion), everything
+     *   appears at once with no audio/confetti.
      */
-    function displayLeaderboard() {
+    function displayLeaderboard(animate = false) {
         const sortedPlayers = getLeaderboardData(); // This function already filters out the host
         leaderboard.innerHTML = '';
+
+        for (const t of podiumRevealTimers) clearTimeout(t);
+        podiumRevealTimers = [];
 
         if (sortedPlayers.length === 0) {
             leaderboard.innerHTML = '<p>Noch keine Spieler in der Rangliste.</p>';
             return;
         }
 
-        for (const [idx, p] of sortedPlayers.entries()) {
-            const i = document.createElement('div');
-            i.className = 'leaderboard-item';
-            switch (idx) {
-                case 0: {
-                    i.classList.add('rank-1');
-                    break;
-                }
-                case 1: {
-                    i.classList.add('rank-2');
-                    break;
-                }
-                case 2: {
-                    i.classList.add('rank-3');
-                    break;
-                }
-            }
-            const avatarHtml = p.avatar
-                ? `<span class="player-avatar" aria-hidden="true">${sanitizeHTML(p.avatar)}</span>`
+        const reduceMotion =
+            globalThis.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
+        const staged = animate && !reduceMotion;
+
+        const top3 = sortedPlayers.slice(0, 3);
+        const rest = sortedPlayers.slice(3);
+        const winnerAvatar = top3[0]?.avatar || undefined;
+        const MEDALS = ['🥇', '🥈', '🥉'];
+
+        // Podium — DOM order is 2nd · 1st · 3rd so the tallest pedestal sits in
+        // the middle. `layout` lists the rank indices (0 = winner) that exist.
+        const podium = document.createElement('div');
+        podium.className = 'podium';
+        const layout = [];
+        if (top3[1]) layout.push(1);
+        layout.push(0); // the winner is always present here
+        if (top3[2]) layout.push(2);
+
+        const placeEls = {};
+        for (const rankIdx of layout) {
+            const p = top3[rankIdx];
+            const place = document.createElement('div');
+            place.className = `podium-place podium-${rankIdx + 1}`;
+            if (rankIdx === 0) place.classList.add('podium-winner');
+            if (staged) place.classList.add('podium-pending');
+            const avatar = p.avatar
+                ? `<span class="podium-avatar" aria-hidden="true">${sanitizeHTML(p.avatar)}</span>`
                 : '';
-            i.innerHTML = `<span class="player-row"><span class="player-rank">${idx + 1}.</span>${avatarHtml}<span class="player-name">${sanitizeHTML(p.name)}</span></span><span class="player-score">${Math.round(p.score)} Punkte</span>`;
-            leaderboard.append(i);
+            const crown =
+                rankIdx === 0 ? '<span class="podium-crown" aria-hidden="true">👑</span>' : '';
+            place.innerHTML =
+                crown +
+                `<span class="podium-medal" aria-hidden="true">${MEDALS[rankIdx]}</span>` +
+                avatar +
+                `<span class="podium-name">${sanitizeHTML(p.name)}</span>` +
+                `<span class="podium-score">${Math.round(p.score)} Punkte</span>` +
+                `<div class="podium-pedestal"><span class="podium-rank">${rankIdx + 1}</span></div>`;
+            podium.append(place);
+            placeEls[rankIdx] = place;
         }
+        leaderboard.append(podium);
+
+        // Ranks 4+ as a plain list below the podium.
+        let restList = null;
+        if (rest.length > 0) {
+            restList = document.createElement('div');
+            restList.className = 'podium-rest';
+            if (staged) restList.classList.add('podium-pending');
+            for (const [idx, p] of rest.entries()) {
+                const row = document.createElement('div');
+                row.className = 'leaderboard-item';
+                const avatarHtml = p.avatar
+                    ? `<span class="player-avatar" aria-hidden="true">${sanitizeHTML(p.avatar)}</span>`
+                    : '';
+                row.innerHTML = `<span class="player-row"><span class="player-rank">${idx + 4}.</span>${avatarHtml}<span class="player-name">${sanitizeHTML(p.name)}</span></span><span class="player-score">${Math.round(p.score)} Punkte</span>`;
+                restList.append(row);
+            }
+            leaderboard.append(restList);
+        }
+
+        if (!staged) return; // static render: all visible, no fx
+
+        // Staged reveal: 3rd → 2nd → 1st, climaxing on the winner with the
+        // ovation + confetti, then the rest of the field slides in.
+        const reveal = (el) => el && el.classList.remove('podium-pending');
+        const schedule = (fn, delay) => podiumRevealTimers.push(setTimeout(fn, delay));
+        const BASE = 250;
+        const STEP = 700;
+        const revealOrder = [2, 1, 0].filter((r) => placeEls[r]);
+        let winnerDelay = BASE;
+        for (const [i, rankIdx] of revealOrder.entries()) {
+            const delay = BASE + i * STEP;
+            if (rankIdx === 0) winnerDelay = delay;
+            schedule(() => {
+                reveal(placeEls[rankIdx]);
+                if (rankIdx === 0) {
+                    triggerConfetti(winnerAvatar);
+                    // Universal `audio/final.opus` (theme-agnostic ovation),
+                    // fired at the winner reveal so the applause lands on the
+                    // climax rather than the empty podium.
+                    if (hostMusicEngine) hostMusicEngine.playStinger('final');
+                }
+            }, delay);
+        }
+        schedule(() => triggerConfetti(winnerAvatar), winnerDelay + 500);
+        if (restList) schedule(() => reveal(restList), winnerDelay + 750);
     }
 }
 
@@ -3265,8 +3371,10 @@ let lastConfettiAvatarVariant = null;
 
 /**
  * Triggers confetti animation for correct answers.
+ * @param {string} [avatarOverride] - Emoji to pop alongside the burst. Defaults
+ *   to the local player's avatar; the host podium passes the winner's avatar.
  */
-function triggerConfetti() {
+function triggerConfetti(avatarOverride) {
     const confettiContainer = document.querySelector('#confetti-container');
     if (!confettiContainer) {
         console.warn('Confetti-Container nicht gefunden.');
@@ -3309,7 +3417,8 @@ function triggerConfetti() {
         });
     }
 
-    if (playerAvatar) {
+    const avatar = avatarOverride ?? playerAvatar;
+    if (avatar) {
         const pool = lastConfettiAvatarVariant
             ? CONFETTI_AVATAR_VARIANTS.filter((v) => v !== lastConfettiAvatarVariant)
             : CONFETTI_AVATAR_VARIANTS;
@@ -3318,7 +3427,7 @@ function triggerConfetti() {
         const avatarEl = document.createElement('div');
         avatarEl.className = `confetti-avatar confetti-avatar-${variant}`;
         avatarEl.setAttribute('aria-hidden', 'true');
-        avatarEl.textContent = playerAvatar;
+        avatarEl.textContent = avatar;
         confettiContainer.append(avatarEl);
         avatarEl.addEventListener('animationend', () => {
             avatarEl.remove();
