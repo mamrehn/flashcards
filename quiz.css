@@ -36,6 +36,15 @@ body {
     line-height: 1.5;
 }
 
+/* The `* { padding: 0 }` reset above strips the indentation browsers normally
+   give lists, leaving markers flush against the card edge (e.g. the privacy
+   page). Restore it for plain content lists; component lists such as
+   `.host-options-list` set their own padding via their class. */
+ul,
+ol {
+    padding-left: 1.5rem;
+}
+
 /* Links — themed so the join-link and footer stay readable in both modes
    (browser default dark-blue is nearly invisible on dark surfaces). */
 a {
