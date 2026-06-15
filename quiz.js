@@ -3242,13 +3242,13 @@ async function initializeHostFeatures(reconnectInfo) {
             if (rankIdx === 0) winnerDelay = delay;
             schedule(() => {
                 reveal(placeEls[rankIdx]);
-                if (rankIdx === 0) {
-                    triggerConfetti(winnerAvatar);
-                    // Universal `audio/final.opus` (theme-agnostic ovation),
-                    // fired at the winner reveal so the applause lands on the
-                    // climax rather than the empty podium.
-                    if (hostMusicEngine) hostMusicEngine.playStinger('final');
-                }
+                // Applause on every podium step — a fresh burst from the
+                // universal `audio/final.opus` (theme-agnostic ovation) timed to
+                // each reveal of 3rd → 2nd → 1st. Re-firing restarts the clip,
+                // so each place gets its own clap, building to the winner.
+                if (hostMusicEngine) hostMusicEngine.playStinger('final');
+                // Confetti stays on the winner alone, for the climax.
+                if (rankIdx === 0) triggerConfetti(winnerAvatar);
             }, delay);
         }
         schedule(() => triggerConfetti(winnerAvatar), winnerDelay + 500);
