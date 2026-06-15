@@ -310,6 +310,10 @@ wss.on('connection', (ws) => {
                 handleSendResults(ws, msg);
                 break;
             }
+            case 'reveal_final': {
+                handleRevealFinal(ws);
+                break;
+            }
             case 'terminate': {
                 handleTerminate(ws);
                 break;
@@ -413,6 +417,9 @@ function handleCreateRoom(ws) {
         phase: 'lobby',
         activeQuestion: null,
         finalSnapshot: null,
+        // Whether the host has triggered the podium reveal. Players withhold the
+        // final ranking until this flips, so phones can't spoil the reveal.
+        finalRevealed: false,
     };
     rooms.set(roomId, room);
 
@@ -568,6 +575,9 @@ function handleRestoreRoom(ws, msg) {
         phase: 'lobby',
         activeQuestion: null,
         finalSnapshot: null,
+        // Whether the host has triggered the podium reveal. Players withhold the
+        // final ranking until this flips, so phones can't spoil the reveal.
+        finalRevealed: false,
     };
 
     // Restore players if provided (limit to MAX_PLAYERS_PER_ROOM)
@@ -687,6 +697,8 @@ function handleJoin(ws, msg) {
                 questionIndex: room.finalSnapshot.questionIndex,
                 leaderboard: room.finalSnapshot.leaderboard,
                 playerScore: player.score,
+                // Show the ranking on arrival only if the podium is already out.
+                revealed: !!room.finalRevealed,
             });
         }
 
@@ -771,6 +783,8 @@ function handleJoin(ws, msg) {
                 questionIndex: room.finalSnapshot.questionIndex,
                 leaderboard: room.finalSnapshot.leaderboard,
                 playerScore: 0,
+                // Show the ranking on arrival only if the podium is already out.
+                revealed: !!room.finalRevealed,
             });
         }
 
@@ -953,6 +967,9 @@ function handleSendResults(ws, msg) {
             leaderboard,
             questionIndex: room.currentQuestionIndex,
         };
+        // Ranking is sent now but stays hidden on players' phones until the
+        // host triggers the podium (`reveal_final`).
+        room.finalRevealed = false;
     }
 
     // Send personalized results to each player
@@ -968,6 +985,19 @@ function handleSendResults(ws, msg) {
             });
         }
     }
+}
+
+/**
+ * Host triggered the podium. Flag the room as revealed (so reconnecting players
+ * get the ranking right away) and tell connected players to unveil it now.
+ * @param ws
+ */
+function handleRevealFinal(ws) {
+    const room = rooms.get(ws.roomId);
+    if (!room || ws.sessionId !== room.hostSessionId) return;
+
+    room.finalRevealed = true;
+    broadcastToPlayers(room, { type: 'reveal_final' });
 }
 
 /**

@@ -1230,6 +1230,33 @@ select:focus {
     color: var(--secondary-color);
 }
 
+/* Placeholder shown on the player's final screen while the ranking is held
+   back, so a glance at the phone can't spoil the host's podium reveal. */
+.leaderboard-suspense {
+    margin: 0;
+    text-align: center;
+    font-weight: 600;
+    color: var(--secondary-color);
+    animation: leaderboard-suspense-pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes leaderboard-suspense-pulse {
+    0%,
+    100% {
+        opacity: 0.55;
+    }
+    50% {
+        opacity: 1;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .leaderboard-suspense {
+        animation: none;
+        opacity: 1;
+    }
+}
+
 /* Timer bar */
 .timer-bar-container {
     width: 100%;

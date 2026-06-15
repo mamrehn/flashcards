@@ -3134,8 +3134,12 @@ async function initializeHostFeatures(reconnectInfo) {
         displayLeaderboard(true); // animated podium reveal + confetti + applause
         flyInElement(hostResults);
 
-        // No need to send 'final' broadcast here, it's already sent with the last 'result'
-        // This function just handles the host UI transition
+        // Unveil the ranking on the players' phones in sync with the podium.
+        // The final standings were already sent (withheld client-side) with the
+        // last 'result'; this is just the go-ahead to render them.
+        if (hostWs && hostWs.readyState === WebSocket.OPEN) {
+            hostWs.send(JSON.stringify({ type: 'reveal_final' }));
+        }
     }
 
     // Pending reveal timers for the podium, cleared on each render so a fast
@@ -3263,6 +3267,10 @@ let selectedAnswers = [];
 let playerHasSubmitted = false;
 let playerWasAutoSubmitted = false;
 let playerScore = 0;
+// Final standings the player has received but is deliberately NOT showing yet,
+// so the leaderboard can't spoil the host's podium reveal. Held until the host
+// broadcasts `reveal_final` (or replayed already-revealed on reconnect).
+let pendingFinalResultData = null;
 // Lobby-only state (cosmetic; resets on a fresh join):
 let playerAvatarBase = LOBBY_AVATAR_BASE_DEFAULT;
 let playerAvatarAccessory = null; // null = bare base
@@ -4125,6 +4133,13 @@ function initializePlayerFeatures(reconnectInfo) {
                     break;
                 }
 
+                case 'reveal_final': {
+                    // Host pressed "Endergebnisse anzeigen" — unveil the ranking
+                    // now, in sync with the podium on the big screen.
+                    revealFinalLeaderboard();
+                    break;
+                }
+
                 case 'quiz_terminated': {
                     showMessage('Der Host hat das Quiz beendet.', 'info');
                     resetPlayerStateAndUI();
@@ -4485,7 +4500,11 @@ function initializePlayerFeatures(reconnectInfo) {
     }
 
     /**
-     * Displays the final results and leaderboard for the player.
+     * Displays the final results for the player. The own score shows right
+     * away, but the full ranking is withheld so a glance at the phone can't
+     * spoil the host's podium reveal. The leaderboard is only rendered once the
+     * host broadcasts `reveal_final` — or immediately if `frData.revealed` is
+     * set (a reconnect that lands after the host already revealed).
      * @param {object} frData - The final results data received from the host.
      */
     function displayFinalResult(frData) {
@@ -4498,6 +4517,31 @@ function initializePlayerFeatures(reconnectInfo) {
 
         finalScoreEl.textContent = Math.round(playerScore); // Use the global playerScore for final display
 
+        pendingFinalResultData = frData;
+        if (frData.revealed) {
+            renderFinalLeaderboard(frData);
+        } else {
+            // Suspense placeholder until the host triggers the podium.
+            playerLeaderboardContainer.innerHTML =
+                '<p class="leaderboard-suspense">🥁 Die Siegerehrung wird gleich enthüllt …</p>';
+        }
+    }
+
+    /**
+     * Reveals the withheld final ranking on the player's screen. Triggered by
+     * the host's `reveal_final` broadcast, in sync with the podium reveal on
+     * the big screen. No-op if no final data is pending.
+     */
+    function revealFinalLeaderboard() {
+        if (!pendingFinalResultData) return;
+        renderFinalLeaderboard(pendingFinalResultData);
+    }
+
+    /**
+     * Builds the final leaderboard DOM into the player's container.
+     * @param {object} frData - The final results data received from the host.
+     */
+    function renderFinalLeaderboard(frData) {
         playerLeaderboardContainer.innerHTML = '';
 
         if (frData.leaderboard) {
@@ -4548,6 +4592,7 @@ function initializePlayerFeatures(reconnectInfo) {
 
         playerScore = 0;
         selectedAnswers = [];
+        pendingFinalResultData = null;
         playerCurrentQuestionOptions = [];
         playerCurrentQuestionIndex = -1;
         playerRoomId = null;
