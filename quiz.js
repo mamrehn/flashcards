@@ -57,6 +57,13 @@ function showView(viewToShowId) {
     if (viewToShowId === 'host-view' || viewToShowId === 'player-view') {
         document.querySelector('#role-selection').classList.add('hidden');
     }
+
+    // The privacy-notice link is only relevant on the landing screen. Once a
+    // game is underway, hide it so players/hosts can't accidentally tap it and
+    // navigate away from their live session.
+    document
+        .querySelector('#privacy-footer')
+        ?.classList.toggle('hidden', viewToShowId !== 'role-selection');
 }
 
 // --- Lobby cosmetics ---
