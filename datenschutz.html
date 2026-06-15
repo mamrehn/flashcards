@@ -14,32 +14,35 @@
                 <a href="index.html" class="back-link" id="back-link" title="Zurück">←</a>
                 <h1>Datenschutz</h1>
             </header>
+
+            <div class="card">
+                <h2>Datenschutzinformationen zur Nutzung der Quiz App</h2>
+
+                <p>
+                    Beim Verwenden dieser Quiz App werden bestimmte Daten des Spielers temporär im
+                    Arbeitsspeicher des Servers verarbeitet, um den Fortschritt und die Interaktionen
+                    während einer Fragerunde zu ermöglichen.
+                </p>
+
+                <h2>Gespeicherte Daten</h2>
+                <p>Folgende Daten werden temporär erhoben und verarbeitet:</p>
+                <ul>
+                    <li>Nickname (frei wählbar, keine Pflicht zur echten Namensangabe)</li>
+                    <li>Session-ID (automatisch generiert)</li>
+                    <li>Antworten auf Aufgaben bzw. Lernkarten</li>
+                    <li>Statistische Informationen wie Antwortzeiten oder Fortschritt</li>
+                </ul>
+
+                <h2>Datensicherheit und Löschkonzept</h2>
+                <p>
+                    Die Daten werden ausschließlich in Echtzeit über eine WebSocket-Verbindung
+                    verarbeitet und nur im Arbeitsspeicher des Servers gehalten. Es erfolgt keine
+                    dauerhafte Speicherung in einer Datenbank. Die Daten werden automatisch gelöscht,
+                    wenn der Raum beendet wird oder spätestens nach <strong>2 Stunden</strong>. Es
+                    erfolgt keine Profilbildung. Die Nutzung erfolgt anonymisiert.
+                </p>
+            </div>
         </div>
-        <h1>Datenschutzinformationen zur Nutzung der Quiz App</h1>
-
-        <p>
-            Beim Verwenden dieser Quiz App werden bestimmte Daten des Spielers temporär im
-            Arbeitsspeicher des Servers verarbeitet, um den Fortschritt und die Interaktionen
-            während einer Fragerunde zu ermöglichen.
-        </p>
-
-        <h2>Gespeicherte Daten</h2>
-        <p>Folgende Daten werden temporär erhoben und verarbeitet:</p>
-        <ul>
-            <li>Nickname (frei wählbar, keine Pflicht zur echten Namensangabe)</li>
-            <li>Session-ID (automatisch generiert)</li>
-            <li>Antworten auf Aufgaben bzw. Lernkarten</li>
-            <li>Statistische Informationen wie Antwortzeiten oder Fortschritt</li>
-        </ul>
-
-        <h2>Datensicherheit und Löschkonzept</h2>
-        <p>
-            Die Daten werden ausschließlich in Echtzeit über eine WebSocket-Verbindung verarbeitet
-            und nur im Arbeitsspeicher des Servers gehalten. Es erfolgt keine dauerhafte Speicherung
-            in einer Datenbank. Die Daten werden automatisch gelöscht, wenn der Raum beendet wird
-            oder spätestens nach <strong>2 Stunden</strong>. Es erfolgt keine Profilbildung. Die
-            Nutzung erfolgt anonymisiert.
-        </p>
         <script>
             // If we got here from another page on this site (e.g. the
             // quiz lobby), the back arrow should return there so the
