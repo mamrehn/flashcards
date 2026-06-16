@@ -1267,7 +1267,10 @@ body {
 }
 
 .weakspot-name {
-    flex: 0 0 8rem;
+    /* Take the available width so more of the deck label shows; truncate only
+       when it really doesn't fit. */
+    flex: 1 1 auto;
+    min-width: 0;
     font-size: 0.85rem;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -1275,7 +1278,8 @@ body {
 }
 
 .weakspot-bar {
-    flex: 1;
+    /* Fixed, short bar so it doesn't eat the label's space */
+    flex: 0 0 6rem;
     height: 10px;
     background: var(--input-border);
     border-radius: 5px;
