@@ -58,7 +58,7 @@ let correctCount = 0;
 /** @type {number} Count of incorrectly answered cards */
 let incorrectCount = 0;
 
-/** @type {Array<boolean|null>} Track answers for each card (true=correct, false=incorrect, null=not answered) */
+/** @type {Array<number|null>} Per-card answer score 0..1 (1=correct, partial allowed; null=not answered) */
 let answeredCards = [];
 
 /** @type {boolean} Flag to prevent double-marking answers */
@@ -70,8 +70,29 @@ let activeDecks = [];
 /** @type {{[deckName: string]: {cards: Array}}} Saved decks from localStorage */
 let savedDecks = {};
 
-/** @type {{[deckName: string]: Array<number>}} Indices of incorrect answers per deck */
-let previousIncorrectIndices = {};
+// ── Deck-picker selection model ─────────────────────────────────────────────
+// The picker's selection (which categories, which card types) is the source of
+// truth here rather than in the DOM, so it survives a full re-render — e.g. when
+// the user types in the search box, which rebuilds the list. Keys use a NUL
+// separator that cannot appear in topic/category names.
+const SEL_SEP = '\u0000';
+/** @type {Set<string>} Checked categories, keyed `topicKey\0category`. */
+let selectedCategories = new Set();
+/** @type {Set<string>} Type chips turned OFF (default is on), keyed `topicKey\0category\0type`. */
+let deselectedChips = new Set();
+/**
+ * @param {string} topicKey
+ * @param {string} category
+ * @returns {string}
+ */
+const catKey = (topicKey, category) => `${topicKey}${SEL_SEP}${category}`;
+/**
+ * @param {string} topicKey
+ * @param {string} category
+ * @param {'mc'|'text'|'matching'} type
+ * @returns {string}
+ */
+const chipKey = (topicKey, category, type) => `${topicKey}${SEL_SEP}${category}${SEL_SEP}${type}`;
 
 /** @type {Array<number>} Selected option indices for multiple choice questions */
 let selectedOptionIndices = [];
@@ -191,8 +212,6 @@ let userAnswerDisplay;
 let optionsContainer;
 let optionsContainerBack;
 let selectedOptionsContainer;
-let mcCorrectAnswerContainer;
-let mcCorrectAnswerText;
 let standardAnswerContainer;
 let textExplanationContainer;
 let textExplanationContent;
@@ -268,8 +287,6 @@ function initializeApp() {
     optionsContainer = document.querySelector('#options-container');
     optionsContainerBack = document.querySelector('#options-container-back');
     selectedOptionsContainer = document.querySelector('#selected-options-container');
-    mcCorrectAnswerContainer = document.querySelector('#mc-correct-answer-container');
-    mcCorrectAnswerText = document.querySelector('#mc-correct-answer-text');
     standardAnswerContainer = document.querySelector('#standard-answer-container');
     textExplanationContainer = document.querySelector('#text-explanation-container');
     textExplanationContent = document.querySelector('#text-explanation-content');
@@ -363,6 +380,7 @@ function initializeApp() {
     selectAllBucketsBtn.addEventListener('click', debounce(selectAllSRBuckets, 200));
     deselectAllBucketsBtn.addEventListener('click', debounce(deselectAllSRBuckets, 200));
     cleanupOrphansBtn.addEventListener('click', throttle(cleanupOrphanedSRData, 500));
+    setupSrBucketDelegation();
     document.querySelector('#book-view-csv').addEventListener('click', throttle(exportToCsv, 300));
     document
         .querySelector('#book-view-anki')
@@ -526,6 +544,21 @@ function handleCardFrontKeys(e) {
         return;
     }
 
+    // Number keys 1-3: set the pre-reveal confidence — only on cards without MC
+    // options (text/matching), where the 1-9 option shortcut below is inactive,
+    // so the two never collide.
+    const confNum = Number.parseInt(e.key);
+    if (
+        !confidencePrompt.classList.contains('hidden') &&
+        optionsContainer.classList.contains('hidden') &&
+        confNum >= 1 &&
+        confNum <= 3
+    ) {
+        e.preventDefault();
+        confidencePrompt.querySelector(`.confidence-btn[data-confidence="${confNum}"]`)?.click();
+        return;
+    }
+
     // Number keys 1-9: toggle MC option by position
     const num = Number.parseInt(e.key);
     if (num >= 1 && num <= 9) {
@@ -686,8 +719,12 @@ function dismissUpdate() {
     }
 }
 
-// Initialize when DOM is ready
-globalThis.addEventListener('DOMContentLoaded', initializeApp);
+// Initialize when DOM is ready. Guarded so the module can be require()'d in a
+// non-browser context (the node:test suite) without a missing-addEventListener
+// throw at load time.
+if (typeof document !== 'undefined' && globalThis.addEventListener) {
+    globalThis.addEventListener('DOMContentLoaded', initializeApp);
+}
 
 // ============================================================================
 // File Upload Handlers
@@ -701,15 +738,10 @@ function toggleJsonSample() {
     sampleJson.classList.toggle('hidden');
 }
 
-// Expose SR manager functions to global scope for onclick handlers
-globalThis.toggleBucketExpansion = toggleBucketExpansion;
-globalThis.toggleBucketSelection = toggleBucketSelection;
-globalThis.moveSRCard = moveSRCard;
-globalThis.deleteSRCard = deleteSRCard;
+// Exposed for the inline handler in cards.html's upload section. The SR-manager
+// controls used to live here too, but they are now wired via event delegation
+// (see setupSrBucketDelegation), so they no longer leak onto globalThis.
 globalThis.toggleJsonSample = toggleJsonSample;
-globalThis.openBookViewForBucket = openBookViewForBucket;
-globalThis.handleMoveSRCard = handleMoveSRCard;
-globalThis.handleDeleteSRCard = handleDeleteSRCard;
 
 /**
  * Keep the header back-link in sync with the current view: from the
@@ -932,7 +964,7 @@ async function handleZipUpload(event) {
                     // back-compat) → zip-level manifest.json → zip basename.
                     const meta = (data.meta && typeof data.meta === 'object' && data.meta) ||
                         manifestMeta || { name: zipBaseName };
-                    saveToLocalStorage(deckName, validCards, [], meta);
+                    saveToLocalStorage(deckName, validCards, meta);
                     importedDeckNames.push(deckName);
                 } catch {
                     errorCount++;
@@ -1036,7 +1068,7 @@ async function handleLibraryImportDeepLink() {
                 const zipBaseName = deckMeta.filename.replace(/\.(zip|json)$/i, '');
                 const meta = (data && typeof data.meta === 'object' && data.meta) ||
                     deckMeta.meta || { name: zipBaseName };
-                saveToLocalStorage(deckName, validCards, [], meta);
+                saveToLocalStorage(deckName, validCards, meta);
             }
             importedDeckNames.push(deckName);
             for (const card of validCards) {
@@ -1124,7 +1156,7 @@ function processJsonData(data, fileName) {
 
     updateAppTitle([deckName]);
     const meta = data && typeof data.meta === 'object' ? data.meta : null;
-    saveToLocalStorage(deckName, validCards, [], meta);
+    saveToLocalStorage(deckName, validCards, meta);
     displaySavedDecks('', [deckName]);
     initializeQuiz(validCards.map((card) => ({ ...card, sourceDeck: deckName })));
     fileInput.value = '';
@@ -1157,14 +1189,6 @@ async function handleBackupImport(backup) {
             spacedRepetitionData = backup.spacedRepetitionData;
             reviveSRData();
             localStorage.setItem('spacedRepetitionData', JSON.stringify(spacedRepetitionData));
-        }
-
-        if (backup.flashcardIncorrectIndices) {
-            previousIncorrectIndices = backup.flashcardIncorrectIndices;
-            localStorage.setItem(
-                'flashcardIncorrectIndices',
-                JSON.stringify(previousIncorrectIndices)
-            );
         }
 
         // Restore the progress journey (optional — older backups won't have it)
@@ -1200,12 +1224,31 @@ async function handleBackupImport(backup) {
 }
 
 /**
- * Validate card format - checks for required fields
+ * Collapse cards that share the same question text, keeping the LAST occurrence.
+ * A deck's SR/progress data is keyed by `deck|||question`, so two cards with the
+ * same question would otherwise collide and share state. Treating a re-import as
+ * "the new card replaces the old" (e.g. a typo fix) keeps that key unambiguous.
+ * @param {Array<object>} cards
+ * @returns {Array<object>} de-duplicated cards (last wins, original order kept)
+ */
+function dedupeCardsByQuestion(cards) {
+    const byQuestion = new Map();
+    for (const card of cards) {
+        // Map.set keeps the first insertion position but updates the value, so
+        // order is stable and the latest content wins.
+        byQuestion.set(card.question, card);
+    }
+    return [...byQuestion.values()];
+}
+
+/**
+ * Validate card format - checks for required fields, then de-duplicates by
+ * question text (last occurrence wins).
  * @param {Array<object>} cards - Array of card objects to validate
- * @returns {Array<object>} Array of valid cards
+ * @returns {Array<object>} Array of valid, de-duplicated cards
  */
 function validateCards(cards) {
-    return cards.filter((card) => {
+    const valid = cards.filter((card) => {
         // Check standard card format (question + answer)
         if (card.question && card.answer) {
             return true;
@@ -1240,6 +1283,7 @@ function validateCards(cards) {
         }
         return false;
     });
+    return dedupeCardsByQuestion(valid);
 }
 
 // ============================================================================
@@ -1272,26 +1316,15 @@ function loadSavedDecks() {
         console.error('Error loading saved decks:', error);
         savedDecks = {};
     }
-
-    try {
-        const incorrectIndicesString = localStorage.getItem('flashcardIncorrectIndices');
-        if (incorrectIndicesString) {
-            previousIncorrectIndices = JSON.parse(incorrectIndicesString);
-        }
-    } catch (error) {
-        console.error('Error loading incorrect indices:', error);
-        previousIncorrectIndices = {};
-    }
 }
 
 /**
  * Save a deck to localStorage
  * @param {string} deckName - Name of the deck
  * @param {Array<object>} deckCards - Array of card objects
- * @param {Array<number>} incorrectIndices - Indices of incorrectly answered cards
  * @param {object|null} [meta] - Optional deck metadata (name, subject, learningUnit, ...)
  */
-function saveToLocalStorage(deckName, deckCards, incorrectIndices = [], meta = null) {
+function saveToLocalStorage(deckName, deckCards, meta = null) {
     savedDecks[deckName] = meta ? { cards: deckCards, meta } : { cards: deckCards };
     try {
         localStorage.setItem('flashcardDecks', JSON.stringify(savedDecks));
@@ -1299,20 +1332,6 @@ function saveToLocalStorage(deckName, deckCards, incorrectIndices = [], meta = n
         console.error('Error saving decks (storage quota exceeded?):', error);
         showError('Speicher voll! Bitte lösche nicht benötigte Decks.');
         delete savedDecks[deckName];
-        return;
-    }
-
-    // Save incorrect indices separately
-    if (!previousIncorrectIndices[deckName]) {
-        previousIncorrectIndices[deckName] = [];
-    }
-    if (incorrectIndices.length > 0) {
-        previousIncorrectIndices[deckName] = [...incorrectIndices];
-    }
-    try {
-        localStorage.setItem('flashcardIncorrectIndices', JSON.stringify(previousIncorrectIndices));
-    } catch (error) {
-        console.error('Error saving incorrect indices:', error);
     }
 }
 
@@ -1333,13 +1352,6 @@ function persistToStorage(key, value) {
         console.error(`Error writing "${key}" to localStorage (quota exceeded?):`, error);
         return false;
     }
-}
-
-/**
- * Update incorrect indices in localStorage
- */
-function updateIncorrectIndices() {
-    persistToStorage('flashcardIncorrectIndices', JSON.stringify(previousIncorrectIndices));
 }
 
 // ============================================================================
@@ -1410,9 +1422,9 @@ function buildTopics() {
 }
 
 /**
- * Build a category chip for a given type. Visual state lives in the DOM
- * (`.selected`); selection logic reads it from there at start time.
- * @param {'mc'|'text'} type
+ * Build a category chip for a given type. Selected state is backed by the
+ * `deselectedChips` model (chips are on by default), so it survives re-renders.
+ * @param {'mc'|'text'|'matching'} type
  * @param {number} count
  * @param {string} topicKey
  * @param {string} catName
@@ -1420,7 +1432,8 @@ function buildTopics() {
 function makeTypeChip(type, count, topicKey, catName) {
     const chip = document.createElement('button');
     chip.type = 'button';
-    chip.className = `type-chip type-chip-${type} selected`;
+    const selected = !deselectedChips.has(chipKey(topicKey, catName, type));
+    chip.className = `type-chip type-chip-${type}${selected ? ' selected' : ''}`;
     chip.dataset.type = type;
     chip.dataset.topicKey = topicKey;
     chip.dataset.category = catName;
@@ -1438,10 +1451,13 @@ function makeTypeChip(type, count, topicKey, catName) {
     }
     chip.textContent = `${chipLabel} ${count}`;
     chip.title = chipTitle;
-    chip.setAttribute('aria-pressed', 'true');
+    chip.setAttribute('aria-pressed', String(selected));
     chip.addEventListener('click', (e) => {
         e.stopPropagation();
         const nowSelected = !chip.classList.contains('selected');
+        const key = chipKey(topicKey, catName, type);
+        if (nowSelected) deselectedChips.delete(key);
+        else deselectedChips.add(key);
         chip.classList.toggle('selected', nowSelected);
         chip.setAttribute('aria-pressed', String(nowSelected));
         updateStartButtonState();
@@ -1498,6 +1514,16 @@ function displaySavedDecks(searchTerm = '', preselectDeckNames = []) {
 
     matching.sort((a, b) => a.title.localeCompare(b.title, 'de'));
 
+    // Seed the selection model for any just-imported topics so their checkboxes
+    // render checked (the model, not the DOM, is the source of truth).
+    for (const topic of topics.values()) {
+        if (topic.decks.some((d) => preselectSet.has(d))) {
+            for (const catName of topic.categories.keys()) {
+                selectedCategories.add(catKey(topic.key, catName));
+            }
+        }
+    }
+
     for (const topic of matching) {
         const folder = document.createElement('div');
         folder.className = 'topic-folder';
@@ -1510,8 +1536,13 @@ function displaySavedDecks(searchTerm = '', preselectDeckNames = []) {
         checkbox.type = 'checkbox';
         checkbox.className = 'topic-checkbox';
         checkbox.dataset.topicKey = topic.key;
-        const preselected = topic.decks.some((d) => preselectSet.has(d));
-        if (preselected) checkbox.checked = true;
+        // Derive the tri-state from how many of the topic's categories are selected.
+        const catNames = [...topic.categories.keys()];
+        const selCatCount = catNames.filter((c) =>
+            selectedCategories.has(catKey(topic.key, c))
+        ).length;
+        checkbox.checked = selCatCount > 0 && selCatCount === catNames.length;
+        checkbox.indeterminate = selCatCount > 0 && selCatCount < catNames.length;
         checkbox.addEventListener('click', (e) => e.stopPropagation());
         checkbox.addEventListener('change', () => {
             onTopicCheckboxChange(topic.key, checkbox.checked);
@@ -1579,7 +1610,11 @@ function displaySavedDecks(searchTerm = '', preselectDeckNames = []) {
             catCheckbox.className = 'category-checkbox';
             catCheckbox.dataset.topicKey = topic.key;
             catCheckbox.dataset.category = catName;
+            catCheckbox.checked = selectedCategories.has(catKey(topic.key, catName));
             catCheckbox.addEventListener('change', () => {
+                const key = catKey(topic.key, catName);
+                if (catCheckbox.checked) selectedCategories.add(key);
+                else selectedCategories.delete(key);
                 onCategoryCheckboxChange(topic.key);
                 updateStartButtonState();
             });
@@ -1629,10 +1664,10 @@ function displaySavedDecks(searchTerm = '', preselectDeckNames = []) {
         savedDecksDiv.append(folder);
     }
 
-    // Cascade preselection: topics whose decks were just imported start expanded and fully checked
+    // Topics whose decks were just imported start expanded (their categories are
+    // already selected in the model above).
     for (const topic of matching) {
         if (topic.decks.some((d) => preselectSet.has(d))) {
-            onTopicCheckboxChange(topic.key, true);
             const folder = savedDecksDiv.querySelector(
                 `.topic-folder[data-topic-key="${CSS.escape(topic.key)}"]`
             );
@@ -1646,8 +1681,9 @@ function displaySavedDecks(searchTerm = '', preselectDeckNames = []) {
 }
 
 /**
- * Topic-level checkbox toggles: cascades to all category checkboxes in the topic.
- * Type chip selection is intentionally preserved across topic check/uncheck.
+ * Topic-level checkbox toggles: cascades to all category checkboxes in the topic
+ * (both the model and the visible DOM). Type chip selection is intentionally
+ * preserved across topic check/uncheck.
  * @param {string} topicKey
  * @param {boolean} checked
  */
@@ -1658,6 +1694,9 @@ function onTopicCheckboxChange(topicKey, checked) {
     );
     for (const cb of catCheckboxes) {
         cb.checked = checked;
+        const key = catKey(topicKey, cb.dataset.category);
+        if (checked) selectedCategories.add(key);
+        else selectedCategories.delete(key);
     }
 }
 
@@ -1689,23 +1728,12 @@ function onCategoryCheckboxChange(topicKey) {
 }
 
 /**
- * Whether at least one (category, type) pair is selected anywhere.
+ * Whether at least one (category, type) pair is selected anywhere. Reads the
+ * selection model, so it stays correct even for topics filtered out of the DOM.
  * @returns {boolean}
  */
 function hasAnyActiveSelection() {
-    for (const cb of document.querySelectorAll('.category-checkbox:checked')) {
-        const topicKey = cb.dataset.topicKey;
-        const cat = cb.dataset.category;
-        const chips = document.querySelectorAll(
-            `.type-chip[data-topic-key="${CSS.escape(topicKey)}"][data-category="${CSS.escape(cat)}"]`
-        );
-        // Category contributes if it has any selected chip (or no chips at all = degenerate, treat as active).
-        if (chips.length === 0) return true;
-        for (const chip of chips) {
-            if (chip.classList.contains('selected')) return true;
-        }
-    }
-    return false;
+    return getSelectedFilters().size > 0;
 }
 
 /**
@@ -1728,25 +1756,17 @@ function getSelectedFilters() {
     const result = new Map();
     const topics = buildTopics();
     for (const topic of topics.values()) {
-        const escaped = CSS.escape(topic.key);
-        const catCheckboxes = document.querySelectorAll(
-            `.category-checkbox[data-topic-key="${escaped}"]`
-        );
         const perCategory = new Map();
-        for (const catCb of catCheckboxes) {
-            if (!catCb.checked) continue;
-            const catName = catCb.dataset.category;
-            const chips = document.querySelectorAll(
-                `.type-chip[data-topic-key="${escaped}"][data-category="${CSS.escape(catName)}"]`
-            );
-            if (chips.length === 0) {
-                // Degenerate: category checked but no chips rendered — include both types.
-                perCategory.set(catName, new Set(['mc', 'text', 'matching']));
-                continue;
-            }
+        for (const [catName, counts] of topic.categories.entries()) {
+            if (!selectedCategories.has(catKey(topic.key, catName))) continue;
             const types = new Set();
-            for (const chip of chips) {
-                if (chip.classList.contains('selected')) types.add(chip.dataset.type);
+            for (const ty of ['mc', 'text', 'matching']) {
+                if (
+                    (counts[ty] || 0) > 0 &&
+                    !deselectedChips.has(chipKey(topic.key, catName, ty))
+                ) {
+                    types.add(ty);
+                }
             }
             if (types.size === 0) continue;
             perCategory.set(catName, types);
@@ -1838,7 +1858,8 @@ function resetDeckStats(deckNames, selectedPerDeck) {
 }
 
 /**
- * Select all topic and category checkboxes (chips remain in their current state).
+ * Select all visible topic and category checkboxes (chips remain in their
+ * current state). Updates both the model and the DOM.
  */
 function selectAllDecks() {
     for (const cb of document.querySelectorAll('.topic-checkbox')) {
@@ -1847,12 +1868,14 @@ function selectAllDecks() {
     }
     for (const cb of document.querySelectorAll('.category-checkbox')) {
         cb.checked = true;
+        selectedCategories.add(catKey(cb.dataset.topicKey, cb.dataset.category));
     }
     updateStartButtonState();
 }
 
 /**
- * Deselect all topic and category checkboxes (chips remain in their current state).
+ * Deselect all visible topic and category checkboxes (chips remain in their
+ * current state). Updates both the model and the DOM.
  */
 function deselectAllDecks() {
     for (const cb of document.querySelectorAll('.topic-checkbox')) {
@@ -1861,6 +1884,7 @@ function deselectAllDecks() {
     }
     for (const cb of document.querySelectorAll('.category-checkbox')) {
         cb.checked = false;
+        selectedCategories.delete(catKey(cb.dataset.topicKey, cb.dataset.category));
     }
     updateStartButtonState();
 }
@@ -1878,11 +1902,6 @@ async function deleteSavedDeck(deckName) {
 
     delete savedDecks[deckName];
     persistToStorage('flashcardDecks', JSON.stringify(savedDecks));
-
-    if (previousIncorrectIndices[deckName]) {
-        delete previousIncorrectIndices[deckName];
-        persistToStorage('flashcardIncorrectIndices', JSON.stringify(previousIncorrectIndices));
-    }
 
     displaySavedDecks();
 }
@@ -1902,18 +1921,10 @@ async function deleteSavedTopic(topic) {
     const msg = `Möchtest du das Thema "${topic.title}" mit allen ${topic.decks.length} Quelldateien wirklich löschen?\n\n${sourceList}`;
     const ok = await uiConfirm(msg, { confirmText: 'Löschen', danger: true });
     if (!ok) return;
-    let incorrectChanged = false;
     for (const deckName of topic.decks) {
         delete savedDecks[deckName];
-        if (previousIncorrectIndices[deckName]) {
-            delete previousIncorrectIndices[deckName];
-            incorrectChanged = true;
-        }
     }
     persistToStorage('flashcardDecks', JSON.stringify(savedDecks));
-    if (incorrectChanged) {
-        persistToStorage('flashcardIncorrectIndices', JSON.stringify(previousIncorrectIndices));
-    }
     displaySavedDecks();
 }
 
@@ -2863,7 +2874,6 @@ function updateCardContent(card) {
 
         // Back-side containers
         standardAnswerContainer.classList.add('hidden');
-        mcCorrectAnswerContainer.classList.add('hidden');
         matchingResultContainer.classList.add('hidden');
     } else if (isMultipleChoice) {
         // Handle multiple choice question
@@ -2955,10 +2965,9 @@ function updateCardContent(card) {
             optionsContainer.append(optionItem);
         }
 
-        // Set answer text for back of card
+        // Hide the standard text-answer container (MC feedback is rendered on the
+        // back as colour-coded options in showAnswer()).
         standardAnswerContainer.classList.add('hidden');
-        mcCorrectAnswerContainer.classList.remove('hidden');
-        mcCorrectAnswerText.innerHTML = ''; // Will be populated in showAnswer()
     } else {
         // Handle standard question
         userAnswerInput.classList.remove('hidden');
@@ -2972,7 +2981,6 @@ function updateCardContent(card) {
         // Set answer text for standard card
         answerText.textContent = card.answer;
         standardAnswerContainer.classList.remove('hidden');
-        mcCorrectAnswerContainer.classList.add('hidden');
     }
 
     // Reset containers
@@ -3312,24 +3320,11 @@ function showAnswer() {
         // Show back options container and hide other answer displays
         optionsContainerBack.classList.remove('hidden');
         selectedOptionsContainer.classList.add('hidden');
-        mcCorrectAnswerContainer.classList.add('hidden');
 
-        // Automatically evaluate the answer with partial scoring
-        let score;
-        if (selectedOptionIndices.length > 0 || card.correct.length === 0) {
-            // Count how many options were handled correctly
-            let correctChoices = 0;
-            for (let i = 0; i < card.options.length; i++) {
-                const shouldBeSelected = card.correct.includes(i);
-                const wasSelected = selectedOptionIndices.includes(i);
-                if (shouldBeSelected === wasSelected) correctChoices++;
-            }
-            score = card.options.length > 0 ? correctChoices / card.options.length : 0;
-        } else {
-            // No selection was made
-            score = 0;
-        }
-        markAnswer(score);
+        // Auto-score with a set-based (Jaccard) overlap of correct vs. selected
+        // options — far more discriminating than the old per-option scheme, where
+        // a near-miss on a many-distractor question still cleared the pass mark.
+        markAnswer(scoreMultipleChoice(card.correct, selectedOptionIndices));
 
         // Multiple choice is auto-scored — no self-rating, just advance.
         nextCardBtn.style.display = 'inline-block';
@@ -3349,9 +3344,10 @@ function showAnswer() {
             textExplanationContainer.classList.remove('hidden');
         }
 
-        // Check if the user's answer exactly matches the correct answer
-        const correctAnswer = card.answer.trim();
-        const isExactMatch = userAnswer.toLowerCase() === correctAnswer.toLowerCase();
+        // Treat a normalized match (case/whitespace/trailing-punctuation
+        // insensitive) as correct; anything else falls through to self-grading.
+        const isExactMatch =
+            userAnswer.length > 0 && normalizeAnswer(userAnswer) === normalizeAnswer(card.answer);
 
         if (isExactMatch) {
             // Exact text match is a fair correctness proxy: auto-grade as perfect.
@@ -3391,6 +3387,46 @@ function showAnswer() {
  */
 function formatScore(value) {
     return Number.isInteger(value) ? String(value) : value.toFixed(1);
+}
+
+/**
+ * Normalize a free-text answer for forgiving comparison: lower-case, collapse
+ * internal whitespace, and drop trailing sentence punctuation. This lets
+ * "Berlin." / "berlin" / "der  Bundestag " match the stored answer instead of
+ * needlessly dropping the student into manual self-grading on a near-exact hit.
+ * @param {string} text
+ * @returns {string}
+ */
+function normalizeAnswer(text) {
+    return String(text ?? '')
+        .trim()
+        .toLowerCase()
+        .replaceAll(/\s+/g, ' ')
+        .replace(/[.,;:!?]+$/u, '')
+        .trim();
+}
+
+/**
+ * Score a multiple-choice answer as the Jaccard overlap between the correct and
+ * the selected option sets: |correct ∩ selected| / |correct ∪ selected|.
+ * This rewards getting the *set* right rather than each option independently, so
+ * a wrong tick or a missed correct answer meaningfully lowers the score even on
+ * questions with many distractors. Selecting nothing when nothing is correct is
+ * a perfect 1; any mismatch trends toward 0.
+ * @param {number[]} correctIndices - Indices that should be selected
+ * @param {number[]} selectedIndices - Indices the user selected
+ * @returns {number} Score in [0, 1]
+ */
+function scoreMultipleChoice(correctIndices, selectedIndices) {
+    const correct = new Set(correctIndices);
+    const selected = new Set(selectedIndices);
+    if (correct.size === 0 && selected.size === 0) return 1;
+    let intersection = 0;
+    for (const i of selected) {
+        if (correct.has(i)) intersection++;
+    }
+    const union = correct.size + selected.size - intersection;
+    return union === 0 ? 0 : intersection / union;
 }
 
 /**
@@ -3446,60 +3482,6 @@ function markAnswer(scoreOrBool) {
         // Trigger confetti animation for fully correct answers
         triggerConfetti();
     }
-
-    if (
-        !isFullyCorrect && // Store the incorrect/partial card in the source deck's incorrect indices
-        deckName &&
-        savedDecks[deckName]
-    ) {
-        const originalDeckCards = savedDecks[deckName].cards;
-        const originalIndex = originalDeckCards.findIndex(
-            (c) =>
-                c.question === card.question &&
-                (c.answer === card.answer ||
-                    (Array.isArray(c.options) &&
-                        Array.isArray(card.options) &&
-                        JSON.stringify(c.options) === JSON.stringify(card.options)) ||
-                    (Array.isArray(c.pairs) &&
-                        Array.isArray(card.pairs) &&
-                        JSON.stringify(c.pairs) === JSON.stringify(card.pairs)))
-        );
-
-        if (originalIndex !== -1) {
-            if (!previousIncorrectIndices[deckName]) {
-                previousIncorrectIndices[deckName] = [];
-            }
-            if (!previousIncorrectIndices[deckName].includes(originalIndex)) {
-                previousIncorrectIndices[deckName].push(originalIndex);
-            }
-        }
-    } else if (
-        isFullyCorrect &&
-        deckName &&
-        savedDecks[deckName] &&
-        previousIncorrectIndices[deckName]?.length > 0
-    ) {
-        // Remove from incorrect indices when answered correctly
-        const originalDeckCards = savedDecks[deckName].cards;
-        const originalIndex = originalDeckCards.findIndex(
-            (c) =>
-                c.question === card.question &&
-                (c.answer === card.answer ||
-                    (Array.isArray(c.options) &&
-                        Array.isArray(card.options) &&
-                        JSON.stringify(c.options) === JSON.stringify(card.options)) ||
-                    (Array.isArray(c.pairs) &&
-                        Array.isArray(card.pairs) &&
-                        JSON.stringify(c.pairs) === JSON.stringify(card.pairs)))
-        );
-        if (originalIndex !== -1) {
-            const idx = previousIncorrectIndices[deckName].indexOf(originalIndex);
-            if (idx !== -1) previousIncorrectIndices[deckName].splice(idx, 1);
-        }
-    }
-
-    // Update incorrect indices in local storage
-    updateIncorrectIndices();
 
     // Hide the rating control and show next button
     recallRating.classList.add('hidden');
@@ -3575,6 +3557,15 @@ function updateStatistics() {
     incorrectCountElement.textContent = formatScore(incorrectCount);
 
     progressBar.style.width = `${percentageComplete}%`;
+    // Mirror progress onto the progressbar role for assistive tech.
+    const progressTrack = progressBar.parentElement;
+    if (progressTrack) {
+        progressTrack.setAttribute('aria-valuenow', String(Math.round(percentageComplete)));
+        progressTrack.setAttribute(
+            'aria-valuetext',
+            `${completedCards} von ${totalCards} Karten bearbeitet`
+        );
+    }
 }
 
 // ============================================================================
@@ -3736,6 +3727,14 @@ function restartQuiz() {
 
     // Reset answered cards
     answeredCards = Array.from({ length: cards.length }).fill(null);
+
+    // Reset session-scoped accumulators too (otherwise the completion screen's
+    // calibration summary double-counts, the Lernstand-gain badge measures from
+    // the first run, and the undo stack carries stale snapshots across the reset).
+    undoStack = [];
+    undoBtn.disabled = true;
+    sessionCalibration = [];
+    sessionStartLernstand = computeDeckKnowledge(activeDecks.filter((d) => savedDecks[d])).percent;
 
     // Reshuffle and re-order by review urgency for the repeat run
     shuffleCards();
@@ -4227,7 +4226,6 @@ function exportBackup() {
         exportDate: new Date().toISOString(),
         flashcardDecks: savedDecks,
         spacedRepetitionData: spacedRepetitionData,
-        flashcardIncorrectIndices: previousIncorrectIndices,
         // Progress journey so it survives a backup/restore
         lernstandHistory: lernstandHistory,
         sessionHistory: sessionHistory,
@@ -4273,9 +4271,6 @@ function captureUndoSnapshot(card, score) {
             ? structuredClone(spacedRepetitionData[key])
             : null,
         srKey: key,
-        previousIncorrectSnapshot: previousIncorrectIndices[deckName]
-            ? [...previousIncorrectIndices[deckName]]
-            : null,
     });
 
     undoBtn.disabled = false;
@@ -4322,14 +4317,6 @@ function undoLastAnswer() {
         saveSpacedRepetitionData();
     }
 
-    // Restore incorrect indices
-    if (snapshot.previousIncorrectSnapshot !== null) {
-        previousIncorrectIndices[snapshot.deckName] = snapshot.previousIncorrectSnapshot;
-    } else if (previousIncorrectIndices[snapshot.deckName]) {
-        delete previousIncorrectIndices[snapshot.deckName];
-    }
-    persistToStorage('flashcardIncorrectIndices', JSON.stringify(previousIncorrectIndices));
-
     // Roll back the session calibration entry recorded for this answer
     if (snapshot.calibrationPushed) sessionCalibration.pop();
     currentConfidence = null;
@@ -4349,10 +4336,18 @@ function undoLastAnswer() {
 // Confetti Animation
 // ============================================================================
 
+/** Whether the user has asked the OS to minimize non-essential motion. */
+function prefersReducedMotion() {
+    return Boolean(globalThis.matchMedia?.('(prefers-reduced-motion: reduce)').matches);
+}
+
 /**
  * Trigger an improved confetti animation for correct answers
  */
 function triggerConfetti() {
+    // Respect the OS "reduce motion" preference — confetti is purely decorative.
+    if (prefersReducedMotion()) return;
+
     const confettiContainer = document.querySelector('#confetti-container');
     if (!confettiContainer) {
         console.error('Confetti container not found');
@@ -4833,6 +4828,44 @@ function buildLadderDistributionHTML() {
 }
 
 /**
+ * Wire a single delegated click handler for the SR bucket list. The list is
+ * rebuilt via innerHTML on every render, so per-element listeners would leak;
+ * delegation on the stable container handles every (re)rendered control and
+ * keeps the bucket actions off the global scope (they read `data-action`).
+ */
+function setupSrBucketDelegation() {
+    srBucketsDisplay.addEventListener('click', (e) => {
+        const actionEl = e.target.closest('[data-action]');
+        if (!actionEl || !srBucketsDisplay.contains(actionEl)) return;
+        const step = Number(actionEl.dataset.step);
+        switch (actionEl.dataset.action) {
+            case 'move': {
+                handleMoveSRCard(actionEl);
+                break;
+            }
+            case 'delete': {
+                handleDeleteSRCard(actionEl);
+                break;
+            }
+            case 'book': {
+                openBookViewForBucket(step);
+                break;
+            }
+            case 'toggle-select': {
+                // The native checkbox toggle already fired; mirror it onto the bucket.
+                toggleBucketSelection(step);
+                break;
+            }
+            case 'toggle-expand': {
+                toggleBucketExpansion(step);
+                break;
+            }
+            // No default
+        }
+    });
+}
+
+/**
  * Render the "Karten verwalten" bucket list in the hub.
  */
 function displaySpacedRepetitionBuckets() {
@@ -4907,13 +4940,13 @@ function displaySpacedRepetitionBuckets() {
 
         html += `
             <div class="sr-bucket ${isSelected}" data-step="${step}">
-                <div class="sr-bucket-header" onclick="toggleBucketExpansion(${step})">
+                <div class="sr-bucket-header" data-action="toggle-expand" data-step="${step}">
                     <div class="sr-bucket-info">
-                        <input type="checkbox" class="sr-bucket-checkbox" onclick="event.stopPropagation(); toggleBucketSelection(${step})" data-step="${step}" ${isChecked}>
+                        <input type="checkbox" class="sr-bucket-checkbox" data-action="toggle-select" data-step="${step}" ${isChecked}>
                         <span class="sr-bucket-title">${stepLabel}</span>
                         <span class="sr-bucket-count">${cards.length} Karten${overdueCount > 0 ? ` (${overdueCount} fällig)` : ''}</span>
                     </div>
-                    <button class="sr-bucket-book-btn" onclick="event.stopPropagation(); openBookViewForBucket(${step})" title="Buchansicht">📖</button>
+                    <button class="sr-bucket-book-btn" data-action="book" data-step="${step}" title="Buchansicht">📖</button>
                     <span class="sr-bucket-interval">${SR_STEP_LABELS[step] ?? ''}</span>
                 </div>
                 <div class="sr-bucket-cards ${isExpanded}" id="bucket-cards-${step}">
@@ -4927,10 +4960,10 @@ function displaySpacedRepetitionBuckets() {
                                     ${isOverdue ? '⚠️ Fällig' : '✓'} ${formatDate(data.nextReview)}
                                 </span>
                                 <div class="sr-card-actions">
-                                    <button class="sr-move-btn" onclick="handleMoveSRCard(this)" data-step="${step}" title="Zu anderer Stufe verschieben">
+                                    <button class="sr-move-btn" data-action="move" data-step="${step}" title="Zu anderer Stufe verschieben">
                                         Verschieben
                                     </button>
-                                    <button class="sr-delete-btn" onclick="handleDeleteSRCard(this)" title="Aus SR-System entfernen">
+                                    <button class="sr-delete-btn" data-action="delete" title="Aus SR-System entfernen">
                                         Löschen
                                     </button>
                                 </div>
@@ -5849,4 +5882,21 @@ function startDecksByNames(deckNames) {
     if (merged.length === 0) return;
     closeProgressView();
     initializeQuiz(merged);
+}
+
+// Expose the pure, side-effect-free helpers for unit testing under node:test.
+// No-op in the browser (and in the inlined production build), where `module`
+// is undefined — so this stays invisible to end users.
+if (typeof module !== 'undefined' && module.exports) {
+    module.exports = {
+        projectSR,
+        cardKnowledge,
+        scoreMultipleChoice,
+        normalizeAnswer,
+        dedupeCardsByQuestion,
+        validateCards,
+        SR_STEP_MINUTES,
+        SR_PASS_SCORE,
+        SR_FAIL_SCORE,
+    };
 }

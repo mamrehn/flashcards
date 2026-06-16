@@ -213,7 +213,7 @@
             </div>
 
             <div id="app-content" class="hidden">
-                <div class="stats">
+                <div class="stats" aria-live="polite" aria-label="Lernfortschritt dieser Sitzung">
                     <div class="stat-item">
                         <div class="stat-value" id="cards-remaining">0</div>
                         <div class="stat-label">Verbleibend</div>
@@ -232,7 +232,14 @@
                     </div>
                 </div>
 
-                <div class="progress-bar">
+                <div
+                    class="progress-bar"
+                    role="progressbar"
+                    aria-label="Fortschritt"
+                    aria-valuemin="0"
+                    aria-valuemax="100"
+                    aria-valuenow="0"
+                >
                     <div class="progress" id="progress-bar"></div>
                 </div>
 
@@ -349,14 +356,6 @@
                                     </div>
                                 </div>
 
-                                <!-- Multiple choice correct answer display -->
-                                <div id="mc-correct-answer-container" class="hidden">
-                                    <div class="answer">
-                                        <strong>Korrekte Antworten:</strong>
-                                        <div id="mc-correct-answer-text"></div>
-                                    </div>
-                                </div>
-
                                 <!-- Matching result display -->
                                 <div
                                     id="matching-result-container"
@@ -436,7 +435,10 @@
                             <kbd>1</kbd>–<kbd>9</kbd> MC-Option wählen / Erklärung
                         </div>
                         <div class="keyboard-hint">
-                            <kbd>1</kbd>–<kbd>4</kbd> Selbsteinschätzung (Textkarten)
+                            <kbd>1</kbd>–<kbd>3</kbd> Sicherheit einschätzen (vor dem Aufdecken)
+                        </div>
+                        <div class="keyboard-hint">
+                            <kbd>1</kbd>–<kbd>4</kbd> Selbstbewertung (Textkarten)
                         </div>
                         <div class="keyboard-hint"><kbd>E</kbd> Erklärung ein/aus</div>
                         <div class="keyboard-hint"><kbd>⌫</kbd> Letzte Antwort rückgängig</div>

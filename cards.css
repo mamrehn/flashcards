@@ -114,13 +114,19 @@ body {
     border: none;
     cursor: pointer;
     font-size: 1.05rem;
-    padding: 0.25rem 0.5rem;
+    /* Destructive control on a touch-first UI: keep a ≥44px hit area. */
+    min-width: 44px;
+    min-height: 44px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
 }
 
 .topic-checkbox,
 .category-checkbox {
-    width: 18px;
-    height: 18px;
+    /* Enlarged from 18px for easier tapping on phones. */
+    width: 24px;
+    height: 24px;
     cursor: pointer;
     flex-shrink: 0;
 }
@@ -308,7 +314,11 @@ body {
     font: inherit;
     font-size: 0.8rem;
     line-height: 1;
-    padding: 0.25rem 0.55rem;
+    /* ≥44px tap target on a touch-first UI; stays pill-shaped via the radius. */
+    min-height: 44px;
+    padding: 0.25rem 0.85rem;
+    display: inline-flex;
+    align-items: center;
     border-radius: 999px;
     border: 1px solid var(--input-border);
     background-color: var(--surface-color);
@@ -1679,8 +1689,10 @@ body {
 }
 
 .btn.btn-sm {
-    padding: 0.25rem 0.55rem;
+    padding: 0.25rem 0.75rem;
     font-size: 0.85rem;
+    /* Keep a comfortable tap target even on the compact "Alle/Keine" buttons. */
+    min-height: 44px;
 }
 
 /* Back link in page header */
@@ -3001,5 +3013,23 @@ body {
 
     .book-card-explanation {
         background-color: #f5f5f5 !important;
+    }
+}
+
+/* Respect the OS "reduce motion" preference: near-instant transitions/animations
+   and no decorative confetti. (Solo study mode previously had no such handling,
+   unlike the quiz, so the card flip, fly-in, pulse and confetti always ran.) */
+@media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+        scroll-behavior: auto !important;
+    }
+
+    #confetti-container {
+        display: none !important;
     }
 }
