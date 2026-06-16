@@ -179,7 +179,7 @@ body {
 }
 
 .topic-subtitle {
-    font-size: 0.78rem;
+    font-size: 0.8rem;
     color: var(--text-muted, #888);
     margin-top: 0.1rem;
 }
@@ -216,7 +216,7 @@ body {
 }
 
 .topic-knowledge-text {
-    font-size: 0.82rem;
+    font-size: 0.8rem;
     font-weight: 600;
 }
 
@@ -306,7 +306,7 @@ body {
 
 .type-chip {
     font: inherit;
-    font-size: 0.78rem;
+    font-size: 0.8rem;
     line-height: 1;
     padding: 0.25rem 0.55rem;
     border-radius: 999px;
@@ -357,7 +357,10 @@ body {
 .card-container {
     perspective: 1000px;
     margin-bottom: 1rem;
-    /* Grow to fill the space left under the stats row */
+    /* Grow to fill the space left under the stats row; flex column so the card
+       fills it (a flex-computed height doesn't satisfy child height:100%). */
+    display: flex;
+    flex-direction: column;
     flex: 1 1 auto;
     min-height: 350px;
     overflow: hidden;
@@ -367,8 +370,9 @@ body {
 .card {
     position: relative;
     width: 100%;
-    height: 100%;
-    min-height: 350px;
+    /* Fill the container via flex (not height:100%, which wouldn't resolve) */
+    flex: 1 1 auto;
+    min-height: 0;
     text-align: center;
     transition: transform 0.8s;
     transform-style: preserve-3d;
@@ -399,8 +403,9 @@ body {
 .card-front,
 .card-back {
     position: absolute;
-    width: 100%;
-    height: 100%;
+    /* Fill the card's actual box (inset works even when the card's height is
+       flex-computed, unlike height:100%). */
+    inset: 0;
     backface-visibility: hidden;
     border-radius: 8px;
     box-shadow: 0 2px 4px var(--shadow-color);
@@ -409,9 +414,10 @@ body {
     background-color: var(--surface-color);
     display: flex;
     flex-direction: column;
-    justify-content: space-between;
-    top: 0;
-    left: 0;
+    /* Content at the top, action buttons pinned to the bottom — so the bottom
+       buttons stay at a constant position from card to card (no vertical drift).
+       Leftover space on short cards becomes quiet whitespace above the buttons. */
+    justify-content: flex-start;
     transition: opacity 0.4s ease;
 }
 
@@ -444,6 +450,8 @@ body {
 }
 
 .card-content {
+    /* Fill the space above the action buttons (pushing them to the bottom) and
+       scroll internally when the content is taller than the card. */
     flex: 1 1 0;
     min-height: 0;
     margin-bottom: 0.75rem;
@@ -609,7 +617,7 @@ body {
     min-width: 80px;
     /* >=44px tap target (WCAG 2.5.5 / mobile guidelines). */
     min-height: 44px;
-    font-size: 1.05rem;
+    font-size: 1rem;
 }
 
 /* ── Accessible confirm/prompt dialog (replaces native confirm/prompt) ─────── */
@@ -764,26 +772,40 @@ body {
     flex: 0 0 auto;
 }
 
-/* ── Deck action bar: [Lernen][Lesen] · option · select helpers ──────────── */
-/* Mobile-first: use a 2-column grid so elements land on clean rows instead of
-   wrapping mid-element. At ≥480px we revert to the flexible single-row layout. */
+/* ── Deck action bar ─────────────────────────────────────────────────────── */
+/* Two groups that wrap as whole units: start actions and deck options. On a
+   phone they stack onto two clean rows; on wider screens they share one line. */
 #deck-selection-controls {
-    display: grid;
-    grid-template-columns: 1fr auto;
-    gap: 0.5rem 0.75rem;
+    display: flex;
+    flex-wrap: wrap;
     align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem 0.75rem;
     margin-bottom: 0.75rem;
 }
 
-#deck-selection-controls #start-selected-decks {
-    /* Span the first column */
+.start-actions {
+    display: flex;
+    gap: 0.5rem;
+    flex: 1 1 16rem;
+}
+
+.start-actions #start-selected-decks {
+    flex: 1 1 auto;
+}
+
+.deck-options {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem 0.9rem;
+    flex-wrap: wrap;
 }
 
 .study-option {
     display: inline-flex;
     align-items: center;
     gap: 0.35rem;
-    font-size: 0.9rem;
+    font-size: 0.85rem;
     color: var(--text-color);
     cursor: pointer;
 }
@@ -795,31 +817,13 @@ body {
     cursor: pointer;
 }
 
-/* Selection helpers — sit beside the checkbox on mobile, pushed right on wider. */
 .select-actions {
     display: inline-flex;
-    flex-wrap: wrap;
     gap: 0.4rem;
-    justify-self: end;
 }
 
 .select-actions .btn {
     white-space: nowrap;
-}
-
-@media (min-width: 480px) {
-    #deck-selection-controls {
-        display: flex;
-        flex-wrap: wrap;
-    }
-
-    #deck-selection-controls #start-selected-decks {
-        flex: 1 1 auto;
-    }
-
-    .select-actions {
-        margin-left: auto;
-    }
 }
 
 /* ── Graded recall self-rating (text cards) ──────────────────────────────── */
@@ -934,13 +938,12 @@ body {
     display: grid;
     grid-template-columns: 1fr 1fr;
     gap: 0.15rem 1rem;
-    font-size: 0.9rem;
+    font-size: 0.85rem;
     color: var(--text-muted);
 }
 
 .menu-stat strong {
     color: var(--primary);
-    font-size: 1.05rem;
 }
 
 /* Wider screens: single-row layout with button right-aligned */
@@ -1513,21 +1516,6 @@ body {
         margin: 0.5rem auto;
     }
 
-    /* Keep the summary on one line beside the Fortschritt button: show only the
-       headline stats (Lernstand + fällig); the rest live on the Fortschritt page. */
-    .menu-summary-stats {
-        font-size: 0.82rem;
-        gap: 0.2rem 0.7rem;
-    }
-
-    .menu-summary-stats .menu-stat:nth-child(n + 3) {
-        display: none;
-    }
-
-    .menu-stat strong {
-        font-size: 0.95rem;
-    }
-
     .controls {
         gap: 0.3rem;
     }
@@ -1716,7 +1704,7 @@ body {
 .deck-search-input {
     width: 100%;
     padding: 0.75rem;
-    font-size: 1.05rem;
+    font-size: 1rem;
     border: 2px solid var(--input-border);
     background-color: var(--input-bg);
     color: var(--text-color);
@@ -1766,6 +1754,13 @@ body {
 
 /* Responsive adjustments */
 @media (max-width: 768px) {
+    /* Keep the summary on one line beside the Fortschritt button: show only the
+       headline stats (Lernstand + fällig); the rest live on the Fortschritt page.
+       (Below ~739px all four stats + the button would otherwise wrap.) */
+    .menu-summary-stats .menu-stat:nth-child(n + 3) {
+        display: none;
+    }
+
     .header {
         flex-wrap: wrap;
         align-items: center;

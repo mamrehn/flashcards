@@ -124,25 +124,39 @@
 
                     <!-- Act on the selection -->
                     <div id="deck-selection-controls">
-                        <button id="start-selected-decks" class="btn btn-primary" disabled>
-                            Lernen starten
-                        </button>
-                        <button id="read-mode-btn" class="btn btn-soft" disabled>📖 Lesen</button>
-                        <label
-                            class="study-option"
-                            title="Schätze vor dem Aufdecken ein, wie sicher du dir bist. Die App zeigt dir danach, wie gut deine Einschätzung mit dem Ergebnis übereinstimmt."
-                        >
-                            <input type="checkbox" id="calibration-mode" />
-                            Selbsteinschätzung
-                        </label>
-                        <span class="select-actions">
-                            <button id="select-all-decks" class="btn btn-soft btn-sm">
-                                Alle auswählen
+                        <div class="start-actions">
+                            <button id="start-selected-decks" class="btn btn-primary" disabled>
+                                Lernen starten
                             </button>
-                            <button id="deselect-all-decks" class="btn btn-soft btn-sm">
-                                Alle abwählen
+                            <button id="read-mode-btn" class="btn btn-soft" disabled>
+                                📖 Lesen
                             </button>
-                        </span>
+                        </div>
+                        <div class="deck-options">
+                            <label
+                                class="study-option"
+                                title="Schätze vor dem Aufdecken ein, wie sicher du dir bist. Die App zeigt dir danach, wie gut deine Einschätzung mit dem Ergebnis übereinstimmt."
+                            >
+                                <input type="checkbox" id="calibration-mode" />
+                                Selbsteinschätzung
+                            </label>
+                            <span class="select-actions">
+                                <button
+                                    id="select-all-decks"
+                                    class="btn btn-soft btn-sm"
+                                    title="Alle Decks auswählen"
+                                >
+                                    Alle
+                                </button>
+                                <button
+                                    id="deselect-all-decks"
+                                    class="btn btn-soft btn-sm"
+                                    title="Auswahl aufheben"
+                                >
+                                    Keine
+                                </button>
+                            </span>
+                        </div>
                     </div>
 
                     <div id="saved-decks">
