@@ -733,10 +733,18 @@ body {
     font-weight: 500;
 }
 
-.btn-soft:hover {
+.btn-soft:not(:disabled):hover {
     background-color: var(--surface-color);
     border-color: var(--primary);
     color: var(--primary);
+}
+
+.btn-soft:disabled,
+.btn-soft[disabled] {
+    color: var(--text-muted);
+    border-color: var(--input-border);
+    cursor: not-allowed;
+    opacity: 0.55;
 }
 
 /* Utility button in the summary strip keeps its natural width. */
