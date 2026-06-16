@@ -121,7 +121,7 @@ let isMultiCard = false;
 /** @type {{[deckName: string]: {correct: number, incorrect: number, total: number}}} Statistics per deck */
 let deckStats = {};
 
-/** @type {string} Current study mode: 'spaced-repetition', 'incorrect-only' */
+/** @type {string} Current study mode: 'spaced-repetition' (quiz) or 'read-through' (book view) */
 let studyMode = 'spaced-repetition';
 
 /**
@@ -217,7 +217,6 @@ let flipCard;
 let cardContainer;
 let startSelectedDecksBtn;
 let readModeBtn;
-let incorrectOnlyToggle;
 let selectAllDecksBtn;
 let deselectAllDecksBtn;
 let deckSearchInput;
@@ -295,7 +294,6 @@ function initializeApp() {
     cardContainer = document.querySelector('#card-container');
     startSelectedDecksBtn = document.querySelector('#start-selected-decks');
     readModeBtn = document.querySelector('#read-mode-btn');
-    incorrectOnlyToggle = document.querySelector('#incorrect-only-toggle');
     selectAllDecksBtn = document.querySelector('#select-all-decks');
     deselectAllDecksBtn = document.querySelector('#deselect-all-decks');
     deckSearchInput = document.querySelector('#deck-search');
@@ -339,12 +337,12 @@ function initializeApp() {
     restartBtn.addEventListener('click', throttle(restartQuiz, 500));
     uploadNewBtn.addEventListener('click', throttle(resetAndUpload, 500));
     returnToSrBtn.addEventListener('click', throttle(returnToSRManager, 500));
-    // Primary "start" action: spaced repetition, or incorrect-only when the
-    // "Nur falsche" option is ticked. Reading is a separate action below.
+    // Two actions on the selected decks; the "Nur falsche" filter (below)
+    // applies to both. Reading skips the quiz and opens the book view.
     startSelectedDecksBtn.addEventListener(
         'click',
         throttle(() => {
-            studyMode = incorrectOnlyToggle.checked ? 'incorrect-only' : 'spaced-repetition';
+            studyMode = 'spaced-repetition';
             startSelectedDecks();
         }, 500)
     );
@@ -357,9 +355,6 @@ function initializeApp() {
     );
     selectAllDecksBtn.addEventListener('click', debounce(selectAllDecks, 200));
     deselectAllDecksBtn.addEventListener('click', debounce(deselectAllDecks, 200));
-    for (const btn of document.querySelectorAll('.type-filter-btn')) {
-        btn.addEventListener('click', () => applyGlobalTypeFilter(btn.dataset.filter));
-    }
     deckSearchInput.addEventListener('input', debounce(handleDeckSearch, 250));
     for (const tab of document.querySelectorAll('.hub-tab')) {
         tab.addEventListener('click', () => switchHubTab(tab.dataset.tab));
@@ -1645,16 +1640,9 @@ function displaySavedDecks(searchTerm = '', preselectDeckNames = []) {
         }
     }
 
-    // Chips are freshly created with `selected`, but the global filter buttons
-    // are static HTML and keep their state across renders. Re-apply the active
-    // filter so chip state stays in sync with the visibly-pressed button.
-    const activeFilterBtn = document.querySelector('.type-filter-btn.selected');
-    const activeFilter = activeFilterBtn ? activeFilterBtn.dataset.filter : 'all';
-    if (activeFilter && activeFilter !== 'all') {
-        applyGlobalTypeFilter(activeFilter);
-    } else {
-        updateStartButtonState();
-    }
+    // Type chips render selected by default (all types included); per-category
+    // toggling happens in the expanded deck view.
+    updateStartButtonState();
 }
 
 /**
@@ -1698,25 +1686,6 @@ function onCategoryCheckboxChange(topicKey) {
         topicCb.checked = false;
         topicCb.indeterminate = true;
     }
-}
-
-/**
- * Apply a global type filter to every chip on the page.
- * @param {'all'|'mc'|'text'} filter
- */
-function applyGlobalTypeFilter(filter) {
-    const chips = document.querySelectorAll('.type-chip');
-    for (const chip of chips) {
-        const matches = filter === 'all' || chip.dataset.type === filter;
-        chip.classList.toggle('selected', matches);
-        chip.setAttribute('aria-pressed', String(matches));
-    }
-    for (const btn of document.querySelectorAll('.type-filter-btn')) {
-        const active = btn.dataset.filter === filter;
-        btn.classList.toggle('selected', active);
-        btn.setAttribute('aria-pressed', String(active));
-    }
-    updateStartButtonState();
 }
 
 /**
@@ -1967,30 +1936,11 @@ function initializeQuiz(loadedCards) {
     // Check if this is from SR buckets
     const isFromSRBuckets = activeDecks.length === 1 && activeDecks[0] === 'SR Buckets';
 
-    // Only shuffle if not from SR buckets (bucket order should be preserved)
+    // Shuffle, then order by review urgency so even a short session is spent
+    // where it matters most (bucket order is preserved, so skip it there).
     if (!isFromSRBuckets) {
-        // Randomize initial card order
         shuffleArray(cards);
-
-        if (studyMode === 'spaced-repetition') {
-            // Order by review urgency so even a short session is spent optimally
-            orderCardsForReview();
-        } else {
-            // Prioritize incorrectly answered cards if available
-            prioritizeIncorrectCards();
-        }
-
-        // Apply "Nur falsche wiederholen" filter at quiz start — the dropdown
-        // is hidden during active quizzes, so this can only take effect here.
-        if (studyMode === 'incorrect-only') {
-            const incorrectCards = cards.filter((c) => isCardIncorrectFromPreviousSession(c));
-            if (incorrectCards.length === 0) {
-                showError('Keine falsch beantworteten Karten gefunden.');
-                return;
-            }
-            cards = incorrectCards;
-            answeredCards = Array.from({ length: cards.length }).fill(null);
-        }
+        orderCardsForReview();
     }
 
     // Clear undo stack and session calibration for new quiz
@@ -2059,56 +2009,6 @@ function orderCardsForReview() {
             `📅 ${dueCount} fällig · ${newCount} neu · ${laterCount} erst später fällig (kommen zuletzt)`
         );
     }
-}
-
-/**
- * Prioritize incorrectly answered cards from previous sessions
- * Places incorrect cards at the beginning of the deck
- */
-function prioritizeIncorrectCards() {
-    if (activeDecks.length === 0) return;
-
-    // Create a copy of the cards array for manipulation
-    const allCards = [...cards];
-    const prioritizedCards = [];
-    const remainingCards = [];
-
-    // First, identify cards from decks with incorrect answers
-    for (const card of allCards) {
-        const deckName = card.sourceDeck;
-        if (previousIncorrectIndices[deckName] && previousIncorrectIndices[deckName].length > 0) {
-            // Find if this card was incorrect in its original deck
-            const originalIndex = savedDecks[deckName].cards.findIndex(
-                (c) =>
-                    c.question === card.question &&
-                    (c.answer === card.answer ||
-                        (Array.isArray(c.options) &&
-                            Array.isArray(card.options) &&
-                            JSON.stringify(c.options) === JSON.stringify(card.options)) ||
-                        (Array.isArray(c.pairs) &&
-                            Array.isArray(card.pairs) &&
-                            JSON.stringify(c.pairs) === JSON.stringify(card.pairs)))
-            );
-
-            if (
-                originalIndex !== -1 &&
-                previousIncorrectIndices[deckName].includes(originalIndex)
-            ) {
-                prioritizedCards.push(card);
-            } else {
-                remainingCards.push(card);
-            }
-        } else {
-            remainingCards.push(card);
-        }
-    }
-
-    // Shuffle both arrays
-    shuffleArray(prioritizedCards);
-    shuffleArray(remainingCards);
-
-    // Combine the arrays
-    cards = [...prioritizedCards, ...remainingCards];
 }
 
 /**
@@ -3837,9 +3737,9 @@ function restartQuiz() {
     // Reset answered cards
     answeredCards = Array.from({ length: cards.length }).fill(null);
 
-    // Prioritize incorrect cards again and reshuffle
+    // Reshuffle and re-order by review urgency for the repeat run
     shuffleCards();
-    prioritizeIncorrectCards();
+    orderCardsForReview();
 
     // Reset UI
     feedbackElement.classList.add('hidden');
@@ -3910,39 +3810,6 @@ function showError(message) {
 // ============================================================================
 // UX Enhancements
 // ============================================================================
-
-/**
- * Check if a card was answered incorrectly in a previous session
- * @param {object} card - Card object
- * @returns {boolean} True if card was incorrect in previous session
- */
-function isCardIncorrectFromPreviousSession(card) {
-    const deckName = card.sourceDeck;
-    if (
-        !deckName ||
-        !previousIncorrectIndices[deckName] ||
-        previousIncorrectIndices[deckName].length === 0
-    ) {
-        return false;
-    }
-
-    // Find the original index of this card in its source deck
-    if (!savedDecks[deckName]) return false;
-
-    const originalIndex = savedDecks[deckName].cards.findIndex(
-        (c) =>
-            c.question === card.question &&
-            (c.answer === card.answer ||
-                (Array.isArray(c.options) &&
-                    Array.isArray(card.options) &&
-                    JSON.stringify(c.options) === JSON.stringify(card.options)) ||
-                (Array.isArray(c.pairs) &&
-                    Array.isArray(card.pairs) &&
-                    JSON.stringify(c.pairs) === JSON.stringify(card.pairs)))
-    );
-
-    return originalIndex !== -1 && previousIncorrectIndices[deckName].includes(originalIndex);
-}
 
 /**
  * Get unique key for a card (for spaced repetition tracking)
@@ -5969,6 +5836,7 @@ function buildSparkline(values) {
 function startDecksByNames(deckNames) {
     const valid = deckNames.filter((d) => savedDecks[d]?.cards?.length);
     if (valid.length === 0) return;
+    studyMode = 'spaced-repetition';
     activeDecks = valid;
     updateAppTitle(valid);
     let merged = [];

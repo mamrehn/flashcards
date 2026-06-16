@@ -121,83 +121,30 @@
                             placeholder="🔍 Decks durchsuchen..."
                         />
                     </div>
-                    <div
-                        class="type-filter-toolbar"
-                        role="group"
-                        aria-label="Globaler Fragetyp-Filter"
-                    >
-                        <span class="type-filter-label">Fragetyp:</span>
-                        <button
-                            type="button"
-                            class="type-filter-btn selected"
-                            data-filter="all"
-                            aria-pressed="true"
-                            title="Multiple-Choice und Freitext"
-                        >
-                            Alle
-                        </button>
-                        <button
-                            type="button"
-                            class="type-filter-btn"
-                            data-filter="mc"
-                            aria-pressed="false"
-                            title="Nur Multiple-Choice-Fragen"
-                        >
-                            Nur MC
-                        </button>
-                        <button
-                            type="button"
-                            class="type-filter-btn"
-                            data-filter="text"
-                            aria-pressed="false"
-                            title="Nur Freitext-Fragen"
-                        >
-                            Nur Freitext
-                        </button>
-                        <button
-                            type="button"
-                            class="type-filter-btn"
-                            data-filter="matching"
-                            aria-pressed="false"
-                            title="Nur Zuordnungsaufgaben"
-                        >
-                            Nur Zuordnung
-                        </button>
-                    </div>
+
+                    <!-- Act on the selection -->
                     <div id="deck-selection-controls">
-                        <div class="study-options">
-                            <label
-                                class="study-option"
-                                title="Schätze vor dem Aufdecken ein, wie sicher du dir bist. Die App zeigt dir danach, wie gut deine Einschätzung mit dem Ergebnis übereinstimmt."
-                            >
-                                <input type="checkbox" id="calibration-mode" />
-                                Selbsteinschätzung
-                            </label>
-                            <label
-                                class="study-option"
-                                title="Übe nur die Karten, die du zuletzt falsch beantwortet hast."
-                            >
-                                <input type="checkbox" id="incorrect-only-toggle" />
-                                Nur falsche wiederholen
-                            </label>
-                        </div>
-                        <div class="start-actions">
-                            <button id="start-selected-decks" class="btn btn-primary" disabled>
-                                Mit ausgewählten Decks lernen
-                            </button>
-                            <button id="read-mode-btn" class="btn btn-soft" disabled>
-                                📖 Lesemodus
-                            </button>
-                        </div>
-                        <div class="select-actions">
+                        <button id="start-selected-decks" class="btn btn-primary" disabled>
+                            Lernen starten
+                        </button>
+                        <button id="read-mode-btn" class="btn btn-soft" disabled>📖 Lesen</button>
+                        <label
+                            class="study-option"
+                            title="Schätze vor dem Aufdecken ein, wie sicher du dir bist. Die App zeigt dir danach, wie gut deine Einschätzung mit dem Ergebnis übereinstimmt."
+                        >
+                            <input type="checkbox" id="calibration-mode" />
+                            Selbsteinschätzung
+                        </label>
+                        <span class="select-actions">
                             <button id="select-all-decks" class="btn btn-soft btn-sm">
                                 Alle auswählen
                             </button>
                             <button id="deselect-all-decks" class="btn btn-soft btn-sm">
                                 Alle abwählen
                             </button>
-                        </div>
+                        </span>
                     </div>
+
                     <div id="saved-decks">
                         <!-- Saved decks will be dynamically inserted here -->
                     </div>

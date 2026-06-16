@@ -341,45 +341,6 @@ body {
 }
 
 /* Global Type Filter Toolbar */
-.type-filter-toolbar {
-    display: flex;
-    align-items: center;
-    gap: 0.4rem;
-    flex-wrap: wrap;
-    margin: 0.5rem 0 0.75rem;
-}
-
-.type-filter-label {
-    font-size: 0.85rem;
-    color: var(--text-muted, #888);
-    margin-right: 0.25rem;
-}
-
-.type-filter-btn {
-    font: inherit;
-    font-size: 0.85rem;
-    padding: 0.3rem 0.7rem;
-    border-radius: 999px;
-    border: 1px solid var(--input-border);
-    background-color: var(--surface-color);
-    color: var(--text-color);
-    cursor: pointer;
-    transition:
-        background-color 0.15s ease,
-        color 0.15s ease,
-        border-color 0.15s ease;
-}
-
-.type-filter-btn:hover {
-    border-color: var(--primary);
-}
-
-.type-filter-btn.selected {
-    background-color: var(--primary);
-    color: #fff;
-    border-color: transparent;
-}
-
 /* Flip Card Animation Styles */
 .card-container {
     perspective: 1000px;
@@ -783,12 +744,17 @@ body {
     flex: 0 0 auto;
 }
 
-/* ── Study options + start actions (deck picker) ─────────────────────────── */
-.study-options {
+/* ── Deck action bar: [Lernen][Lesen] · option · select helpers ──────────── */
+#deck-selection-controls {
     display: flex;
     flex-wrap: wrap;
-    gap: 0.5rem 1.25rem;
-    margin-bottom: 0.6rem;
+    align-items: center;
+    gap: 0.5rem 0.75rem;
+    margin-bottom: 0.75rem;
+}
+
+#deck-selection-controls #start-selected-decks {
+    flex: 1 1 auto;
 }
 
 .study-option {
@@ -807,29 +773,12 @@ body {
     cursor: pointer;
 }
 
-.start-actions {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.5rem;
-    margin-bottom: 0.5rem;
-}
-
-.start-actions #start-selected-decks {
-    flex: 1 1 auto;
-}
-
-.start-actions #read-mode-btn {
-    flex: 0 0 auto;
-}
-
+/* Selection helpers — de-emphasized, pushed to the right */
 .select-actions {
-    display: flex;
+    display: inline-flex;
     flex-wrap: wrap;
-    gap: 0.5rem;
-}
-
-.select-actions .btn {
-    flex: 0 0 auto;
+    gap: 0.4rem;
+    margin-left: auto;
 }
 
 /* ── Graded recall self-rating (text cards) ──────────────────────────────── */
