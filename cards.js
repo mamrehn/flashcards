@@ -140,8 +140,22 @@ const SR_PASS_SCORE = 0.8;
 /** Score below which the card falls back to the first ladder step */
 const SR_FAIL_SCORE = 0.5;
 
-/** @type {{[cardKey: string]: {step: number, repetitions: number, nextReview: Date, lastReview?: Date, history: number[]}}} Spaced repetition data per card */
+/** @type {{[cardKey: string]: {step: number, repetitions: number, nextReview: Date, lastReview?: Date, history: number[], confHistory: Array<number|null>}}} Spaced repetition data per card */
 let spacedRepetitionData = {};
+
+/**
+ * Calibration mode (opt-in): capture the student's confidence before the answer
+ * is revealed, then feed back how well that self-assessment matched reality.
+ * Off by default so the fast study path stays fast.
+ * @type {boolean}
+ */
+let calibrationMode = false;
+
+/** @type {number|null} Confidence for the current card: 1=unsicher, 2=mittel, 3=sicher (null if unset) */
+let currentConfidence = null;
+
+/** @type {Array<{confidence: number, score: number}>} Confidence vs. outcome for the current session */
+let sessionCalibration = [];
 
 // ============================================================================
 // DOM Elements Cache
@@ -167,9 +181,11 @@ let standardAnswerContainer;
 let textExplanationContainer;
 let textExplanationContent;
 let showAnswerBtn;
-let markCorrectBtn;
-let markIncorrectBtn;
+let recallRating;
 let nextCardBtn;
+let calibrationModeCheckbox;
+let confidencePrompt;
+let calibrationCue;
 let progressBar;
 let cardsRemainingElement;
 let cardsCompletedElement;
@@ -243,9 +259,11 @@ function initializeApp() {
     textExplanationContainer = document.querySelector('#text-explanation-container');
     textExplanationContent = document.querySelector('#text-explanation-content');
     showAnswerBtn = document.querySelector('#show-answer');
-    markCorrectBtn = document.querySelector('#mark-correct');
-    markIncorrectBtn = document.querySelector('#mark-incorrect');
+    recallRating = document.querySelector('#recall-rating');
     nextCardBtn = document.querySelector('#next-card');
+    calibrationModeCheckbox = document.querySelector('#calibration-mode');
+    confidencePrompt = document.querySelector('#confidence-prompt');
+    calibrationCue = document.querySelector('#calibration-cue');
     progressBar = document.querySelector('#progress-bar');
     cardsRemainingElement = document.querySelector('#cards-remaining');
     cardsCompletedElement = document.querySelector('#cards-completed');
@@ -292,14 +310,12 @@ function initializeApp() {
     // Set up event listeners with debouncing/throttling for performance
     fileInput.addEventListener('change', handleFileUpload);
     showAnswerBtn.addEventListener('click', throttle(showAnswer, 300));
-    markCorrectBtn.addEventListener(
-        'click',
-        throttle(() => markAnswer(true), 300)
-    );
-    markIncorrectBtn.addEventListener(
-        'click',
-        throttle(() => markAnswer(false), 300)
-    );
+    // Graded self-rating (text cards): one delegated handler, score from data-score.
+    // markAnswer's isAnswered guard already prevents double-grading.
+    recallRating.addEventListener('click', (e) => {
+        const btn = e.target.closest('.recall-rating-btn');
+        if (btn) markAnswer(Number(btn.dataset.score));
+    });
     nextCardBtn.addEventListener('click', throttle(showNextCard, 300));
     restartBtn.addEventListener('click', throttle(restartQuiz, 500));
     uploadNewBtn.addEventListener('click', throttle(resetAndUpload, 500));
@@ -323,6 +339,25 @@ function initializeApp() {
         .addEventListener('click', throttle(exportToAnki, 300));
     undoBtn.addEventListener('click', throttle(undoLastAnswer, 300));
     exportBackupBtn.addEventListener('click', throttle(exportBackup, 500));
+
+    // Calibration mode toggle (persisted) and pre-answer confidence capture
+    calibrationMode = localStorage.getItem('calibrationMode') === '1';
+    calibrationModeCheckbox.checked = calibrationMode;
+    calibrationModeCheckbox.addEventListener('change', () => {
+        calibrationMode = calibrationModeCheckbox.checked;
+        persistToStorage('calibrationMode', calibrationMode ? '1' : '0');
+        confidencePrompt.classList.toggle('hidden', !calibrationMode || isAnswered);
+    });
+    confidencePrompt.addEventListener('click', (e) => {
+        const btn = e.target.closest('.confidence-btn');
+        if (!btn) return;
+        currentConfidence = Number(btn.dataset.confidence);
+        for (const b of confidencePrompt.querySelectorAll('.confidence-btn')) {
+            const isSel = b === btn;
+            b.classList.toggle('selected', isSel);
+            b.setAttribute('aria-pressed', String(isSel));
+        }
+    });
 
     // Drop zone drag-and-drop
     setupDropZone();
@@ -443,6 +478,12 @@ function handleGlobalKeyboard(e) {
  * @param e
  */
 function handleCardFrontKeys(e) {
+    // Let the confidence buttons handle their own Space/Enter activation
+    // instead of hijacking it to reveal the answer.
+    if (e.target.closest('#confidence-prompt')) {
+        return;
+    }
+
     // Space or Enter: show answer
     if (e.key === ' ' || e.key === 'Enter') {
         e.preventDefault();
@@ -487,30 +528,26 @@ function handleCardBackKeys(e) {
         return;
     }
 
-    // R: mark correct (Richtig)
-    if (e.key === 'r' && markCorrectBtn.style.display !== 'none') {
-        e.preventDefault();
-        markCorrectBtn.click();
-        return;
-    }
-
-    // F: mark incorrect (Falsch)
-    if (e.key === 'f' && markIncorrectBtn.style.display !== 'none') {
-        e.preventDefault();
-        markIncorrectBtn.click();
-        return;
-    }
-
-    // Arrow keys: cycle focus between Richtig/Falsch buttons
-    if (e.key === 'ArrowRight' && markCorrectBtn.style.display !== 'none') {
-        e.preventDefault();
-        markIncorrectBtn.focus();
-        return;
-    }
-    if (e.key === 'ArrowLeft' && markIncorrectBtn.style.display !== 'none') {
-        e.preventDefault();
-        markCorrectBtn.focus();
-        return;
+    // Graded self-rating (text cards): keys 1-4 grade, arrows move focus.
+    // Only active while the rating group is visible — for MC cards it stays
+    // hidden, so the 1-9 option-tooltip shortcut below keeps working.
+    if (!recallRating.classList.contains('hidden')) {
+        const ratingBtns = [...recallRating.querySelectorAll('.recall-rating-btn')];
+        const num = Number.parseInt(e.key);
+        if (num >= 1 && num <= ratingBtns.length) {
+            e.preventDefault();
+            ratingBtns[num - 1].click();
+            return;
+        }
+        if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') {
+            e.preventDefault();
+            const current = ratingBtns.indexOf(document.activeElement);
+            const delta = e.key === 'ArrowRight' ? 1 : -1;
+            const next =
+                current < 0 ? 0 : Math.min(Math.max(current + delta, 0), ratingBtns.length - 1);
+            ratingBtns[next].focus();
+            return;
+        }
     }
 
     // E: toggle explanation (text answers)
@@ -1883,9 +1920,10 @@ function initializeQuiz(loadedCards) {
         }
     }
 
-    // Clear undo stack for new quiz
+    // Clear undo stack and session calibration for new quiz
     undoStack = [];
     undoBtn.disabled = true;
+    sessionCalibration = [];
 
     // Show the app content
     document.querySelector('#file-input-container').style.display = 'none';
@@ -2995,14 +3033,24 @@ function updateCardContent(card) {
         tooltip.remove();
     }
 
-    // Reset buttons
-    markCorrectBtn.style.display = 'inline-block';
-    markIncorrectBtn.style.display = 'inline-block';
+    // Reset buttons + calibration UI for the fresh card
+    recallRating.classList.add('hidden');
     nextCardBtn.style.display = 'none';
+    calibrationCue.classList.add('hidden');
+    calibrationCue.textContent = '';
+
+    // Pre-answer confidence prompt: shown on the front only in calibration mode
+    currentConfidence = null;
+    confidencePrompt.classList.toggle('hidden', !calibrationMode);
+    for (const b of confidencePrompt.querySelectorAll('.confidence-btn')) {
+        b.classList.remove('selected');
+        b.setAttribute('aria-pressed', 'false');
+    }
 
     // Tabindex management: prevent tabbing into back-side buttons when front is shown
-    markCorrectBtn.setAttribute('tabindex', '-1');
-    markIncorrectBtn.setAttribute('tabindex', '-1');
+    for (const b of recallRating.querySelectorAll('.recall-rating-btn')) {
+        b.setAttribute('tabindex', '-1');
+    }
     nextCardBtn.setAttribute('tabindex', '-1');
     showAnswerBtn.setAttribute('tabindex', '0');
 
@@ -3248,8 +3296,6 @@ function showAnswer() {
         const score = matchingRequiredCount > 0 ? correctPairCount / matchingRequiredCount : 0;
         markAnswer(score);
 
-        markCorrectBtn.style.display = 'none';
-        markIncorrectBtn.style.display = 'none';
         nextCardBtn.style.display = 'inline-block';
     } else if (isMultipleChoice) {
         // For multiple choice questions
@@ -3313,9 +3359,7 @@ function showAnswer() {
         }
         markAnswer(score);
 
-        // For multiple choice, always hide Richtig/Falsch buttons and show Next button
-        markCorrectBtn.style.display = 'none';
-        markIncorrectBtn.style.display = 'none';
+        // Multiple choice is auto-scored — no self-rating, just advance.
         nextCardBtn.style.display = 'inline-block';
     } else {
         // Handle standard text answer display
@@ -3338,15 +3382,15 @@ function showAnswer() {
         const isExactMatch = userAnswer.toLowerCase() === correctAnswer.toLowerCase();
 
         if (isExactMatch) {
-            // Automatically mark as correct and show only Next button
+            // Exact text match is a fair correctness proxy: auto-grade as perfect.
             markAnswer(true);
-            markCorrectBtn.style.display = 'none';
-            markIncorrectBtn.style.display = 'none';
+            recallRating.classList.add('hidden');
             nextCardBtn.style.display = 'inline-block';
         } else {
-            // For text answers that don't match, show the Richtig/Falsch buttons
-            markCorrectBtn.style.display = 'inline-block';
-            markIncorrectBtn.style.display = 'inline-block';
+            // Otherwise let the student grade their own recall (4-level scale),
+            // which feeds the spaced-repetition ladder a finer signal than yes/no.
+            updateRatingIntervals(card);
+            recallRating.classList.remove('hidden');
             nextCardBtn.style.display = 'none';
         }
     }
@@ -3354,16 +3398,17 @@ function showAnswer() {
     // Tabindex: hide front-side from tab, expose back-side
     showAnswerBtn.setAttribute('tabindex', '-1');
     userAnswerInput.setAttribute('tabindex', '-1');
-    markCorrectBtn.setAttribute('tabindex', '0');
-    markIncorrectBtn.setAttribute('tabindex', '0');
+    for (const b of recallRating.querySelectorAll('.recall-rating-btn')) {
+        b.setAttribute('tabindex', '0');
+    }
     nextCardBtn.setAttribute('tabindex', '0');
 
-    // Focus the first actionable button after flip animation
+    // Focus the first actionable control after flip animation
     setTimeout(() => {
         if (nextCardBtn.style.display !== 'none') {
             nextCardBtn.focus({ preventScroll: true });
-        } else if (markCorrectBtn.style.display !== 'none') {
-            markCorrectBtn.focus({ preventScroll: true });
+        } else if (!recallRating.classList.contains('hidden')) {
+            recallRating.querySelector('.recall-rating-btn')?.focus({ preventScroll: true });
         }
     }, 400);
 }
@@ -3402,7 +3447,16 @@ function markAnswer(scoreOrBool) {
     // Update spaced repetition data
     const isFromSRBuckets = activeDecks.length === 1 && activeDecks[0] === 'SR Buckets';
     if (studyMode === 'spaced-repetition' || isFromSRBuckets) {
-        updateSpacedRepetition(card, score);
+        updateSpacedRepetition(card, score, currentConfidence);
+    }
+
+    // Calibration: compare the pre-answer confidence with the actual outcome.
+    // Works in any study mode; the undo snapshot (captured above) remembers
+    // whether an entry was pushed so it can be rolled back.
+    if (calibrationMode && currentConfidence !== null) {
+        sessionCalibration.push({ confidence: currentConfidence, score });
+        if (undoStack.length > 0) undoStack.at(-1).calibrationPushed = true;
+        showCalibrationCue(currentConfidence, score);
     }
 
     // Accumulate fractional scores
@@ -3476,9 +3530,9 @@ function markAnswer(scoreOrBool) {
     // Update incorrect indices in local storage
     updateIncorrectIndices();
 
-    // Hide the evaluation buttons and show next button
-    markCorrectBtn.style.display = 'none';
-    markIncorrectBtn.style.display = 'none';
+    // Hide the rating control and show next button
+    recallRating.classList.add('hidden');
+    confidencePrompt.classList.add('hidden');
     nextCardBtn.style.display = 'inline-block';
 
     // If this was a multiple choice question, highlight correct/incorrect options
@@ -3508,6 +3562,37 @@ function markAnswer(scoreOrBool) {
     if (nextCardBtn.style.display !== 'none') {
         nextCardBtn.focus({ preventScroll: true });
     }
+}
+
+/**
+ * Show a brief calibration cue on the answer side: did the pre-answer confidence
+ * match the outcome? The actionable case is overconfidence (sure but wrong).
+ * @param {number} confidence - 1 (unsicher) … 3 (sicher)
+ * @param {number} score - answer score 0..1
+ */
+function showCalibrationCue(confidence, score) {
+    const correct = score >= SR_PASS_SCORE;
+    let msg;
+    let cls;
+    if (confidence === 3 && !correct) {
+        msg = '⚠️ Überschätzt – diese Karte kommt schneller wieder dran.';
+        cls = 'calibration-cue-warn';
+    } else if (confidence === 1 && correct) {
+        msg = '✅ Besser als gedacht – du kannst das schon!';
+        cls = 'calibration-cue-good';
+    } else if (confidence === 3 && correct) {
+        msg = '🎯 Sicher und richtig – stark!';
+        cls = 'calibration-cue-good';
+    } else if (confidence === 1 && !correct) {
+        msg = '👍 Ehrlich eingeschätzt – dranbleiben.';
+        cls = 'calibration-cue-neutral';
+    } else {
+        msg = correct ? '🙂 Richtig.' : '🤔 Nochmal ansehen.';
+        cls = 'calibration-cue-neutral';
+    }
+    calibrationCue.textContent = msg;
+    calibrationCue.className = `calibration-cue ${cls}`;
+    calibrationCue.classList.remove('hidden');
 }
 
 /**
@@ -3570,6 +3655,42 @@ function showFeedback() {
         knowledgeLine.classList.remove('hidden');
     } else {
         knowledgeLine.classList.add('hidden');
+    }
+
+    // Calibration summary: how well the student's confidence matched reality.
+    let calibrationLine = document.querySelector('#feedback-calibration');
+    if (!calibrationLine) {
+        calibrationLine = document.createElement('div');
+        calibrationLine.id = 'feedback-calibration';
+        calibrationLine.className = 'feedback-knowledge';
+        (document.querySelector('#feedback-knowledge') ?? finalScoreElement.parentElement).after(
+            calibrationLine
+        );
+    }
+    if (sessionCalibration.length > 0) {
+        const avgConf =
+            sessionCalibration.reduce((a, e) => a + (e.confidence - 1) / 2, 0) /
+            sessionCalibration.length;
+        const avgScore =
+            sessionCalibration.reduce((a, e) => a + e.score, 0) / sessionCalibration.length;
+        const sure = sessionCalibration.filter((e) => e.confidence === 3);
+        let msg;
+        if (sure.length > 0) {
+            const sureCorrect = Math.round(
+                (sure.filter((e) => e.score >= SR_PASS_SCORE).length / sure.length) * 100
+            );
+            msg = `🎯 Selbsteinschätzung: von deinen „sicher“-Karten lagst du zu ${sureCorrect} % richtig`;
+        } else {
+            msg = `🎯 Selbsteinschätzung für ${sessionCalibration.length} Karten erfasst`;
+        }
+        const gap = avgConf - avgScore;
+        if (gap > 0.15) msg += ' · du neigst zur Überschätzung';
+        else if (gap < -0.15) msg += ' · du bist strenger zu dir als nötig';
+        else msg += ' · gut kalibriert 👍';
+        calibrationLine.textContent = msg;
+        calibrationLine.classList.remove('hidden');
+    } else {
+        calibrationLine.classList.add('hidden');
     }
 
     // Show/hide buttons based on whether we're in SR bucket mode
@@ -3813,12 +3934,56 @@ function getCardKey(card) {
 }
 
 /**
+ * Pure projection of the ladder: given the current step and an answer score,
+ * return the resulting step and how long to wait before the next review.
+ * Shared by updateSpacedRepetition (to apply) and the rating buttons (to
+ * preview the consequence), so the two can never drift apart.
+ *   - score ≈ 1   → skip ahead two steps (mastered, like Anki's "Easy")
+ *   - score ≥ 0.8 → advance one step
+ *   - 0.5–0.8     → keep step, review at half the interval (partial recall)
+ *   - score < 0.5 → reset to the first step
+ * @param {number} step - current ladder step
+ * @param {number} score - answer score 0..1
+ * @returns {{step: number, waitMinutes: number}}
+ */
+function projectSR(step, score) {
+    const maxStep = SR_STEP_MINUTES.length - 1;
+    if (score >= 0.999) {
+        const newStep = Math.min(step + 2, maxStep);
+        return { step: newStep, waitMinutes: SR_STEP_MINUTES[newStep] };
+    }
+    if (score >= SR_PASS_SCORE) {
+        const newStep = Math.min(step + 1, maxStep);
+        return { step: newStep, waitMinutes: SR_STEP_MINUTES[newStep] };
+    }
+    if (score >= SR_FAIL_SCORE) {
+        // Partially correct: keep the step, but review sooner than usual.
+        // (The old SM-2 logic reset everything on any score < 1, which punished
+        // matching/MC cards where partial scores are the norm.)
+        return { step, waitMinutes: Math.max(SR_STEP_MINUTES[step] / 2, SR_STEP_MINUTES[0]) };
+    }
+    return { step: 0, waitMinutes: SR_STEP_MINUTES[0] };
+}
+
+/**
+ * Compact human label for a wait duration in minutes ("10 Min" / "2 Std" / "3 Tage").
+ * @param {number} mins
+ * @returns {string}
+ */
+function formatWaitMinutes(mins) {
+    if (mins < 60) return `${Math.round(mins)} Min`;
+    if (mins < 1440) return `${Math.round(mins / 60)} Std`;
+    const days = Math.round(mins / 1440);
+    return `${days} Tag${days === 1 ? '' : 'e'}`;
+}
+
+/**
  * Update spaced repetition data after answering
  * @param {object} card - Card object
- * @param {boolean} wasCorrect - Whether answer was correct
- * @param score
+ * @param {number} score - answer score 0..1
+ * @param {number|null} [confidence] - pre-answer self-rated confidence (1-3), null if not captured
  */
-function updateSpacedRepetition(card, score) {
+function updateSpacedRepetition(card, score, confidence = null) {
     const key = getCardKey(card);
     const now = new Date();
     const data = spacedRepetitionData[key] ?? {
@@ -3826,34 +3991,49 @@ function updateSpacedRepetition(card, score) {
         repetitions: 0,
         nextReview: now,
         history: [],
+        confHistory: [],
     };
 
-    // Backward compat with entries created before the cram ladder
+    // Backward compat with entries created before the cram ladder / calibration
     if (!data.history) data.history = [];
+    if (!data.confHistory) data.confHistory = [];
     if (data.step === undefined) data.step = migrateLegacyInterval(data.interval);
 
     data.history.push(score);
+    // Keep confHistory index-aligned with history: back-fill null for any older
+    // answers recorded before calibration existed, then append this one.
+    while (data.confHistory.length < data.history.length - 1) data.confHistory.push(null);
+    data.confHistory.push(confidence);
     data.repetitions = (data.repetitions ?? 0) + 1;
 
-    let waitMinutes;
-    if (score >= SR_PASS_SCORE) {
-        data.step = Math.min(data.step + 1, SR_STEP_MINUTES.length - 1);
-        waitMinutes = SR_STEP_MINUTES[data.step];
-    } else if (score >= SR_FAIL_SCORE) {
-        // Partially correct: keep the step, but review sooner than usual.
-        // (The old SM-2 logic reset everything on any score < 1, which punished
-        // matching/MC cards where partial scores are the norm.)
-        waitMinutes = Math.max(SR_STEP_MINUTES[data.step] / 2, SR_STEP_MINUTES[0]);
-    } else {
-        data.step = 0;
-        waitMinutes = SR_STEP_MINUTES[0];
-    }
-
+    const projected = projectSR(data.step, score);
+    data.step = projected.step;
     data.lastReview = now;
-    data.nextReview = new Date(now.getTime() + waitMinutes * 60 * 1000);
+    data.nextReview = new Date(now.getTime() + projected.waitMinutes * 60 * 1000);
 
     spacedRepetitionData[key] = data;
     saveSpacedRepetitionData();
+}
+
+/**
+ * Fill in the "next review" preview under each rating button, so the student
+ * sees the consequence of each choice. Only meaningful while the ladder is
+ * actually driving scheduling (SR mode / SR buckets); otherwise left blank.
+ * @param {object} card - the card being answered
+ */
+function updateRatingIntervals(card) {
+    const inSR =
+        studyMode === 'spaced-repetition' ||
+        (activeDecks.length === 1 && activeDecks[0] === 'SR Buckets');
+    const data = spacedRepetitionData[getCardKey(card)];
+    const step = data?.step ?? 0;
+    for (const btn of recallRating.querySelectorAll('.recall-rating-btn')) {
+        const intervalEl = btn.querySelector('.rating-interval');
+        if (!intervalEl) continue;
+        intervalEl.textContent = inSR
+            ? formatWaitMinutes(projectSR(step, Number(btn.dataset.score)).waitMinutes)
+            : '';
+    }
 }
 
 /**
@@ -3876,6 +4056,7 @@ function reviveSRData() {
         data.nextReview = new Date(data.nextReview);
         if (data.lastReview) data.lastReview = new Date(data.lastReview);
         if (data.step === undefined) data.step = migrateLegacyInterval(data.interval);
+        if (!data.confHistory) data.confHistory = [];
     }
 }
 
@@ -4285,6 +4466,10 @@ function undoLastAnswer() {
         delete previousIncorrectIndices[snapshot.deckName];
     }
     persistToStorage('flashcardIncorrectIndices', JSON.stringify(previousIncorrectIndices));
+
+    // Roll back the session calibration entry recorded for this answer
+    if (snapshot.calibrationPushed) sessionCalibration.pop();
+    currentConfidence = null;
 
     // Restore card state
     answeredCards[snapshot.cardIndex] = null;
@@ -4795,6 +4980,22 @@ function renderSRDashboard() {
     }
     const avgScore = totalAttempts > 0 ? Math.round((totalScore / totalAttempts) * 100) : 0;
 
+    // Calibration: mean agreement between self-rated confidence and outcome,
+    // over every answer where a confidence was captured. 100% = perfectly
+    // calibrated (1 − mean absolute error of normalized confidence vs. score).
+    let calPairs = 0;
+    let calErrSum = 0;
+    for (const data of srEntries) {
+        if (!data.confHistory || !data.history) continue;
+        for (const [i, c] of data.confHistory.entries()) {
+            if (c === null || c === undefined) continue;
+            const normConf = (c - 1) / 2; // 1..3 → 0..1
+            calErrSum += Math.abs(normConf - (data.history[i] ?? 0));
+            calPairs++;
+        }
+    }
+    const calibration = calPairs > 0 ? Math.round((1 - calErrSum / calPairs) * 100) : null;
+
     // Ladder distribution for bar chart (steps grouped into 5 stages)
     const bucketColors = ['#e74c3c', '#e67e22', '#f1c40f', '#2ecc71', '#27ae60'];
     const bucketLabels = ['Wackelig (Minuten)', 'Im Aufbau (Stunden)', '1 Tag', '3 Tage', '7 Tage'];
@@ -4816,6 +5017,9 @@ function renderSRDashboard() {
     html += `<div class="sr-stat-card"><span class="sr-stat-value">${overdueCount}</span> Fällig</div>`;
     html += `<div class="sr-stat-card">Ø <span class="sr-stat-value">${totalAttempts > 0 ? avgScore + '%' : '–'}</span> richtig</div>`;
     html += `<div class="sr-stat-card"><span class="sr-stat-value">${totalAttempts}</span> Versuche</div>`;
+    if (calibration !== null) {
+        html += `<div class="sr-stat-card" title="Wie gut deine Selbsteinschätzung „Wie sicher?“ mit dem tatsächlichen Ergebnis übereinstimmt (${calPairs} Einschätzungen).">🎯 Kalibrierung <span class="sr-stat-value">${calibration}%</span></div>`;
+    }
 
     // Bucket distribution bar
     if (totalSRCards > 0) {

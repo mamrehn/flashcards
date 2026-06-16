@@ -38,6 +38,13 @@
                     <option value="incorrect-only">Nur falsche wiederholen</option>
                     <option value="read-through">Lesemodus</option>
                 </select>
+                <label
+                    class="calibration-toggle"
+                    title="Schätze vor dem Aufdecken ein, wie sicher du dir bist. Die App zeigt dir danach, wie gut du dich selbst einschätzt."
+                >
+                    <input type="checkbox" id="calibration-mode" />
+                    🎯 Kalibrierung
+                </label>
                 <button
                     id="open-sr-manager"
                     class="btn btn-secondary sr-manager-btn"
@@ -264,6 +271,41 @@
                                     <!-- Matching UI will be dynamically inserted here -->
                                 </div>
                             </div>
+                            <div
+                                id="confidence-prompt"
+                                class="confidence-prompt hidden"
+                                role="group"
+                                aria-label="Wie sicher bist du dir?"
+                            >
+                                <span class="confidence-prompt-label">Wie sicher?</span>
+                                <button
+                                    type="button"
+                                    class="confidence-btn"
+                                    data-confidence="1"
+                                    aria-pressed="false"
+                                    title="Unsicher"
+                                >
+                                    🤔
+                                </button>
+                                <button
+                                    type="button"
+                                    class="confidence-btn"
+                                    data-confidence="2"
+                                    aria-pressed="false"
+                                    title="Mittel"
+                                >
+                                    🙂
+                                </button>
+                                <button
+                                    type="button"
+                                    class="confidence-btn"
+                                    data-confidence="3"
+                                    aria-pressed="false"
+                                    title="Sicher"
+                                >
+                                    😎
+                                </button>
+                            </div>
                             <div class="controls">
                                 <button class="btn btn-primary" id="show-answer">
                                     Antwort zeigen
@@ -337,6 +379,13 @@
                                 >
                                     <!-- Matching results will be dynamically inserted here -->
                                 </div>
+
+                                <!-- Calibration cue (confidence vs. outcome) -->
+                                <div
+                                    id="calibration-cue"
+                                    class="calibration-cue hidden"
+                                    aria-live="polite"
+                                ></div>
                             </div>
                             <div class="controls">
                                 <button
@@ -347,8 +396,49 @@
                                 >
                                     ↩ Zurück
                                 </button>
-                                <button class="btn btn-success" id="mark-correct">Richtig</button>
-                                <button class="btn btn-danger" id="mark-incorrect">Falsch</button>
+                                <div
+                                    id="recall-rating"
+                                    class="recall-rating hidden"
+                                    role="group"
+                                    aria-label="Wie gut wusstest du die Antwort?"
+                                >
+                                    <button
+                                        type="button"
+                                        class="recall-rating-btn rating-again"
+                                        data-score="0"
+                                        title="Gar nicht gewusst (Taste 1)"
+                                    >
+                                        <span class="rating-label">Nochmal</span>
+                                        <span class="rating-interval"></span>
+                                    </button>
+                                    <button
+                                        type="button"
+                                        class="recall-rating-btn rating-hard"
+                                        data-score="0.6"
+                                        title="Mit Mühe (Taste 2)"
+                                    >
+                                        <span class="rating-label">Schwer</span>
+                                        <span class="rating-interval"></span>
+                                    </button>
+                                    <button
+                                        type="button"
+                                        class="recall-rating-btn rating-good"
+                                        data-score="0.85"
+                                        title="Gewusst (Taste 3)"
+                                    >
+                                        <span class="rating-label">Gut</span>
+                                        <span class="rating-interval"></span>
+                                    </button>
+                                    <button
+                                        type="button"
+                                        class="recall-rating-btn rating-easy"
+                                        data-score="1"
+                                        title="Sofort gewusst (Taste 4)"
+                                    >
+                                        <span class="rating-label">Einfach</span>
+                                        <span class="rating-interval"></span>
+                                    </button>
+                                </div>
                                 <button class="btn btn-secondary" id="next-card">Nächste</button>
                             </div>
                         </div>
@@ -371,8 +461,9 @@
                         <div class="keyboard-hint">
                             <kbd>1</kbd>–<kbd>9</kbd> MC-Option wählen / Erklärung
                         </div>
-                        <div class="keyboard-hint"><kbd>R</kbd> Richtig</div>
-                        <div class="keyboard-hint"><kbd>F</kbd> Falsch</div>
+                        <div class="keyboard-hint">
+                            <kbd>1</kbd>–<kbd>4</kbd> Selbsteinschätzung (Textkarten)
+                        </div>
                         <div class="keyboard-hint"><kbd>E</kbd> Erklärung ein/aus</div>
                         <div class="keyboard-hint"><kbd>⌫</kbd> Letzte Antwort rückgängig</div>
                         <div class="keyboard-hint"><kbd>?</kbd> Diese Hilfe</div>
