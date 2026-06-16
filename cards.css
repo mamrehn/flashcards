@@ -1155,8 +1155,8 @@ body {
 
 .coverage-bar {
     display: flex;
-    height: 16px;
-    border-radius: 8px;
+    height: 10px;
+    border-radius: 5px;
     overflow: hidden;
     background: var(--input-border);
 }
