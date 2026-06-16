@@ -200,7 +200,6 @@ let showAnswerBtn;
 let recallRating;
 let nextCardBtn;
 let calibrationModeCheckbox;
-let calibrationToggle;
 let confidencePrompt;
 let progressBar;
 let cardsRemainingElement;
@@ -217,9 +216,10 @@ let errorMessageElement;
 let flipCard;
 let cardContainer;
 let startSelectedDecksBtn;
+let readModeBtn;
+let incorrectOnlyToggle;
 let selectAllDecksBtn;
 let deselectAllDecksBtn;
-let studyModeSelect;
 let deckSearchInput;
 let srBucketsDisplay;
 let startSelectedBucketsBtn;
@@ -278,7 +278,6 @@ function initializeApp() {
     recallRating = document.querySelector('#recall-rating');
     nextCardBtn = document.querySelector('#next-card');
     calibrationModeCheckbox = document.querySelector('#calibration-mode');
-    calibrationToggle = document.querySelector('.calibration-toggle');
     confidencePrompt = document.querySelector('#confidence-prompt');
     progressBar = document.querySelector('#progress-bar');
     cardsRemainingElement = document.querySelector('#cards-remaining');
@@ -295,9 +294,10 @@ function initializeApp() {
     flipCard = document.querySelector('#flip-card');
     cardContainer = document.querySelector('#card-container');
     startSelectedDecksBtn = document.querySelector('#start-selected-decks');
+    readModeBtn = document.querySelector('#read-mode-btn');
+    incorrectOnlyToggle = document.querySelector('#incorrect-only-toggle');
     selectAllDecksBtn = document.querySelector('#select-all-decks');
     deselectAllDecksBtn = document.querySelector('#deselect-all-decks');
-    studyModeSelect = document.querySelector('#study-mode');
     deckSearchInput = document.querySelector('#deck-search');
     srBucketsDisplay = document.querySelector('#sr-buckets-display');
     startSelectedBucketsBtn = document.querySelector('#start-selected-buckets');
@@ -339,13 +339,27 @@ function initializeApp() {
     restartBtn.addEventListener('click', throttle(restartQuiz, 500));
     uploadNewBtn.addEventListener('click', throttle(resetAndUpload, 500));
     returnToSrBtn.addEventListener('click', throttle(returnToSRManager, 500));
-    startSelectedDecksBtn.addEventListener('click', throttle(startSelectedDecks, 500));
+    // Primary "start" action: spaced repetition, or incorrect-only when the
+    // "Nur falsche" option is ticked. Reading is a separate action below.
+    startSelectedDecksBtn.addEventListener(
+        'click',
+        throttle(() => {
+            studyMode = incorrectOnlyToggle.checked ? 'incorrect-only' : 'spaced-repetition';
+            startSelectedDecks();
+        }, 500)
+    );
+    readModeBtn.addEventListener(
+        'click',
+        throttle(() => {
+            studyMode = 'read-through';
+            startSelectedDecks();
+        }, 500)
+    );
     selectAllDecksBtn.addEventListener('click', debounce(selectAllDecks, 200));
     deselectAllDecksBtn.addEventListener('click', debounce(deselectAllDecks, 200));
     for (const btn of document.querySelectorAll('.type-filter-btn')) {
         btn.addEventListener('click', () => applyGlobalTypeFilter(btn.dataset.filter));
     }
-    studyModeSelect.addEventListener('change', throttle(handleStudyModeChange, 300));
     deckSearchInput.addEventListener('input', debounce(handleDeckSearch, 250));
     for (const tab of document.querySelectorAll('.hub-tab')) {
         tab.addEventListener('click', () => switchHubTab(tab.dataset.tab));
@@ -360,18 +374,16 @@ function initializeApp() {
         .addEventListener('click', throttle(exportToAnki, 300));
     undoBtn.addEventListener('click', throttle(undoLastAnswer, 300));
     exportBackupBtn.addEventListener('click', throttle(exportBackup, 500));
-    document.querySelector('#close-progress').addEventListener('click', closeProgressView);
 
-    // Self-assessment toggle (persisted, on by default) + confidence capture
+    // Self-assessment option (persisted, on by default). It lives on the deck
+    // picker, so it's only set before a session starts — updateCardContent reads
+    // calibrationMode per card; no live mid-quiz toggling needed.
     const storedCalibration = localStorage.getItem('calibrationMode');
     calibrationMode = storedCalibration === null ? true : storedCalibration === '1';
     calibrationModeCheckbox.checked = calibrationMode;
     calibrationModeCheckbox.addEventListener('change', () => {
         calibrationMode = calibrationModeCheckbox.checked;
         persistToStorage('calibrationMode', calibrationMode ? '1' : '0');
-        const card = cards[currentCardIndex];
-        const ask = calibrationMode && !isAnswered && card && !isCardMastered(card);
-        confidencePrompt.classList.toggle('hidden', !ask);
     });
     confidencePrompt.addEventListener('click', (e) => {
         const btn = e.target.closest('.confidence-btn');
@@ -733,6 +745,15 @@ function setupBackLink() {
         backLink.href = inSession ? 'cards.html' : 'index.html';
         backLink.title = inSession ? 'Zur Deck-Auswahl' : 'Zur Startseite';
     };
+
+    // From the Fortschritt hub, the ← is the single exit: soft-close it in place
+    // (no reload) instead of navigating. Other views fall through to the href.
+    backLink.addEventListener('click', (e) => {
+        if (progressView && !progressView.classList.contains('hidden')) {
+            e.preventDefault();
+            closeProgressView();
+        }
+    });
 
     const observer = new MutationObserver(update);
     observer.observe(appContent, { attributes: true, attributeFilter: ['class'] });
@@ -1722,7 +1743,9 @@ function hasAnyActiveSelection() {
  * Update the enabled state of the start button based on the topic/category/type tree.
  */
 function updateStartButtonState() {
-    startSelectedDecksBtn.disabled = !hasAnyActiveSelection();
+    const noSelection = !hasAnyActiveSelection();
+    startSelectedDecksBtn.disabled = noSelection;
+    readModeBtn.disabled = noSelection;
 }
 
 /**
@@ -1981,11 +2004,6 @@ function initializeQuiz(loadedCards) {
     // Show the app content
     document.querySelector('#file-input-container').style.display = 'none';
     appContent.classList.remove('hidden');
-
-    // Hide menu-only controls (mode switcher + self-assessment toggle) during an
-    // active quiz — they only apply before a deck is started.
-    studyModeSelect.style.display = 'none';
-    calibrationToggle.style.display = 'none';
 
     // Auto-show keyboard hints on first ever quiz
     if (!localStorage.getItem('keyboardHintsShown')) {
@@ -3864,8 +3882,6 @@ function resetAndUpload() {
     // Reset the app title
     appTitle.textContent = 'Lernkarten';
     appSubtitle.style.display = 'block';
-    studyModeSelect.style.display = 'inline-block';
-    calibrationToggle.style.display = 'inline-flex';
 
     // Clear any error messages
     errorMessageElement.classList.add('hidden');
@@ -3894,16 +3910,6 @@ function showError(message) {
 // ============================================================================
 // UX Enhancements
 // ============================================================================
-
-/**
- * Handle study mode change. The dropdown is only reachable on the deck-selection
- * screen (it's hidden once a quiz starts), so this just records the choice —
- * filtering / sorting happens at quiz start inside initializeQuiz.
- * @param {Event} event - Change event from select element
- */
-function handleStudyModeChange(event) {
-    studyMode = event.target.value;
-}
 
 /**
  * Check if a card was answered incorrectly in a previous session
@@ -4701,8 +4707,6 @@ function openBookView(cardsToShow, title) {
     // Hide everything else, show book view
     document.querySelector('#file-input-container').style.display = 'none';
     appContent.classList.add('hidden');
-    studyModeSelect.style.display = 'none';
-    calibrationToggle.style.display = 'none';
     bookView.classList.remove('hidden');
 }
 
@@ -5199,11 +5203,8 @@ function startSelectedBuckets() {
     // Set active decks for title display
     activeDecks = ['SR Buckets'];
 
-    // Ensure study mode is set to spaced-repetition and hide menu controls
+    // Bucket practice always runs as spaced repetition
     studyMode = 'spaced-repetition';
-    studyModeSelect.value = 'spaced-repetition';
-    studyModeSelect.style.display = 'none';
-    calibrationToggle.style.display = 'none';
 
     // Update the app title
     updateAppTitle(['SR Buckets']);
@@ -5677,8 +5678,6 @@ function openProgressView(tab = 'overview') {
     savedDecksContainer.classList.add('hidden');
     if (uploadSection) uploadSection.classList.add('hidden');
     if (subtitle) subtitle.classList.add('hidden');
-    studyModeSelect.style.display = 'none';
-    calibrationToggle.style.display = 'none';
     switchHubTab(tab);
 }
 
@@ -5696,7 +5695,7 @@ function switchHubTab(tab) {
     else renderProgressView();
 }
 
-/** Close the hub and return to the deck-picker menu. */
+/** Close the hub and return to the deck-picker menu (soft close, no reload). */
 function closeProgressView() {
     const savedDecksContainer = document.querySelector('#saved-decks-container');
     const uploadSection = document.querySelector('.upload-section');
@@ -5705,8 +5704,6 @@ function closeProgressView() {
     savedDecksContainer.classList.remove('hidden');
     if (uploadSection) uploadSection.classList.remove('hidden');
     if (subtitle) subtitle.classList.remove('hidden');
-    studyModeSelect.style.display = 'inline-block';
-    calibrationToggle.style.display = 'inline-flex';
     displaySavedDecks(deckSearchInput.value);
 }
 
@@ -5718,7 +5715,7 @@ function renderProgressView() {
     const content = document.querySelector('#progress-content');
     content.innerHTML = `
         <section class="progress-section progress-readiness">
-            ${progressRing(overall.percent, 'Bereitschaft')}
+            ${progressRing(overall.percent, 'Lernstand erreicht')}
             <div class="readiness-side">
                 <div class="readiness-goal">Ziel: Lernstand 80 % – dann „sitzt“ der Stoff.</div>
                 <div class="readiness-facts">${overall.attempted} von ${overall.total} Karten geübt · ${countDueCards()} fällig</div>

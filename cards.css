@@ -778,10 +778,57 @@ body {
     color: var(--primary);
 }
 
-/* Utility buttons in the summary strip / progress header keep their natural
-   width instead of stretching to fill the row. */
-.menu-summary .btn,
-.progress-view-header .btn {
+/* Utility button in the summary strip keeps its natural width. */
+.menu-summary .btn {
+    flex: 0 0 auto;
+}
+
+/* ── Study options + start actions (deck picker) ─────────────────────────── */
+.study-options {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem 1.25rem;
+    margin-bottom: 0.6rem;
+}
+
+.study-option {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    font-size: 0.9rem;
+    color: var(--text-color);
+    cursor: pointer;
+}
+
+.study-option input {
+    width: 1rem;
+    height: 1rem;
+    accent-color: var(--primary);
+    cursor: pointer;
+}
+
+.start-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin-bottom: 0.5rem;
+}
+
+.start-actions #start-selected-decks {
+    flex: 1 1 auto;
+}
+
+.start-actions #read-mode-btn {
+    flex: 0 0 auto;
+}
+
+.select-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+}
+
+.select-actions .btn {
     flex: 0 0 auto;
 }
 
@@ -880,25 +927,6 @@ body {
     outline-offset: 2px;
 }
 
-/* ── Self-assessment toggle (header) ─────────────────────────────────────── */
-.calibration-toggle {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.3rem;
-    font-size: 0.85rem;
-    color: var(--text-muted);
-    cursor: pointer;
-    white-space: nowrap;
-}
-
-.calibration-toggle input {
-    width: 0.95rem;
-    height: 0.95rem;
-    /* Match the calm app accent instead of the loud OS default (often orange). */
-    accent-color: var(--primary);
-    cursor: pointer;
-}
-
 /* ── Menu summary strip (quick progress on the deck picker) ───────────────── */
 .menu-summary {
     display: flex;
@@ -950,32 +978,25 @@ body {
 }
 
 /* ── Dedicated progress page ─────────────────────────────────────────────── */
-.progress-view-header {
-    display: flex;
-    align-items: center;
-    gap: 0.75rem;
-    flex-wrap: wrap;
-    margin-bottom: 0.75rem;
-}
-
-.progress-view-header h3 {
-    margin: 0;
-}
-
-/* Hub tabs: Übersicht | Karten verwalten */
+/* Hub tabs: full-width segmented control (Übersicht | Karten verwalten). The
+   header ← exits the hub, so no in-view back button is needed. */
 .hub-tabs {
-    display: inline-flex;
+    display: flex;
     gap: 0.25rem;
-    padding: 0.2rem;
+    width: 100%;
+    padding: 0.25rem;
+    margin-bottom: 1rem;
     background: var(--surface-secondary);
-    border-radius: 8px;
+    border-radius: 10px;
+    box-sizing: border-box;
 }
 
 .hub-tab {
-    padding: 0.35rem 0.9rem;
-    min-height: 38px;
+    flex: 1;
+    padding: 0.5rem 0.9rem;
+    min-height: 44px;
     border: none;
-    border-radius: 6px;
+    border-radius: 7px;
     background: transparent;
     color: var(--text-muted);
     font-size: 0.95rem;
@@ -1522,29 +1543,6 @@ body {
    UX Enhancements
    ============================================================================ */
 
-/* Study Mode Select */
-.study-mode-select {
-    padding: 0.5rem 0.75rem;
-    border: 2px solid var(--input-border);
-    border-radius: 6px;
-    font-size: 1.05rem;
-    background-color: var(--input-bg);
-    color: var(--text-color);
-    cursor: pointer;
-    transition: border-color 0.3s;
-    min-width: 200px;
-}
-
-.study-mode-select:hover {
-    border-color: var(--primary);
-}
-
-.study-mode-select:focus {
-    outline: none;
-    border-color: var(--primary);
-    box-shadow: 0 0 0 3px rgba(52, 152, 219, 0.1);
-}
-
 /* Drop Zone */
 .drop-zone {
     margin-top: 0.75rem;
@@ -1766,18 +1764,6 @@ body {
         flex: 1 1 0;
         min-width: 0;
         text-align: left;
-    }
-
-    .study-mode-select {
-        order: 2;
-        flex: 1 0 100%;
-        width: 100%;
-        min-width: unset;
-    }
-
-    .calibration-toggle {
-        order: 3;
-        flex: 1 0 100%;
     }
 
     .header h1 {

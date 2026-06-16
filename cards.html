@@ -32,19 +32,6 @@
                         Importiere neue Lernkarten oder wähle ein gespeichertes Deck
                     </p>
                 </div>
-                <select id="study-mode" class="study-mode-select">
-                    <option value="spaced-repetition">Spaced Repetition</option>
-
-                    <option value="incorrect-only">Nur falsche wiederholen</option>
-                    <option value="read-through">Lesemodus</option>
-                </select>
-                <label
-                    class="calibration-toggle"
-                    title="Schätze vor dem Aufdecken ein, wie sicher du dir bist. Die App zeigt dir danach, wie gut deine Einschätzung mit dem Ergebnis übereinstimmt."
-                >
-                    <input type="checkbox" id="calibration-mode" />
-                    Selbsteinschätzung
-                </label>
             </div>
 
             <div id="file-input-container">
@@ -178,11 +165,38 @@
                         </button>
                     </div>
                     <div id="deck-selection-controls">
-                        <button id="start-selected-decks" class="btn btn-primary" disabled>
-                            Mit ausgewählten Decks starten
-                        </button>
-                        <button id="select-all-decks" class="btn">Alle auswählen</button>
-                        <button id="deselect-all-decks" class="btn">Alle abwählen</button>
+                        <div class="study-options">
+                            <label
+                                class="study-option"
+                                title="Schätze vor dem Aufdecken ein, wie sicher du dir bist. Die App zeigt dir danach, wie gut deine Einschätzung mit dem Ergebnis übereinstimmt."
+                            >
+                                <input type="checkbox" id="calibration-mode" />
+                                Selbsteinschätzung
+                            </label>
+                            <label
+                                class="study-option"
+                                title="Übe nur die Karten, die du zuletzt falsch beantwortet hast."
+                            >
+                                <input type="checkbox" id="incorrect-only-toggle" />
+                                Nur falsche wiederholen
+                            </label>
+                        </div>
+                        <div class="start-actions">
+                            <button id="start-selected-decks" class="btn btn-primary" disabled>
+                                Mit ausgewählten Decks lernen
+                            </button>
+                            <button id="read-mode-btn" class="btn btn-soft" disabled>
+                                📖 Lesemodus
+                            </button>
+                        </div>
+                        <div class="select-actions">
+                            <button id="select-all-decks" class="btn btn-soft btn-sm">
+                                Alle auswählen
+                            </button>
+                            <button id="deselect-all-decks" class="btn btn-soft btn-sm">
+                                Alle abwählen
+                            </button>
+                        </div>
                     </div>
                     <div id="saved-decks">
                         <!-- Saved decks will be dynamically inserted here -->
@@ -190,32 +204,18 @@
                 </div>
 
                 <div id="progress-view" class="hidden">
-                    <div class="progress-view-header">
-                        <button class="btn btn-soft btn-sm" id="close-progress">
-                            ← Zurück zu Decks
-                        </button>
-                        <div
-                            class="hub-tabs"
-                            role="tablist"
-                            aria-label="Fortschritt und Verwaltung"
+                    <div class="hub-tabs" role="tablist" aria-label="Fortschritt und Verwaltung">
+                        <button
+                            class="hub-tab active"
+                            data-tab="overview"
+                            role="tab"
+                            aria-selected="true"
                         >
-                            <button
-                                class="hub-tab active"
-                                data-tab="overview"
-                                role="tab"
-                                aria-selected="true"
-                            >
-                                Übersicht
-                            </button>
-                            <button
-                                class="hub-tab"
-                                data-tab="manage"
-                                role="tab"
-                                aria-selected="false"
-                            >
-                                Karten verwalten
-                            </button>
-                        </div>
+                            Übersicht
+                        </button>
+                        <button class="hub-tab" data-tab="manage" role="tab" aria-selected="false">
+                            Karten verwalten
+                        </button>
                     </div>
 
                     <div id="hub-overview" class="hub-panel">
