@@ -876,6 +876,453 @@ body {
     cursor: pointer;
 }
 
+/* ── Menu summary strip (quick progress on the deck picker) ───────────────── */
+.menu-summary {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+    margin-bottom: 0.75rem;
+    padding: 0.5rem 0.75rem;
+    background: var(--surface-color);
+    border: 1px solid var(--input-border);
+    border-radius: 8px;
+    box-shadow: 0 1px 2px var(--shadow-color);
+}
+
+.menu-summary-stats {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.3rem 1rem;
+    font-size: 0.9rem;
+    color: var(--text-muted);
+}
+
+.menu-stat strong {
+    color: var(--primary);
+    font-size: 1.05rem;
+}
+
+/* ── Per-deck trend sparkline (in the Lernstand badge) ───────────────────── */
+.deck-sparkline {
+    display: inline-flex;
+    width: 48px;
+    height: 16px;
+    margin-left: 0.4rem;
+    vertical-align: middle;
+}
+
+.deck-sparkline svg {
+    width: 100%;
+    height: 100%;
+}
+
+.deck-sparkline path {
+    fill: none;
+    stroke: var(--primary);
+    stroke-width: 1.5;
+    stroke-linejoin: round;
+    stroke-linecap: round;
+}
+
+/* ── Dedicated progress page ─────────────────────────────────────────────── */
+.progress-view-header {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin-bottom: 0.75rem;
+}
+
+.progress-view-header h3 {
+    margin: 0;
+}
+
+.progress-section {
+    margin-bottom: 1rem;
+    padding: 0.75rem 0.9rem;
+    background: var(--surface-color);
+    border: 1px solid var(--input-border);
+    border-radius: 8px;
+    box-shadow: 0 1px 2px var(--shadow-color);
+}
+
+.progress-section h4 {
+    margin: 0 0 0.6rem;
+    font-size: 1rem;
+    color: var(--text-color);
+}
+
+.progress-empty {
+    margin: 0;
+    color: var(--text-muted);
+    font-size: 0.9rem;
+}
+
+.progress-readiness {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    flex-wrap: wrap;
+}
+
+.progress-ring {
+    flex: 0 0 auto;
+    text-align: center;
+}
+
+.progress-ring svg {
+    width: 100px;
+    height: 100px;
+}
+
+.ring-track {
+    fill: none;
+    stroke: var(--input-border);
+    stroke-width: 10;
+}
+
+.ring-value {
+    fill: none;
+    stroke-width: 10;
+    stroke-linecap: round;
+    transition: stroke-dashoffset 0.5s ease;
+}
+
+.ring-text {
+    font-size: 26px;
+    font-weight: 700;
+    text-anchor: middle;
+    dominant-baseline: central;
+    fill: var(--text-color);
+}
+
+.progress-ring-high .ring-value {
+    stroke: var(--success);
+}
+
+.progress-ring-mid .ring-value {
+    stroke: var(--warning);
+}
+
+.progress-ring-low .ring-value {
+    stroke: var(--danger);
+}
+
+.progress-ring-caption {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+}
+
+.readiness-side {
+    flex: 1 1 12rem;
+    min-width: 0;
+    font-size: 0.9rem;
+}
+
+.readiness-goal {
+    font-weight: 600;
+}
+
+.readiness-facts {
+    color: var(--text-muted);
+    margin: 0.2rem 0 0.5rem;
+}
+
+.progress-trend {
+    width: 100%;
+    height: 90px;
+}
+
+.trend-area {
+    fill: rgba(74, 111, 165, 0.12);
+    stroke: none;
+}
+
+.trend-line {
+    fill: none;
+    stroke: var(--primary);
+    stroke-width: 2;
+    stroke-linejoin: round;
+    stroke-linecap: round;
+}
+
+.trend-dot {
+    fill: var(--primary);
+}
+
+.progress-trend-labels {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.75rem;
+    color: var(--text-muted);
+}
+
+.reliability-row {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-bottom: 0.35rem;
+}
+
+.reliability-label {
+    flex: 0 0 4.5rem;
+    font-size: 0.85rem;
+}
+
+.reliability-bar {
+    flex: 1;
+    height: 10px;
+    background: var(--input-border);
+    border-radius: 5px;
+    overflow: hidden;
+}
+
+.reliability-fill {
+    display: block;
+    height: 100%;
+}
+
+.reliability-high {
+    background: var(--success);
+}
+
+.reliability-mid {
+    background: var(--warning);
+}
+
+.reliability-low {
+    background: var(--danger);
+}
+
+.reliability-val {
+    flex: 0 0 auto;
+    font-size: 0.8rem;
+    color: var(--text-muted);
+}
+
+.reliability-summary {
+    margin-top: 0.4rem;
+    font-size: 0.9rem;
+}
+
+.coverage-bar {
+    display: flex;
+    height: 16px;
+    border-radius: 8px;
+    overflow: hidden;
+    background: var(--input-border);
+}
+
+.coverage-seg {
+    height: 100%;
+}
+
+.coverage-mastered {
+    background: var(--success);
+}
+
+.coverage-practiced {
+    background: var(--warning);
+}
+
+.coverage-untouched {
+    background: var(--input-border);
+}
+
+.coverage-legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.3rem 1rem;
+    margin-top: 0.4rem;
+    font-size: 0.8rem;
+    color: var(--text-muted);
+}
+
+.coverage-legend .lg::before {
+    content: '';
+    display: inline-block;
+    width: 9px;
+    height: 9px;
+    border-radius: 2px;
+    margin-right: 0.3rem;
+    vertical-align: middle;
+}
+
+.lg-mastered::before {
+    background: var(--success);
+}
+
+.lg-practiced::before {
+    background: var(--warning);
+}
+
+.lg-untouched::before {
+    background: var(--input-border);
+}
+
+.weakspot-row {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-bottom: 0.3rem;
+}
+
+.weakspot-name {
+    flex: 0 0 8rem;
+    font-size: 0.85rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.weakspot-bar {
+    flex: 1;
+    height: 10px;
+    background: var(--input-border);
+    border-radius: 5px;
+    overflow: hidden;
+}
+
+.weakspot-fill {
+    display: block;
+    height: 100%;
+}
+
+.weakspot-high {
+    background: var(--success);
+}
+
+.weakspot-mid {
+    background: var(--warning);
+}
+
+.weakspot-low {
+    background: var(--danger);
+}
+
+.weakspot-val {
+    flex: 0 0 2.5rem;
+    text-align: right;
+    font-size: 0.8rem;
+    color: var(--text-muted);
+}
+
+#study-weakest {
+    margin-top: 0.6rem;
+}
+
+.achv-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+}
+
+.achv {
+    display: inline-block;
+    padding: 0.25rem 0.6rem;
+    border-radius: 999px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--text-color);
+    border: 1px solid var(--input-border);
+}
+
+.achv-master {
+    border-color: var(--success);
+}
+
+.achv-cal {
+    border-color: var(--primary);
+}
+
+.achv-best {
+    border-color: var(--warning);
+}
+
+.session-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.2rem 0.75rem;
+    padding: 0.35rem 0;
+    border-bottom: 1px solid var(--input-border);
+    font-size: 0.85rem;
+}
+
+.session-row:last-child {
+    border-bottom: none;
+}
+
+.session-date {
+    color: var(--text-muted);
+    flex: 0 0 auto;
+}
+
+.session-decks {
+    flex: 1 1 8rem;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.session-meta {
+    color: var(--text-muted);
+    flex: 0 0 auto;
+}
+
+.exam-countdown {
+    font-weight: 600;
+    margin-bottom: 0.4rem;
+}
+
+.exam-input-row {
+    display: block;
+    font-size: 0.85rem;
+    color: var(--text-muted);
+}
+
+.exam-input-row input {
+    margin-left: 0.4rem;
+    padding: 0.2rem 0.4rem;
+    border: 1px solid var(--input-border);
+    border-radius: 4px;
+    background: var(--surface-color);
+    color: var(--text-color);
+}
+
+/* ── Completion-screen gamification line ─────────────────────────────────── */
+.feedback-gamification {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 0.4rem;
+    margin: 0.4rem 0 0.6rem;
+}
+
+.gam-badge {
+    display: inline-block;
+    padding: 0.25rem 0.6rem;
+    border-radius: 999px;
+    font-size: 0.9rem;
+    font-weight: 600;
+}
+
+.gam-up {
+    background: rgba(40, 167, 69, 0.12);
+    color: var(--success);
+}
+
+.gam-master {
+    background: rgba(74, 111, 165, 0.14);
+    color: var(--primary);
+}
+
+.gam-best {
+    background: rgba(255, 193, 7, 0.16);
+    color: var(--text-color);
+}
+
 .stats {
     display: flex;
     justify-content: space-around;

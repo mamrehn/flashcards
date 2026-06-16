@@ -120,6 +120,9 @@
                 </div>
 
                 <div id="saved-decks-container">
+                    <div id="menu-summary" class="menu-summary hidden">
+                        <!-- Quick progress summary rendered dynamically -->
+                    </div>
                     <div class="saved-decks-header">
                         <h3>Gespeicherte Decks</h3>
                         <button
@@ -220,6 +223,18 @@
 
                     <div id="sr-buckets-display">
                         <!-- Buckets will be dynamically inserted here -->
+                    </div>
+                </div>
+
+                <div id="progress-view" class="hidden">
+                    <div class="progress-view-header">
+                        <button class="btn btn-secondary btn-sm" id="close-progress">
+                            ← Zurück zu Decks
+                        </button>
+                        <h3>Dein Fortschritt</h3>
+                    </div>
+                    <div id="progress-content">
+                        <!-- Progress dashboard rendered dynamically -->
                     </div>
                 </div>
             </div>

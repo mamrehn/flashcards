@@ -157,6 +157,22 @@ let currentConfidence = null;
 /** @type {Array<{confidence: number, score: number}>} Confidence vs. outcome for the current session */
 let sessionCalibration = [];
 
+// ── Progress / meta-assessment journals (the "Lernreise") ──────────────────
+/** @type {Array<{date:string, overallPercent:number, attempted:number, total:number, masteredCount:number, calibration:number|null, perDeck:object}>} Daily Lernstand snapshots */
+let lernstandHistory = [];
+
+/** @type {Array<{endedAt:string, deckNames:string[], cardsAnswered:number, correct:number, avgScore:number, avgConfidence:number|null}>} Completed-session log */
+let sessionHistory = [];
+
+/** @type {{deckMastered: object, bestSessionScore: number}} Earned milestones */
+let achievements = { deckMastered: {}, bestSessionScore: 0 };
+
+/** @type {string|null} Optional exam date (YYYY-MM-DD) for the readiness countdown */
+let examDate = null;
+
+/** @type {number} Overall Lernstand of the active decks when the current session started */
+let sessionStartLernstand = 0;
+
 // ============================================================================
 // DOM Elements Cache
 // ============================================================================
@@ -213,6 +229,7 @@ let selectAllBucketsBtn;
 let deselectAllBucketsBtn;
 let cleanupOrphansBtn;
 let bookView;
+let progressView;
 let bookViewCards;
 let bookViewTitle;
 let undoBtn;
@@ -291,6 +308,7 @@ function initializeApp() {
     deselectAllBucketsBtn = document.querySelector('#deselect-all-buckets');
     cleanupOrphansBtn = document.querySelector('#cleanup-orphans-btn');
     bookView = document.querySelector('#book-view');
+    progressView = document.querySelector('#progress-view');
     bookViewCards = document.querySelector('#book-view-cards');
     bookViewTitle = document.querySelector('#book-view-title');
     undoBtn = document.querySelector('#undo-btn');
@@ -342,6 +360,7 @@ function initializeApp() {
         .addEventListener('click', throttle(exportToAnki, 300));
     undoBtn.addEventListener('click', throttle(undoLastAnswer, 300));
     exportBackupBtn.addEventListener('click', throttle(exportBackup, 500));
+    document.querySelector('#close-progress').addEventListener('click', closeProgressView);
 
     // Self-assessment toggle (persisted, on by default) + confidence capture
     const storedCalibration = localStorage.getItem('calibrationMode');
@@ -350,7 +369,9 @@ function initializeApp() {
     calibrationModeCheckbox.addEventListener('change', () => {
         calibrationMode = calibrationModeCheckbox.checked;
         persistToStorage('calibrationMode', calibrationMode ? '1' : '0');
-        confidencePrompt.classList.toggle('hidden', !calibrationMode || isAnswered);
+        const card = cards[currentCardIndex];
+        const ask = calibrationMode && !isAnswered && card && !isCardMastered(card);
+        confidencePrompt.classList.toggle('hidden', !ask);
     });
     confidencePrompt.addEventListener('click', (e) => {
         const btn = e.target.closest('.confidence-btn');
@@ -405,10 +426,13 @@ function initializeApp() {
     // Hide the next button initially
     nextCardBtn.style.display = 'none';
 
-    // Load saved decks from localStorage
+    // Load saved decks + study data first, then render (so knowledge badges and
+    // the menu summary have their data on the very first paint).
     loadSavedDecks();
-    displaySavedDecks();
     loadSpacedRepetitionData();
+    loadProgressData();
+    recordLernstandSnapshot();
+    displaySavedDecks();
 
     // Set up service worker update listener
     setupServiceWorkerUpdates();
@@ -705,7 +729,8 @@ function setupBackLink() {
         const inSession =
             !appContent.classList.contains('hidden') ||
             inBookView ||
-            (srManagerContainer && !srManagerContainer.classList.contains('hidden'));
+            (srManagerContainer && !srManagerContainer.classList.contains('hidden')) ||
+            (progressView && !progressView.classList.contains('hidden'));
         backLink.href = inSession ? 'cards.html' : 'index.html';
         backLink.title = inSession ? 'Zur Deck-Auswahl' : 'Zur Startseite';
     };
@@ -715,6 +740,9 @@ function setupBackLink() {
     observer.observe(bookView, { attributes: true, attributeFilter: ['class'] });
     if (srManagerContainer) {
         observer.observe(srManagerContainer, { attributes: true, attributeFilter: ['class'] });
+    }
+    if (progressView) {
+        observer.observe(progressView, { attributes: true, attributeFilter: ['class'] });
     }
     update();
 }
@@ -1126,6 +1154,27 @@ async function handleBackupImport(backup) {
                 JSON.stringify(previousIncorrectIndices)
             );
         }
+
+        // Restore the progress journey (optional — older backups won't have it)
+        if (backup.lernstandHistory) {
+            lernstandHistory = backup.lernstandHistory;
+            localStorage.setItem('lernstandHistory', JSON.stringify(lernstandHistory));
+        }
+        if (backup.sessionHistory) {
+            sessionHistory = backup.sessionHistory;
+        }
+        if (backup.achievements) {
+            achievements = backup.achievements;
+            if (!achievements.deckMastered) achievements.deckMastered = {};
+            if (typeof achievements.bestSessionScore !== 'number') {
+                achievements.bestSessionScore = 0;
+            }
+        }
+        saveProgressData();
+        if (backup.examDate) {
+            examDate = backup.examDate;
+            localStorage.setItem('examDate', examDate);
+        }
     } catch (error) {
         console.error('Error restoring backup (storage quota exceeded?):', error);
         showError('Speicher voll! Backup konnte nicht vollständig importiert werden.');
@@ -1397,6 +1446,7 @@ function makeTypeChip(type, count, topicKey, catName) {
  * @param {string[]} preselectDeckNames - Deck names whose containing topic should start checked.
  */
 function displaySavedDecks(searchTerm = '', preselectDeckNames = []) {
+    renderMenuSummary();
     const savedDecksDiv = document.querySelector('#saved-decks');
     savedDecksDiv.innerHTML = '';
 
@@ -1928,6 +1978,9 @@ function initializeQuiz(loadedCards) {
     undoStack = [];
     undoBtn.disabled = true;
     sessionCalibration = [];
+
+    // Remember the starting Lernstand so the completion screen can show the gain
+    sessionStartLernstand = computeDeckKnowledge(activeDecks.filter((d) => savedDecks[d])).percent;
 
     // Show the app content
     document.querySelector('#file-input-container').style.display = 'none';
@@ -3043,9 +3096,11 @@ function updateCardContent(card) {
     recallRating.classList.add('hidden');
     nextCardBtn.style.display = 'none';
 
-    // Pre-answer confidence prompt: shown on the front only in calibration mode
+    // Pre-answer confidence prompt: shown on the front only in self-assessment
+    // mode, and skipped for already-mastered cards (adaptive — no point asking
+    // about cards the student reliably knows).
     currentConfidence = null;
-    confidencePrompt.classList.toggle('hidden', !calibrationMode);
+    confidencePrompt.classList.toggle('hidden', !calibrationMode || isCardMastered(card));
     for (const b of confidencePrompt.querySelectorAll('.confidence-btn')) {
         b.classList.remove('selected');
         b.setAttribute('aria-pressed', 'false');
@@ -3682,6 +3737,11 @@ function showFeedback() {
         calibrationLine.classList.add('hidden');
     }
 
+    // Record the journey (session log + daily snapshot) and the gamification line
+    recordSession();
+    recordLernstandSnapshot();
+    renderFeedbackGamification(knowledge);
+
     // Show/hide buttons based on whether we're in SR bucket mode
     const isFromSRBuckets = activeDecks.length === 1 && activeDecks[0] === 'SR Buckets';
     if (isFromSRBuckets) {
@@ -4094,6 +4154,11 @@ function buildKnowledgeBadge(deckNames) {
     text.textContent = `${knowledge.percent} %`;
 
     badge.append(bar, text);
+
+    // Tiny trend sparkline if this topic has enough snapshot history
+    const spark = buildSparkline(deckTrendSeries(deckNames));
+    if (spark) badge.append(spark);
+
     return badge;
 }
 
@@ -4326,6 +4391,11 @@ function exportBackup() {
         flashcardDecks: savedDecks,
         spacedRepetitionData: spacedRepetitionData,
         flashcardIncorrectIndices: previousIncorrectIndices,
+        // Progress journey so it survives a backup/restore
+        lernstandHistory: lernstandHistory,
+        sessionHistory: sessionHistory,
+        achievements: achievements,
+        examDate: examDate,
     };
 
     const blob = new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' });
@@ -4939,21 +5009,9 @@ function renderSRDashboard() {
     }
     const avgScore = totalAttempts > 0 ? Math.round((totalScore / totalAttempts) * 100) : 0;
 
-    // Calibration: mean agreement between self-rated confidence and outcome,
-    // over every answer where a confidence was captured. 100% = perfectly
-    // calibrated (1 − mean absolute error of normalized confidence vs. score).
-    let calPairs = 0;
-    let calErrSum = 0;
-    for (const data of srEntries) {
-        if (!data.confHistory || !data.history) continue;
-        for (const [i, c] of data.confHistory.entries()) {
-            if (c === null || c === undefined) continue;
-            const normConf = (c - 1) / 2; // 1..3 → 0..1
-            calErrSum += Math.abs(normConf - (data.history[i] ?? 0));
-            calPairs++;
-        }
-    }
-    const calibration = calPairs > 0 ? Math.round((1 - calErrSum / calPairs) * 100) : null;
+    // Calibration: agreement between self-rated confidence and outcome
+    // (shared with the progress page so the two never diverge).
+    const { percent: calibration, pairs: calPairs } = computeCalibration();
 
     // Ladder distribution for bar chart (steps grouped into 5 stages)
     const bucketColors = ['#e74c3c', '#e67e22', '#f1c40f', '#2ecc71', '#27ae60'];
@@ -5439,4 +5497,578 @@ function formatDate(date) {
     const diffDays = Math.round(diffHours / 24);
     if (diffDays === 1) return 'Morgen';
     return `in ${diffDays} Tagen`;
+}
+
+// ============================================================================
+// Progress & Meta-Assessment (the "Lernreise")
+// ============================================================================
+
+/**
+ * Read a JSON value from localStorage, falling back on parse/IO errors.
+ * @param {string} key
+ * @param {*} fallback
+ */
+function readJsonStorage(key, fallback) {
+    try {
+        const raw = localStorage.getItem(key);
+        return raw ? JSON.parse(raw) : fallback;
+    } catch {
+        return fallback;
+    }
+}
+
+/** Load the progress journals (trend snapshots, session log, achievements, exam date). */
+function loadProgressData() {
+    lernstandHistory = readJsonStorage('lernstandHistory', []);
+    sessionHistory = readJsonStorage('sessionHistory', []);
+    achievements = readJsonStorage('achievements', { deckMastered: {}, bestSessionScore: 0 });
+    if (!achievements.deckMastered) achievements.deckMastered = {};
+    if (typeof achievements.bestSessionScore !== 'number') achievements.bestSessionScore = 0;
+    examDate = localStorage.getItem('examDate') || null;
+}
+
+/** Persist the session log + achievements (snapshots are saved as they are recorded). */
+function saveProgressData() {
+    persistToStorage('sessionHistory', JSON.stringify(sessionHistory));
+    persistToStorage('achievements', JSON.stringify(achievements));
+}
+
+/**
+ * A card counts as "mastered" once its recency-weighted knowledge is high.
+ * @param {object} card
+ */
+function isCardMastered(card) {
+    const data = spacedRepetitionData[getCardKey(card)];
+    return !!data?.history?.length && cardKnowledge(data) >= 0.8;
+}
+
+/**
+ * Coverage/mastery tally across the given decks.
+ * @param {string[]} deckNames
+ * @returns {{mastered:number, attempted:number, total:number}}
+ */
+function countMastered(deckNames) {
+    let mastered = 0;
+    let attempted = 0;
+    let total = 0;
+    for (const deckName of deckNames) {
+        const deck = savedDecks[deckName];
+        if (!deck?.cards) continue;
+        for (const c of deck.cards) {
+            total++;
+            const data = spacedRepetitionData[`${deckName}|||${c.question}`];
+            if (data?.history?.length) {
+                attempted++;
+                if (cardKnowledge(data) >= 0.8) mastered++;
+            }
+        }
+    }
+    return { mastered, attempted, total };
+}
+
+/**
+ * Calibration across all confidence-rated answers: an overall agreement score
+ * (1 − mean abs error of normalized confidence vs. outcome) plus a per-level
+ * accuracy breakdown for the reliability chart.
+ * @returns {{percent:number|null, pairs:number, byLevel:Array<{level:number,count:number,accuracy:number|null}>}}
+ */
+function computeCalibration() {
+    const byLevel = [
+        { level: 1, sum: 0, n: 0 },
+        { level: 2, sum: 0, n: 0 },
+        { level: 3, sum: 0, n: 0 },
+    ];
+    let pairs = 0;
+    let errSum = 0;
+    for (const data of Object.values(spacedRepetitionData)) {
+        if (!data.confHistory || !data.history) continue;
+        for (const [i, c] of data.confHistory.entries()) {
+            if (c === null || c === undefined) continue;
+            const score = data.history[i] ?? 0;
+            const bucket = byLevel[c - 1];
+            if (bucket) {
+                bucket.sum += score;
+                bucket.n++;
+            }
+            errSum += Math.abs((c - 1) / 2 - score);
+            pairs++;
+        }
+    }
+    return {
+        percent: pairs > 0 ? Math.round((1 - errSum / pairs) * 100) : null,
+        pairs,
+        byLevel: byLevel.map((l) => ({
+            level: l.level,
+            count: l.n,
+            accuracy: l.n > 0 ? Math.round((l.sum / l.n) * 100) : null,
+        })),
+    };
+}
+
+/** Count of cards whose next review is due now. */
+function countDueCards() {
+    const now = new Date();
+    return Object.values(spacedRepetitionData).filter((d) => new Date(d.nextReview) <= now).length;
+}
+
+/**
+ * Append (or overwrite for today) a snapshot of overall Lernstand so the journey
+ * curve can be drawn later. No-op until at least one card has been studied.
+ */
+function recordLernstandSnapshot() {
+    const allDecks = Object.keys(savedDecks);
+    if (allDecks.length === 0) return;
+    const knowledge = computeDeckKnowledge(allDecks);
+    if (knowledge.attempted === 0) return;
+
+    const { mastered } = countMastered(allDecks);
+    const cal = computeCalibration();
+    const perDeck = {};
+    for (const d of allDecks) {
+        const k = computeDeckKnowledge([d]);
+        if (k.attempted > 0) perDeck[d] = k.percent;
+    }
+    const today = new Date().toISOString().slice(0, 10);
+    const entry = {
+        date: today,
+        overallPercent: knowledge.percent,
+        attempted: knowledge.attempted,
+        total: knowledge.total,
+        masteredCount: mastered,
+        calibration: cal.percent,
+        perDeck,
+    };
+    const last = lernstandHistory.at(-1);
+    if (last && last.date === today) lernstandHistory[lernstandHistory.length - 1] = entry;
+    else lernstandHistory.push(entry);
+    if (lernstandHistory.length > 90) lernstandHistory = lernstandHistory.slice(-90);
+    persistToStorage('lernstandHistory', JSON.stringify(lernstandHistory));
+}
+
+/** Append a record of the session that just finished. */
+function recordSession() {
+    const cardsAnswered = answeredCards.filter((a) => a !== null).length;
+    if (cardsAnswered === 0) return;
+    const realDecks = activeDecks.filter((d) => savedDecks[d]);
+    const totalAnswered = correctCount + incorrectCount;
+    const avgConfidence =
+        sessionCalibration.length > 0
+            ? sessionCalibration.reduce((a, e) => a + e.confidence, 0) / sessionCalibration.length
+            : null;
+    sessionHistory.push({
+        endedAt: new Date().toISOString(),
+        deckNames: realDecks.length > 0 ? realDecks : activeDecks,
+        cardsAnswered,
+        correct: Math.round(correctCount * 10) / 10,
+        avgScore: totalAnswered > 0 ? Math.round((correctCount / totalAnswered) * 100) : 0,
+        avgConfidence,
+    });
+    if (sessionHistory.length > 50) sessionHistory = sessionHistory.slice(-50);
+    persistToStorage('sessionHistory', JSON.stringify(sessionHistory));
+}
+
+/**
+ * Record any newly-crossed mastery milestones (deck Lernstand ≥ 80 %).
+ * @returns {string[]} human-readable labels for milestones earned just now
+ */
+function checkAchievements() {
+    const earned = [];
+    for (const d of activeDecks.filter((x) => savedDecks[x])) {
+        const k = computeDeckKnowledge([d]);
+        if (k.total > 0 && k.percent >= 80 && !achievements.deckMastered[d]) {
+            achievements.deckMastered[d] = new Date().toISOString();
+            earned.push(`Deck gemeistert: ${d}`);
+        }
+    }
+    if (earned.length > 0) saveProgressData();
+    return earned;
+}
+
+/**
+ * Render the gamification line on the completion screen: Lernstand gain, new
+ * mastery milestones, and personal-best — all framed as progress, not streaks.
+ * @param {{percent:number, total:number}} knowledge
+ */
+function renderFeedbackGamification(knowledge) {
+    let el = document.querySelector('#feedback-gamification');
+    if (!el) {
+        el = document.createElement('div');
+        el.id = 'feedback-gamification';
+        el.className = 'feedback-gamification';
+        (document.querySelector('#feedback-calibration') ?? finalScoreElement.parentElement).after(
+            el
+        );
+    }
+
+    const parts = [];
+    if (knowledge.total > 0) {
+        const delta = knowledge.percent - sessionStartLernstand;
+        if (delta > 0) {
+            parts.push(
+                `<span class="gam-badge gam-up">+${delta} % Lernstand in dieser Sitzung</span>`
+            );
+        }
+    }
+
+    const earned = checkAchievements();
+    for (const m of earned)
+        parts.push(`<span class="gam-badge gam-master">${sanitizeHTML(m)}</span>`);
+
+    const totalAnswered = correctCount + incorrectCount;
+    const pct = totalAnswered > 0 ? Math.round((correctCount / totalAnswered) * 100) : 0;
+    if (pct > achievements.bestSessionScore) {
+        achievements.bestSessionScore = pct;
+        saveProgressData();
+        parts.push(`<span class="gam-badge gam-best">Neue Bestleistung: ${pct} %</span>`);
+    }
+
+    if (parts.length > 0) {
+        el.innerHTML = parts.join('');
+        el.classList.remove('hidden');
+        if (earned.length > 0) triggerConfetti();
+    } else {
+        el.classList.add('hidden');
+        el.innerHTML = '';
+    }
+}
+
+/**
+ * Compact summary strip shown above the deck list on the menu: overall
+ * Lernstand, due count, mastered ratio, calibration, plus a link to the
+ * dedicated progress page.
+ */
+function renderMenuSummary() {
+    const el = document.querySelector('#menu-summary');
+    if (!el) return;
+    const allDecks = Object.keys(savedDecks);
+    const overall = computeDeckKnowledge(allDecks);
+    if (allDecks.length === 0 || overall.attempted === 0) {
+        el.classList.add('hidden');
+        el.innerHTML = '';
+        return;
+    }
+    const { mastered, total } = countMastered(allDecks);
+    const cal = computeCalibration();
+    const calStr = cal.percent === null ? '–' : `${cal.percent} %`;
+    el.innerHTML = `
+        <div class="menu-summary-stats">
+            <span class="menu-stat"><strong>${overall.percent} %</strong> Lernstand</span>
+            <span class="menu-stat"><strong>${countDueCards()}</strong> fällig</span>
+            <span class="menu-stat"><strong>${mastered}/${total}</strong> gemeistert</span>
+            <span class="menu-stat"><strong>${calStr}</strong> Treffsicherheit</span>
+        </div>
+        <button class="btn btn-secondary btn-sm" id="open-progress">Fortschritt ansehen →</button>
+    `;
+    el.classList.remove('hidden');
+    const btn = el.querySelector('#open-progress');
+    if (btn) btn.addEventListener('click', openProgressView);
+}
+
+/** Open the dedicated progress page (mirrors the SR-manager show/hide pattern). */
+function openProgressView() {
+    const savedDecksContainer = document.querySelector('#saved-decks-container');
+    const uploadSection = document.querySelector('.upload-section');
+    const subtitle = document.querySelector('#app-subtitle');
+    progressView.classList.remove('hidden');
+    savedDecksContainer.classList.add('hidden');
+    if (srManagerContainer) srManagerContainer.classList.add('hidden');
+    if (uploadSection) uploadSection.classList.add('hidden');
+    if (subtitle) subtitle.classList.add('hidden');
+    studyModeSelect.style.display = 'none';
+    openSrManagerBtn.style.display = 'none';
+    calibrationToggle.style.display = 'none';
+    renderProgressView();
+}
+
+/** Close the progress page and return to the deck-picker menu. */
+function closeProgressView() {
+    const savedDecksContainer = document.querySelector('#saved-decks-container');
+    const uploadSection = document.querySelector('.upload-section');
+    const subtitle = document.querySelector('#app-subtitle');
+    progressView.classList.add('hidden');
+    savedDecksContainer.classList.remove('hidden');
+    if (uploadSection) uploadSection.classList.remove('hidden');
+    if (subtitle) subtitle.classList.remove('hidden');
+    studyModeSelect.style.display = 'inline-block';
+    openSrManagerBtn.style.display = studyMode === 'spaced-repetition' ? 'inline-block' : 'none';
+    calibrationToggle.style.display = 'inline-flex';
+    displaySavedDecks(deckSearchInput.value);
+}
+
+/** Build the whole progress page into #progress-content and wire its controls. */
+function renderProgressView() {
+    const allDecks = Object.keys(savedDecks);
+    const overall = computeDeckKnowledge(allDecks);
+    const cal = computeCalibration();
+    const content = document.querySelector('#progress-content');
+    content.innerHTML = `
+        <section class="progress-section progress-readiness">
+            ${progressRing(overall.percent, 'Bereitschaft')}
+            <div class="readiness-side">
+                <div class="readiness-goal">Ziel: Lernstand 80 % – dann „sitzt“ der Stoff.</div>
+                <div class="readiness-facts">${overall.attempted} von ${overall.total} Karten geübt · ${countDueCards()} fällig</div>
+                ${progressExam(allDecks)}
+            </div>
+        </section>
+        <section class="progress-section"><h4>Lernstand-Verlauf</h4>${progressTrend(lernstandHistory)}</section>
+        <section class="progress-section"><h4>Selbsteinschätzung</h4>${progressReliability(cal)}</section>
+        <section class="progress-section"><h4>Abdeckung &amp; Beherrschung</h4>${progressCoverage(allDecks)}</section>
+        <section class="progress-section"><h4>Schwachstellen</h4>${progressWeakSpots(allDecks)}</section>
+        <section class="progress-section"><h4>Erfolge</h4>${progressAchievements(cal)}</section>
+        <section class="progress-section"><h4>Sitzungen</h4>${progressSessions()}</section>
+    `;
+
+    const examInput = content.querySelector('#exam-date-input');
+    if (examInput) {
+        examInput.addEventListener('change', () => {
+            examDate = examInput.value || null;
+            if (examDate) persistToStorage('examDate', examDate);
+            else localStorage.removeItem('examDate');
+            renderProgressView();
+        });
+    }
+    const studyWeakest = content.querySelector('#study-weakest');
+    if (studyWeakest) {
+        studyWeakest.addEventListener('click', () => {
+            startDecksByNames(JSON.parse(decodeURIComponent(studyWeakest.dataset.decks)));
+        });
+    }
+}
+
+/** A traffic-light level class from a 0–100 percentage. */
+function levelClass(percent) {
+    return percent >= 80 ? 'high' : percent >= 50 ? 'mid' : 'low';
+}
+
+/** Readiness ring (SVG donut + centered percentage). */
+function progressRing(percent, caption) {
+    const r = 46;
+    const circ = 2 * Math.PI * r;
+    const off = circ * (1 - Math.max(0, Math.min(100, percent)) / 100);
+    return `
+        <div class="progress-ring progress-ring-${levelClass(percent)}">
+            <svg viewBox="0 0 120 120" role="img" aria-label="${caption}: ${percent} Prozent">
+                <circle class="ring-track" cx="60" cy="60" r="${r}"></circle>
+                <circle class="ring-value" cx="60" cy="60" r="${r}"
+                    stroke-dasharray="${circ.toFixed(1)}" stroke-dashoffset="${off.toFixed(1)}"
+                    transform="rotate(-90 60 60)"></circle>
+                <text x="60" y="60" class="ring-text">${percent}%</text>
+            </svg>
+            <div class="progress-ring-caption">${caption}</div>
+        </div>`;
+}
+
+/** Lernstand-over-time line chart from the daily snapshots. */
+function progressTrend(points) {
+    if (points.length < 2) {
+        return '<p class="progress-empty">Noch nicht genug Verlaufsdaten – lerne weiter, dann wächst hier deine Kurve.</p>';
+    }
+    const w = 320;
+    const h = 90;
+    const pad = 6;
+    const n = points.length;
+    const x = (i) => pad + (i * (w - 2 * pad)) / (n - 1);
+    const y = (v) => h - pad - (v / 100) * (h - 2 * pad);
+    const line = points
+        .map((p, i) => `${i === 0 ? 'M' : 'L'}${x(i).toFixed(1)},${y(p.overallPercent).toFixed(1)}`)
+        .join(' ');
+    const area = `${line} L${x(n - 1).toFixed(1)},${(h - pad).toFixed(1)} L${x(0).toFixed(1)},${(h - pad).toFixed(1)} Z`;
+    const last = points.at(-1);
+    return `
+        <svg class="progress-trend" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" role="img" aria-label="Lernstand-Verlauf">
+            <path class="trend-area" d="${area}"></path>
+            <path class="trend-line" d="${line}" vector-effect="non-scaling-stroke"></path>
+            <circle class="trend-dot" cx="${x(n - 1).toFixed(1)}" cy="${y(last.overallPercent).toFixed(1)}" r="3"></circle>
+        </svg>
+        <div class="progress-trend-labels"><span>${points[0].date.slice(5)}</span><span>heute · ${last.overallPercent} %</span></div>`;
+}
+
+/** Confidence-vs-accuracy reliability chart (per confidence level). */
+function progressReliability(cal) {
+    if (cal.pairs === 0) {
+        return '<p class="progress-empty">Aktiviere „Selbsteinschätzung“ und schätze vor dem Aufdecken ein – dann erscheint hier, wie gut du dich selbst kennst.</p>';
+    }
+    const labels = { 1: 'Unsicher', 2: 'Mittel', 3: 'Sicher' };
+    const rows = cal.byLevel
+        .filter((l) => l.count > 0)
+        .map((l) => {
+            const acc = l.accuracy ?? 0;
+            return `<div class="reliability-row">
+                <span class="reliability-label">${labels[l.level]}</span>
+                <span class="reliability-bar"><span class="reliability-fill reliability-${levelClass(acc)}" style="width:${acc}%"></span></span>
+                <span class="reliability-val">${acc} % richtig <small>(${l.count})</small></span>
+            </div>`;
+        })
+        .join('');
+    const verdict =
+        cal.percent >= 80 ? 'gut kalibriert' : cal.percent >= 60 ? 'ordentlich' : 'noch wacklig';
+    return `<div class="reliability-chart">${rows}</div>
+        <div class="reliability-summary">Treffsicherheit insgesamt: <strong>${cal.percent} %</strong> · ${verdict}</div>`;
+}
+
+/** Coverage vs. mastery stacked bar across all cards. */
+function progressCoverage(allDecks) {
+    const { mastered, attempted, total } = countMastered(allDecks);
+    if (total === 0) return '<p class="progress-empty">Noch keine Karten vorhanden.</p>';
+    const m = (mastered / total) * 100;
+    const p = ((attempted - mastered) / total) * 100;
+    const u = 100 - m - p;
+    return `
+        <div class="coverage-bar">
+            ${m > 0 ? `<span class="coverage-seg coverage-mastered" style="width:${m}%"></span>` : ''}
+            ${p > 0 ? `<span class="coverage-seg coverage-practiced" style="width:${p}%"></span>` : ''}
+            ${u > 0 ? `<span class="coverage-seg coverage-untouched" style="width:${u}%"></span>` : ''}
+        </div>
+        <div class="coverage-legend">
+            <span class="lg lg-mastered">Gemeistert ${mastered}</span>
+            <span class="lg lg-practiced">Geübt ${attempted - mastered}</span>
+            <span class="lg lg-untouched">Ungeübt ${total - attempted}</span>
+        </div>`;
+}
+
+/** Weakest decks first, with a one-tap drill-in for the lowest three. */
+function progressWeakSpots(allDecks) {
+    const arr = allDecks
+        .map((d) => ({ d, k: computeDeckKnowledge([d]) }))
+        .filter((x) => x.k.attempted > 0)
+        .sort((a, b) => a.k.percent - b.k.percent)
+        .slice(0, 8);
+    if (arr.length === 0) return '<p class="progress-empty">Noch keine geübten Karten.</p>';
+    const rows = arr
+        .map(
+            (x) => `<div class="weakspot-row">
+            <span class="weakspot-name">${sanitizeHTML(x.d)}</span>
+            <span class="weakspot-bar"><span class="weakspot-fill weakspot-${levelClass(x.k.percent)}" style="width:${x.k.percent}%"></span></span>
+            <span class="weakspot-val">${x.k.percent} %</span>
+        </div>`
+        )
+        .join('');
+    const weakest = arr
+        .filter((x) => x.k.percent < 80)
+        .slice(0, 3)
+        .map((x) => x.d);
+    const btn =
+        weakest.length > 0
+            ? `<button class="btn btn-primary" id="study-weakest" data-decks="${encodeURIComponent(JSON.stringify(weakest))}">Schwächste ${weakest.length} üben</button>`
+            : '';
+    return `<div class="weakspot-list">${rows}</div>${btn}`;
+}
+
+/** Earned milestones as calm text pills (no emoji). */
+function progressAchievements(cal) {
+    const badges = [];
+    for (const d of Object.keys(achievements.deckMastered || {})) {
+        if (savedDecks[d])
+            badges.push(`<span class="achv achv-master">Gemeistert: ${sanitizeHTML(d)}</span>`);
+    }
+    if (cal.pairs >= 10 && cal.percent !== null && cal.percent >= 80) {
+        badges.push(`<span class="achv achv-cal">Gut kalibriert: ${cal.percent} %</span>`);
+    }
+    if (achievements.bestSessionScore > 0) {
+        badges.push(
+            `<span class="achv achv-best">Bestleistung: ${achievements.bestSessionScore} %</span>`
+        );
+    }
+    if (badges.length === 0) {
+        return '<p class="progress-empty">Noch keine Erfolge – meistere ein Deck (Lernstand ≥ 80 %).</p>';
+    }
+    return `<div class="achv-list">${badges.join('')}</div>`;
+}
+
+/** Recent session log. */
+function progressSessions() {
+    if (sessionHistory.length === 0) {
+        return '<p class="progress-empty">Noch keine abgeschlossenen Sitzungen.</p>';
+    }
+    const confLabels = ['', 'niedrig', 'mittel', 'hoch'];
+    const rows = [...sessionHistory]
+        .reverse()
+        .slice(0, 10)
+        .map((s) => {
+            const d = new Date(s.endedAt);
+            const when =
+                d.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' }) +
+                ' ' +
+                d.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
+            const conf =
+                typeof s.avgConfidence === 'number'
+                    ? ` · Sicherheit ${confLabels[Math.round(s.avgConfidence)] ?? ''}`
+                    : '';
+            return `<div class="session-row">
+                <span class="session-date">${when}</span>
+                <span class="session-decks">${sanitizeHTML((s.deckNames || []).join(', '))}</span>
+                <span class="session-meta">${s.cardsAnswered} Karten · ${s.avgScore} %${conf}</span>
+            </div>`;
+        })
+        .join('');
+    return `<div class="session-list">${rows}</div>`;
+}
+
+/** Optional exam-date countdown + date picker. */
+function progressExam(allDecks) {
+    const overall = computeDeckKnowledge(allDecks);
+    let countdown = '';
+    if (examDate) {
+        const days = Math.ceil((new Date(`${examDate}T23:59:59`) - Date.now()) / 86_400_000);
+        countdown =
+            days >= 0
+                ? `<div class="exam-countdown">Noch <strong>${days}</strong> ${days === 1 ? 'Tag' : 'Tage'} bis zur Prüfung · Lernstand <strong>${overall.percent} %</strong></div>`
+                : '<div class="exam-countdown">Der Prüfungstermin liegt in der Vergangenheit.</div>';
+    }
+    return `${countdown}
+        <label class="exam-input-row">Prüfungstermin (optional):
+            <input type="date" id="exam-date-input" value="${examDate || ''}">
+        </label>`;
+}
+
+/** Average per-deck Lernstand series from the snapshots, for menu sparklines. */
+function deckTrendSeries(deckNames) {
+    const series = [];
+    for (const snap of lernstandHistory) {
+        const vals = deckNames.map((d) => snap.perDeck?.[d]).filter((v) => typeof v === 'number');
+        if (vals.length > 0) series.push(vals.reduce((a, b) => a + b, 0) / vals.length);
+    }
+    return series;
+}
+
+/** Tiny inline sparkline element from a series of percentages (null if too short). */
+function buildSparkline(values) {
+    if (values.length < 2) return null;
+    const w = 48;
+    const h = 16;
+    const n = values.length;
+    const x = (i) => (i * w) / (n - 1);
+    const y = (v) => h - 1 - (v / 100) * (h - 2);
+    const line = values
+        .map((v, i) => `${i === 0 ? 'M' : 'L'}${x(i).toFixed(1)},${y(v).toFixed(1)}`)
+        .join(' ');
+    const span = document.createElement('span');
+    span.className = 'deck-sparkline';
+    span.innerHTML = `<svg viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" aria-hidden="true"><path d="${line}" vector-effect="non-scaling-stroke"></path></svg>`;
+    return span;
+}
+
+/**
+ * Start a focused study session on the given decks (used by the weak-spot
+ * drill-in). Builds the merged card set directly, bypassing the checkbox UI.
+ * @param {string[]} deckNames
+ */
+function startDecksByNames(deckNames) {
+    const valid = deckNames.filter((d) => savedDecks[d]?.cards?.length);
+    if (valid.length === 0) return;
+    activeDecks = valid;
+    updateAppTitle(valid);
+    let merged = [];
+    deckStats = {};
+    for (const deckName of valid) {
+        const withSource = savedDecks[deckName].cards.map((card) => ({
+            ...card,
+            sourceDeck: deckName,
+        }));
+        merged = [...merged, ...withSource];
+        deckStats[deckName] = { correct: 0, incorrect: 0, total: withSource.length };
+    }
+    if (merged.length === 0) return;
+    closeProgressView();
+    initializeQuiz(merged);
 }
