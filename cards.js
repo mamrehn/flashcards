@@ -221,8 +221,6 @@ let selectAllDecksBtn;
 let deselectAllDecksBtn;
 let studyModeSelect;
 let deckSearchInput;
-let openSrManagerBtn;
-let srManagerContainer;
 let srBucketsDisplay;
 let startSelectedBucketsBtn;
 let selectAllBucketsBtn;
@@ -230,11 +228,12 @@ let deselectAllBucketsBtn;
 let cleanupOrphansBtn;
 let bookView;
 let progressView;
+let hubOverview;
+let hubManage;
 let bookViewCards;
 let bookViewTitle;
 let undoBtn;
 let exportBackupBtn;
-let srStatsDashboard;
 let matchingContainer;
 let matchingResultContainer;
 let matchingPairedSection = null;
@@ -300,8 +299,6 @@ function initializeApp() {
     deselectAllDecksBtn = document.querySelector('#deselect-all-decks');
     studyModeSelect = document.querySelector('#study-mode');
     deckSearchInput = document.querySelector('#deck-search');
-    openSrManagerBtn = document.querySelector('#open-sr-manager');
-    srManagerContainer = document.querySelector('#spaced-repetition-manager-container');
     srBucketsDisplay = document.querySelector('#sr-buckets-display');
     startSelectedBucketsBtn = document.querySelector('#start-selected-buckets');
     selectAllBucketsBtn = document.querySelector('#select-all-buckets');
@@ -309,11 +306,12 @@ function initializeApp() {
     cleanupOrphansBtn = document.querySelector('#cleanup-orphans-btn');
     bookView = document.querySelector('#book-view');
     progressView = document.querySelector('#progress-view');
+    hubOverview = document.querySelector('#hub-overview');
+    hubManage = document.querySelector('#hub-manage');
     bookViewCards = document.querySelector('#book-view-cards');
     bookViewTitle = document.querySelector('#book-view-title');
     undoBtn = document.querySelector('#undo-btn');
     exportBackupBtn = document.querySelector('#export-backup-btn');
-    srStatsDashboard = document.querySelector('#sr-stats-dashboard');
     matchingContainer = document.querySelector('#matching-container');
     matchingResultContainer = document.querySelector('#matching-result-container');
     matchingContainer.addEventListener('keydown', (e) => {
@@ -349,7 +347,9 @@ function initializeApp() {
     }
     studyModeSelect.addEventListener('change', throttle(handleStudyModeChange, 300));
     deckSearchInput.addEventListener('input', debounce(handleDeckSearch, 250));
-    openSrManagerBtn.addEventListener('click', throttle(openSpacedRepetitionManager, 300));
+    for (const tab of document.querySelectorAll('.hub-tab')) {
+        tab.addEventListener('click', () => switchHubTab(tab.dataset.tab));
+    }
     startSelectedBucketsBtn.addEventListener('click', throttle(startSelectedBuckets, 500));
     selectAllBucketsBtn.addEventListener('click', debounce(selectAllSRBuckets, 200));
     deselectAllBucketsBtn.addEventListener('click', debounce(deselectAllSRBuckets, 200));
@@ -729,7 +729,6 @@ function setupBackLink() {
         const inSession =
             !appContent.classList.contains('hidden') ||
             inBookView ||
-            (srManagerContainer && !srManagerContainer.classList.contains('hidden')) ||
             (progressView && !progressView.classList.contains('hidden'));
         backLink.href = inSession ? 'cards.html' : 'index.html';
         backLink.title = inSession ? 'Zur Deck-Auswahl' : 'Zur Startseite';
@@ -738,9 +737,6 @@ function setupBackLink() {
     const observer = new MutationObserver(update);
     observer.observe(appContent, { attributes: true, attributeFilter: ['class'] });
     observer.observe(bookView, { attributes: true, attributeFilter: ['class'] });
-    if (srManagerContainer) {
-        observer.observe(srManagerContainer, { attributes: true, attributeFilter: ['class'] });
-    }
     if (progressView) {
         observer.observe(progressView, { attributes: true, attributeFilter: ['class'] });
     }
@@ -1986,10 +1982,9 @@ function initializeQuiz(loadedCards) {
     document.querySelector('#file-input-container').style.display = 'none';
     appContent.classList.remove('hidden');
 
-    // Hide menu-only controls (mode switcher, SR button, self-assessment toggle)
-    // during an active quiz — they only apply before a deck is started.
+    // Hide menu-only controls (mode switcher + self-assessment toggle) during an
+    // active quiz — they only apply before a deck is started.
     studyModeSelect.style.display = 'none';
-    openSrManagerBtn.style.display = 'none';
     calibrationToggle.style.display = 'none';
 
     // Auto-show keyboard hints on first ever quiz
@@ -3839,38 +3834,13 @@ function restartQuiz() {
  * Return to SR Manager after completing a quiz from SR buckets
  */
 function returnToSRManager() {
-    // Hide quiz content
+    // Hide quiz content, return to the hub on the "Karten verwalten" tab
     appContent.classList.add('hidden');
     feedbackElement.classList.add('hidden');
-
-    // Show file input container and SR manager
     document.querySelector('#file-input-container').style.display = 'block';
-    srManagerContainer.classList.remove('hidden');
-
-    // Hide saved decks and upload section
-    const savedDecksContainer = document.querySelector('#saved-decks-container');
-    const uploadSection = document.querySelector('.upload-section');
-    const subtitle = document.querySelector('#app-subtitle');
-
-    savedDecksContainer.classList.add('hidden');
-    if (uploadSection) uploadSection.classList.add('hidden');
-    if (subtitle) subtitle.classList.add('hidden');
-
-    // Hide the SR button — back-arrow is the only exit from this view
-    openSrManagerBtn.style.display = 'none';
-
-    // Hide study mode selector + self-assessment toggle in SR manager
-    studyModeSelect.style.display = 'none';
-    calibrationToggle.style.display = 'none';
-
-    // Refresh SR buckets display
-    displaySpacedRepetitionBuckets();
-
-    // Reset the app title
     appTitle.textContent = 'Lernkarten App';
-
-    // Clear active decks
     activeDecks = [];
+    openProgressView('manage');
 }
 
 /**
@@ -3896,9 +3866,6 @@ function resetAndUpload() {
     appSubtitle.style.display = 'block';
     studyModeSelect.style.display = 'inline-block';
     calibrationToggle.style.display = 'inline-flex';
-
-    // Show SR button only if in spaced-repetition mode
-    openSrManagerBtn.style.display = studyMode === 'spaced-repetition' ? 'inline-block' : 'none';
 
     // Clear any error messages
     errorMessageElement.classList.add('hidden');
@@ -3936,9 +3903,6 @@ function showError(message) {
  */
 function handleStudyModeChange(event) {
     studyMode = event.target.value;
-
-    // Show/hide SR button based on mode
-    openSrManagerBtn.style.display = studyMode === 'spaced-repetition' ? 'inline-block' : 'none';
 }
 
 /**
@@ -4738,7 +4702,6 @@ function openBookView(cardsToShow, title) {
     document.querySelector('#file-input-container').style.display = 'none';
     appContent.classList.add('hidden');
     studyModeSelect.style.display = 'none';
-    openSrManagerBtn.style.display = 'none';
     calibrationToggle.style.display = 'none';
     bookView.classList.remove('hidden');
 }
@@ -4938,7 +4901,7 @@ function openBookViewForBucket(step) {
     }
 
     const label = getStepLabel(step);
-    srManagerContainer.classList.add('hidden');
+    progressView.classList.add('hidden');
     openBookView(cardsInBucket, `${label} — ${cardsInBucket.length} Karten`);
 }
 
@@ -4947,127 +4910,61 @@ function openBookViewForBucket(step) {
 // ============================================================================
 
 /**
- * Toggle the Spaced Repetition Manager interface
+ * Build the ladder-distribution bar (how many cards sit in each consolidation
+ * stage) plus a compact facts line. Rendered in the progress overview; reuses
+ * the existing sr-bucket-bar styling.
+ * @returns {string} HTML
  */
-function openSpacedRepetitionManager() {
-    const savedDecksContainer = document.querySelector('#saved-decks-container');
-    const uploadSection = document.querySelector('.upload-section');
-    const subtitle = document.querySelector('#app-subtitle');
-    const isCurrentlyOpen = !srManagerContainer.classList.contains('hidden');
-
-    if (isCurrentlyOpen) {
-        // Close SR manager, show saved decks
-        srManagerContainer.classList.add('hidden');
-        savedDecksContainer.classList.remove('hidden');
-        if (uploadSection) uploadSection.classList.remove('hidden');
-        if (subtitle) subtitle.classList.remove('hidden');
-        studyModeSelect.style.display = 'inline-block';
-        openSrManagerBtn.style.display = 'inline-block';
-        calibrationToggle.style.display = 'inline-flex';
-        // Refresh saved decks display
-        displaySavedDecks(deckSearchInput.value);
-    } else {
-        // Open SR manager, hide saved decks. The header back-arrow is the
-        // single exit affordance from this view, so we hide the SR button
-        // entirely rather than morphing it into a "Decks anzeigen" toggle.
-        srManagerContainer.classList.remove('hidden');
-        savedDecksContainer.classList.add('hidden');
-        if (uploadSection) uploadSection.classList.add('hidden');
-        if (subtitle) subtitle.classList.add('hidden');
-        studyModeSelect.style.display = 'none';
-        openSrManagerBtn.style.display = 'none';
-        calibrationToggle.style.display = 'none';
-        displaySpacedRepetitionBuckets();
-    }
-}
-
-/**
- * Display cards grouped by their spaced repetition intervals (buckets)
- */
-/**
- * Render the progress dashboard at the top of the SR manager
- */
-function renderSRDashboard() {
+function buildLadderDistributionHTML() {
     const srEntries = Object.values(spacedRepetitionData);
-    const totalSRCards = srEntries.length;
-    const totalDecks = Object.keys(savedDecks).length;
-    const now = new Date();
-
-    // Count overdue cards
-    const overdueCount = srEntries.filter((d) => new Date(d.nextReview) <= now).length;
-
-    // Calculate average score from histories
-    let totalAttempts = 0;
-    let totalScore = 0;
-    for (const data of srEntries) {
-        if (data.history && data.history.length > 0) {
-            for (const s of data.history) {
-                totalScore += s;
-                totalAttempts++;
-            }
-        }
+    const total = srEntries.length;
+    if (total === 0) {
+        return '<p class="progress-empty">Noch keine Karten im Wiederholungssystem – starte eine Lernsitzung.</p>';
     }
-    const avgScore = totalAttempts > 0 ? Math.round((totalScore / totalAttempts) * 100) : 0;
-
-    // Calibration: agreement between self-rated confidence and outcome
-    // (shared with the progress page so the two never diverge).
-    const { percent: calibration, pairs: calPairs } = computeCalibration();
-
-    // Ladder distribution for bar chart (steps grouped into 5 stages)
-    const bucketColors = ['#e74c3c', '#e67e22', '#f1c40f', '#2ecc71', '#27ae60'];
-    const bucketLabels = ['Wackelig (Minuten)', 'Im Aufbau (Stunden)', '1 Tag', '3 Tage', '7 Tage'];
-    const bucketCounts = [0, 0, 0, 0, 0];
+    const colors = ['#e74c3c', '#e67e22', '#f1c40f', '#2ecc71', '#27ae60'];
+    const labels = ['Wackelig (Minuten)', 'Im Aufbau (Stunden)', '1 Tag', '3 Tage', '7 Tage'];
+    const counts = [0, 0, 0, 0, 0];
+    let attempts = 0;
+    let scoreSum = 0;
     for (const data of srEntries) {
         const step = data.step ?? 0;
-        if (step <= 1) bucketCounts[0]++;
-        else if (step <= 3) bucketCounts[1]++;
-        else if (step === 4) bucketCounts[2]++;
-        else if (step === 5) bucketCounts[3]++;
-        else bucketCounts[4]++;
-    }
-
-    let html = '';
-
-    // Stat cards
-    html += `<div class="sr-stat-card"><span class="sr-stat-value">${totalDecks}</span> Decks</div>`;
-    html += `<div class="sr-stat-card"><span class="sr-stat-value">${totalSRCards}</span> SR-Karten</div>`;
-    html += `<div class="sr-stat-card"><span class="sr-stat-value">${overdueCount}</span> Fällig</div>`;
-    html += `<div class="sr-stat-card">Ø <span class="sr-stat-value">${totalAttempts > 0 ? avgScore + '%' : '–'}</span> richtig</div>`;
-    html += `<div class="sr-stat-card"><span class="sr-stat-value">${totalAttempts}</span> Versuche</div>`;
-    if (calibration !== null) {
-        html += `<div class="sr-stat-card" title="Wie gut deine Selbsteinschätzung „Wie sicher?“ mit dem tatsächlichen Ergebnis übereinstimmt (${calPairs} Einschätzungen).">Treffsicherheit <span class="sr-stat-value">${calibration}%</span></div>`;
-    }
-
-    // Bucket distribution bar
-    if (totalSRCards > 0) {
-        html += '<div class="sr-bucket-bar">';
-        for (let i = 0; i < 5; i++) {
-            const pct = (bucketCounts[i] / totalSRCards) * 100;
-            if (pct > 0) {
-                html += `<div class="sr-bucket-bar-segment" style="width:${pct}%;background:${bucketColors[i]}" title="${bucketLabels[i]}: ${bucketCounts[i]}"></div>`;
+        if (step <= 1) counts[0]++;
+        else if (step <= 3) counts[1]++;
+        else if (step === 4) counts[2]++;
+        else if (step === 5) counts[3]++;
+        else counts[4]++;
+        if (data.history) {
+            for (const s of data.history) {
+                scoreSum += s;
+                attempts++;
             }
         }
-        html += '</div>';
-
-        html += '<div class="sr-bucket-bar-legend">';
-        for (let i = 0; i < 5; i++) {
-            if (bucketCounts[i] > 0) {
-                html += `<span style="--legend-color:${bucketColors[i]}">${bucketLabels[i]}: ${bucketCounts[i]}</span>`;
-            }
-        }
-        html += '</div>';
     }
 
-    srStatsDashboard.innerHTML = html;
+    let html = '<div class="sr-bucket-bar">';
+    for (let i = 0; i < 5; i++) {
+        const pct = (counts[i] / total) * 100;
+        if (pct > 0) {
+            html += `<div class="sr-bucket-bar-segment" style="width:${pct}%;background:${colors[i]}" title="${labels[i]}: ${counts[i]}"></div>`;
+        }
+    }
+    html += '</div><div class="sr-bucket-bar-legend">';
+    for (let i = 0; i < 5; i++) {
+        if (counts[i] > 0) {
+            html += `<span style="--legend-color:${colors[i]}">${labels[i]}: ${counts[i]}</span>`;
+        }
+    }
+    html += '</div>';
+    if (attempts > 0) {
+        html += `<div class="ladder-facts">${attempts} Versuche · Ø ${Math.round((scoreSum / attempts) * 100)} % richtig</div>`;
+    }
+    return html;
 }
 
 /**
- *
+ * Render the "Karten verwalten" bucket list in the hub.
  */
 function displaySpacedRepetitionBuckets() {
-    // Always render dashboard (even if empty — shows deck count)
-    renderSRDashboard();
-
     // Save current expanded and selected state before overwriting
     const expandedSteps = new Set(
         [...document.querySelectorAll('.sr-bucket-cards.expanded')].map((el) =>
@@ -5311,12 +5208,12 @@ function startSelectedBuckets() {
     // Update the app title
     updateAppTitle(['SR Buckets']);
 
-    // Close SR manager and show quiz
+    // Close the hub and show quiz
     const savedDecksContainer = document.querySelector('#saved-decks-container');
     const uploadSection = document.querySelector('.upload-section');
     const subtitle = document.querySelector('#app-subtitle');
 
-    srManagerContainer.classList.add('hidden');
+    progressView.classList.add('hidden');
     savedDecksContainer.classList.remove('hidden');
     if (uploadSection) uploadSection.classList.remove('hidden');
     if (subtitle) subtitle.classList.remove('hidden');
@@ -5741,12 +5638,14 @@ function renderMenuSummary() {
     const el = document.querySelector('#menu-summary');
     if (!el) return;
     const allDecks = Object.keys(savedDecks);
-    const overall = computeDeckKnowledge(allDecks);
-    if (allDecks.length === 0 || overall.attempted === 0) {
+    // Shown whenever decks exist — it's the single entry to the Fortschritt hub
+    // (stats + card management), so it must be reachable even before studying.
+    if (allDecks.length === 0) {
         el.classList.add('hidden');
         el.innerHTML = '';
         return;
     }
+    const overall = computeDeckKnowledge(allDecks);
     const { mastered, total } = countMastered(allDecks);
     const cal = computeCalibration();
     const calStr = cal.percent === null ? '–' : `${cal.percent} %`;
@@ -5757,30 +5656,47 @@ function renderMenuSummary() {
             <span class="menu-stat"><strong>${mastered}/${total}</strong> gemeistert</span>
             <span class="menu-stat"><strong>${calStr}</strong> Treffsicherheit</span>
         </div>
-        <button class="btn btn-secondary btn-sm" id="open-progress">Fortschritt ansehen →</button>
+        <button class="btn btn-soft btn-sm" id="open-progress">Fortschritt ansehen →</button>
     `;
     el.classList.remove('hidden');
     const btn = el.querySelector('#open-progress');
-    if (btn) btn.addEventListener('click', openProgressView);
+    if (btn) btn.addEventListener('click', () => openProgressView('overview'));
 }
 
-/** Open the dedicated progress page (mirrors the SR-manager show/hide pattern). */
-function openProgressView() {
+/**
+ * Open the Fortschritt hub on the given tab (overview = stats, manage = SR
+ * card management). Single entry point for both — replaces the old separate
+ * "SR verwalten" view.
+ * @param {'overview'|'manage'} [tab]
+ */
+function openProgressView(tab = 'overview') {
     const savedDecksContainer = document.querySelector('#saved-decks-container');
     const uploadSection = document.querySelector('.upload-section');
     const subtitle = document.querySelector('#app-subtitle');
     progressView.classList.remove('hidden');
     savedDecksContainer.classList.add('hidden');
-    if (srManagerContainer) srManagerContainer.classList.add('hidden');
     if (uploadSection) uploadSection.classList.add('hidden');
     if (subtitle) subtitle.classList.add('hidden');
     studyModeSelect.style.display = 'none';
-    openSrManagerBtn.style.display = 'none';
     calibrationToggle.style.display = 'none';
-    renderProgressView();
+    switchHubTab(tab);
 }
 
-/** Close the progress page and return to the deck-picker menu. */
+/** Switch between the hub's "Übersicht" and "Karten verwalten" tabs. */
+function switchHubTab(tab) {
+    const isManage = tab === 'manage';
+    hubOverview.classList.toggle('hidden', isManage);
+    hubManage.classList.toggle('hidden', !isManage);
+    for (const t of document.querySelectorAll('.hub-tab')) {
+        const active = t.dataset.tab === tab;
+        t.classList.toggle('active', active);
+        t.setAttribute('aria-selected', String(active));
+    }
+    if (isManage) displaySpacedRepetitionBuckets();
+    else renderProgressView();
+}
+
+/** Close the hub and return to the deck-picker menu. */
 function closeProgressView() {
     const savedDecksContainer = document.querySelector('#saved-decks-container');
     const uploadSection = document.querySelector('.upload-section');
@@ -5790,7 +5706,6 @@ function closeProgressView() {
     if (uploadSection) uploadSection.classList.remove('hidden');
     if (subtitle) subtitle.classList.remove('hidden');
     studyModeSelect.style.display = 'inline-block';
-    openSrManagerBtn.style.display = studyMode === 'spaced-repetition' ? 'inline-block' : 'none';
     calibrationToggle.style.display = 'inline-flex';
     displaySavedDecks(deckSearchInput.value);
 }
@@ -5813,6 +5728,7 @@ function renderProgressView() {
         <section class="progress-section"><h4>Lernstand-Verlauf</h4>${progressTrend(lernstandHistory)}</section>
         <section class="progress-section"><h4>Selbsteinschätzung</h4>${progressReliability(cal)}</section>
         <section class="progress-section"><h4>Abdeckung &amp; Beherrschung</h4>${progressCoverage(allDecks)}</section>
+        <section class="progress-section"><h4>Wiederholungs-Stufen</h4>${buildLadderDistributionHTML()}</section>
         <section class="progress-section"><h4>Schwachstellen</h4>${progressWeakSpots(allDecks)}</section>
         <section class="progress-section"><h4>Erfolge</h4>${progressAchievements(cal)}</section>
         <section class="progress-section"><h4>Sitzungen</h4>${progressSessions()}</section>

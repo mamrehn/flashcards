@@ -45,13 +45,6 @@
                     <input type="checkbox" id="calibration-mode" />
                     Selbsteinschätzung
                 </label>
-                <button
-                    id="open-sr-manager"
-                    class="btn btn-secondary sr-manager-btn"
-                    title="Spaced Repetition Karten verwalten"
-                >
-                    📊 SR verwalten
-                </button>
             </div>
 
             <div id="file-input-container">
@@ -126,7 +119,7 @@
                     <div class="saved-decks-header">
                         <h3>Gespeicherte Decks</h3>
                         <button
-                            class="btn btn-secondary"
+                            class="btn btn-soft"
                             id="export-backup-btn"
                             title="Alle Decks, Lernfortschritt und Einstellungen als Backup-Datei speichern"
                         >
@@ -196,45 +189,64 @@
                     </div>
                 </div>
 
-                <div id="spaced-repetition-manager-container" class="hidden">
-                    <h3>Spaced Repetition - Kartenverwaltung</h3>
-                    <div id="sr-stats-dashboard">
-                        <!-- Dashboard stats rendered dynamically -->
-                    </div>
-                    <p class="sr-info">
-                        Karten sind nach Wiederholungsintervallen gruppiert. Wähle Buckets aus oder
-                        verwalte einzelne Karten.
-                    </p>
-
-                    <div id="sr-bucket-selection-controls">
-                        <button id="start-selected-buckets" class="btn btn-primary" disabled>
-                            Mit ausgewählten Buckets üben
-                        </button>
-                        <button id="select-all-buckets" class="btn">Alle auswählen</button>
-                        <button id="deselect-all-buckets" class="btn">Alle abwählen</button>
-                        <button
-                            id="cleanup-orphans-btn"
-                            class="btn btn-secondary"
-                            title="Entfernt SR-Daten für gelöschte Decks oder geänderte Fragen"
-                        >
-                            🧹 Aufräumen
-                        </button>
-                    </div>
-
-                    <div id="sr-buckets-display">
-                        <!-- Buckets will be dynamically inserted here -->
-                    </div>
-                </div>
-
                 <div id="progress-view" class="hidden">
                     <div class="progress-view-header">
-                        <button class="btn btn-secondary btn-sm" id="close-progress">
+                        <button class="btn btn-soft btn-sm" id="close-progress">
                             ← Zurück zu Decks
                         </button>
-                        <h3>Dein Fortschritt</h3>
+                        <div
+                            class="hub-tabs"
+                            role="tablist"
+                            aria-label="Fortschritt und Verwaltung"
+                        >
+                            <button
+                                class="hub-tab active"
+                                data-tab="overview"
+                                role="tab"
+                                aria-selected="true"
+                            >
+                                Übersicht
+                            </button>
+                            <button
+                                class="hub-tab"
+                                data-tab="manage"
+                                role="tab"
+                                aria-selected="false"
+                            >
+                                Karten verwalten
+                            </button>
+                        </div>
                     </div>
-                    <div id="progress-content">
-                        <!-- Progress dashboard rendered dynamically -->
+
+                    <div id="hub-overview" class="hub-panel">
+                        <div id="progress-content">
+                            <!-- Progress dashboard rendered dynamically -->
+                        </div>
+                    </div>
+
+                    <div id="hub-manage" class="hub-panel hidden">
+                        <p class="sr-info">
+                            Karten sind nach Wiederholungsintervallen gruppiert. Wähle Buckets aus
+                            oder verwalte einzelne Karten.
+                        </p>
+                        <div id="sr-bucket-selection-controls">
+                            <button id="start-selected-buckets" class="btn btn-primary" disabled>
+                                Mit ausgewählten Buckets üben
+                            </button>
+                            <button id="select-all-buckets" class="btn">Alle auswählen</button>
+                            <button id="deselect-all-buckets" class="btn">Alle abwählen</button>
+                            <button
+                                id="cleanup-orphans-btn"
+                                class="btn btn-soft"
+                                title="Entfernt SR-Daten für gelöschte Decks oder geänderte Fragen"
+                            >
+                                🧹 Aufräumen
+                            </button>
+                        </div>
+
+                        <div id="sr-buckets-display">
+                            <!-- Buckets will be dynamically inserted here -->
+                        </div>
                     </div>
                 </div>
             </div>
