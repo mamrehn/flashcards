@@ -763,74 +763,56 @@ body {
 }
 
 /* ── Graded recall self-rating (text cards) ──────────────────────────────── */
+/* Grows to fill the row beside the undo button: [Zurück][Nochmal…Einfach]. */
 .recall-rating {
     display: flex;
     gap: 0.4rem;
-    flex: 1 1 100%;
+    flex: 1;
 }
 
 .recall-rating-btn {
     flex: 1;
     /* >=44px tap target (WCAG 2.5.5 / mobile guidelines). */
     min-height: 44px;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    gap: 0.1rem;
     padding: 0.35rem 0.3rem;
-    border: none;
+    border: 1px solid var(--input-border);
+    /* Semantic colour lives only on the bottom edge — present but quiet. */
+    border-bottom-width: 3px;
     border-radius: 4px;
     cursor: pointer;
-    color: #fff;
-    font-weight: 600;
+    background: var(--surface-color);
+    color: var(--text-color);
+    font-size: 0.95rem;
+    font-weight: 500;
     transition:
-        transform 0.1s ease,
-        filter 0.2s ease;
+        background-color 0.15s ease,
+        border-color 0.15s ease;
 }
 
-.recall-rating-btn:hover {
-    filter: brightness(1.08);
-}
-
+.recall-rating-btn:hover,
 .recall-rating-btn:active {
-    transform: scale(0.97);
+    background: var(--surface-secondary);
 }
 
 .recall-rating-btn:focus-visible {
-    outline: 3px solid var(--primary);
+    outline: 2px solid var(--primary);
     outline-offset: 2px;
 }
 
-.rating-label {
-    font-size: 1rem;
-}
-
-.rating-interval {
-    font-size: 0.75rem;
-    opacity: 0.85;
-    font-weight: 500;
-}
-
-.rating-interval:empty {
-    display: none;
-}
-
 .rating-again {
-    background-color: var(--danger);
+    border-bottom-color: var(--danger);
 }
 
 .rating-hard {
-    background-color: var(--warning);
-    color: #3a2f00;
+    border-bottom-color: var(--warning);
 }
 
 .rating-good {
-    background-color: var(--primary);
+    border-bottom-color: var(--primary);
 }
 
 .rating-easy {
-    background-color: var(--success);
+    border-bottom-color: var(--success);
 }
 
 /* ── Pre-answer confidence capture (calibration mode) ────────────────────── */
@@ -849,13 +831,13 @@ body {
 }
 
 .confidence-btn {
-    min-width: 44px;
     min-height: 44px;
-    font-size: 1.3rem;
-    line-height: 1;
-    border: 2px solid var(--input-border);
-    border-radius: 8px;
+    padding: 0.3rem 0.7rem;
+    font-size: 0.9rem;
+    border: 1px solid var(--input-border);
+    border-radius: 6px;
     background: var(--surface-color);
+    color: var(--text-color);
     cursor: pointer;
     transition: all 0.15s ease;
 }
@@ -866,8 +848,8 @@ body {
 
 .confidence-btn.selected {
     border-color: var(--primary);
-    box-shadow: 0 0 0 2px var(--primary);
     background: var(--surface-secondary);
+    font-weight: 600;
 }
 
 .confidence-btn:focus-visible {
@@ -875,32 +857,7 @@ body {
     outline-offset: 2px;
 }
 
-/* ── Calibration cue (answer side) ───────────────────────────────────────── */
-.calibration-cue {
-    margin: 0.5rem 0 0;
-    padding: 0.4rem 0.6rem;
-    border-radius: 6px;
-    font-size: 0.95rem;
-    font-weight: 600;
-    text-align: center;
-}
-
-.calibration-cue-warn {
-    background: rgba(220, 53, 69, 0.12);
-    color: var(--danger);
-}
-
-.calibration-cue-good {
-    background: rgba(40, 167, 69, 0.12);
-    color: var(--success);
-}
-
-.calibration-cue-neutral {
-    background: var(--surface-color);
-    color: var(--text-muted);
-}
-
-/* ── Calibration mode toggle (header) ────────────────────────────────────── */
+/* ── Self-assessment toggle (header) ─────────────────────────────────────── */
 .calibration-toggle {
     display: inline-flex;
     align-items: center;
@@ -1200,9 +1157,10 @@ body {
     background-color: var(--legend-color);
 }
 
-/* Undo Button */
+/* Undo Button — leftmost on the answer-side controls row, natural width so it
+   reads as the secondary action beside the rating/next buttons. */
 #undo-btn {
-    margin-right: auto;
+    flex: 0 0 auto;
 }
 
 #next-card {
@@ -1325,6 +1283,11 @@ body {
         flex: 1 0 100%;
         width: 100%;
         margin: 0;
+    }
+
+    .calibration-toggle {
+        order: 3;
+        flex: 1 0 100%;
     }
 
     .header h1 {

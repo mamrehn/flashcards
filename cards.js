@@ -144,12 +144,12 @@ const SR_FAIL_SCORE = 0.5;
 let spacedRepetitionData = {};
 
 /**
- * Calibration mode (opt-in): capture the student's confidence before the answer
- * is revealed, then feed back how well that self-assessment matched reality.
- * Off by default so the fast study path stays fast.
+ * Self-assessment mode: capture the student's confidence before the answer is
+ * revealed, then feed back how well that estimate matched reality. On by
+ * default; the choice is persisted, so opting out sticks.
  * @type {boolean}
  */
-let calibrationMode = false;
+let calibrationMode = true;
 
 /** @type {number|null} Confidence for the current card: 1=unsicher, 2=mittel, 3=sicher (null if unset) */
 let currentConfidence = null;
@@ -185,7 +185,6 @@ let recallRating;
 let nextCardBtn;
 let calibrationModeCheckbox;
 let confidencePrompt;
-let calibrationCue;
 let progressBar;
 let cardsRemainingElement;
 let cardsCompletedElement;
@@ -263,7 +262,6 @@ function initializeApp() {
     nextCardBtn = document.querySelector('#next-card');
     calibrationModeCheckbox = document.querySelector('#calibration-mode');
     confidencePrompt = document.querySelector('#confidence-prompt');
-    calibrationCue = document.querySelector('#calibration-cue');
     progressBar = document.querySelector('#progress-bar');
     cardsRemainingElement = document.querySelector('#cards-remaining');
     cardsCompletedElement = document.querySelector('#cards-completed');
@@ -310,11 +308,14 @@ function initializeApp() {
     // Set up event listeners with debouncing/throttling for performance
     fileInput.addEventListener('change', handleFileUpload);
     showAnswerBtn.addEventListener('click', throttle(showAnswer, 300));
-    // Graded self-rating (text cards): one delegated handler, score from data-score.
-    // markAnswer's isAnswered guard already prevents double-grading.
+    // Graded self-rating (text cards): the rating IS the "continue" action —
+    // grade and advance in one click (no separate "Nächste"). The student has
+    // already read the answer on the back before choosing a rating.
     recallRating.addEventListener('click', (e) => {
         const btn = e.target.closest('.recall-rating-btn');
-        if (btn) markAnswer(Number(btn.dataset.score));
+        if (!btn || isAnswered) return;
+        markAnswer(Number(btn.dataset.score));
+        showNextCard();
     });
     nextCardBtn.addEventListener('click', throttle(showNextCard, 300));
     restartBtn.addEventListener('click', throttle(restartQuiz, 500));
@@ -340,8 +341,9 @@ function initializeApp() {
     undoBtn.addEventListener('click', throttle(undoLastAnswer, 300));
     exportBackupBtn.addEventListener('click', throttle(exportBackup, 500));
 
-    // Calibration mode toggle (persisted) and pre-answer confidence capture
-    calibrationMode = localStorage.getItem('calibrationMode') === '1';
+    // Self-assessment toggle (persisted, on by default) + confidence capture
+    const storedCalibration = localStorage.getItem('calibrationMode');
+    calibrationMode = storedCalibration === null ? true : storedCalibration === '1';
     calibrationModeCheckbox.checked = calibrationMode;
     calibrationModeCheckbox.addEventListener('change', () => {
         calibrationMode = calibrationModeCheckbox.checked;
@@ -3036,8 +3038,6 @@ function updateCardContent(card) {
     // Reset buttons + calibration UI for the fresh card
     recallRating.classList.add('hidden');
     nextCardBtn.style.display = 'none';
-    calibrationCue.classList.add('hidden');
-    calibrationCue.textContent = '';
 
     // Pre-answer confidence prompt: shown on the front only in calibration mode
     currentConfidence = null;
@@ -3389,7 +3389,6 @@ function showAnswer() {
         } else {
             // Otherwise let the student grade their own recall (4-level scale),
             // which feeds the spaced-repetition ladder a finer signal than yes/no.
-            updateRatingIntervals(card);
             recallRating.classList.remove('hidden');
             nextCardBtn.style.display = 'none';
         }
@@ -3565,34 +3564,20 @@ function markAnswer(scoreOrBool) {
 }
 
 /**
- * Show a brief calibration cue on the answer side: did the pre-answer confidence
- * match the outcome? The actionable case is overconfidence (sure but wrong).
+ * Surface a calibration nudge as a brief toast — only when the self-estimate
+ * and the outcome actually disagree (the cases worth acting on). Matches stay
+ * silent so the flow stays quiet. Toast-based so it survives the immediate
+ * advance after a rating click.
  * @param {number} confidence - 1 (unsicher) … 3 (sicher)
  * @param {number} score - answer score 0..1
  */
 function showCalibrationCue(confidence, score) {
     const correct = score >= SR_PASS_SCORE;
-    let msg;
-    let cls;
     if (confidence === 3 && !correct) {
-        msg = '⚠️ Überschätzt – diese Karte kommt schneller wieder dran.';
-        cls = 'calibration-cue-warn';
+        showMessage('Überschätzt – diese Karte kommt schneller wieder dran.');
     } else if (confidence === 1 && correct) {
-        msg = '✅ Besser als gedacht – du kannst das schon!';
-        cls = 'calibration-cue-good';
-    } else if (confidence === 3 && correct) {
-        msg = '🎯 Sicher und richtig – stark!';
-        cls = 'calibration-cue-good';
-    } else if (confidence === 1 && !correct) {
-        msg = '👍 Ehrlich eingeschätzt – dranbleiben.';
-        cls = 'calibration-cue-neutral';
-    } else {
-        msg = correct ? '🙂 Richtig.' : '🤔 Nochmal ansehen.';
-        cls = 'calibration-cue-neutral';
+        showMessage('Besser als gedacht – du kannst das schon.');
     }
-    calibrationCue.textContent = msg;
-    calibrationCue.className = `calibration-cue ${cls}`;
-    calibrationCue.classList.remove('hidden');
 }
 
 /**
@@ -3679,14 +3664,14 @@ function showFeedback() {
             const sureCorrect = Math.round(
                 (sure.filter((e) => e.score >= SR_PASS_SCORE).length / sure.length) * 100
             );
-            msg = `🎯 Selbsteinschätzung: von deinen „sicher“-Karten lagst du zu ${sureCorrect} % richtig`;
+            msg = `Selbsteinschätzung: von deinen „sicher“-Karten lagst du zu ${sureCorrect} % richtig`;
         } else {
-            msg = `🎯 Selbsteinschätzung für ${sessionCalibration.length} Karten erfasst`;
+            msg = `Selbsteinschätzung für ${sessionCalibration.length} Karten erfasst`;
         }
         const gap = avgConf - avgScore;
         if (gap > 0.15) msg += ' · du neigst zur Überschätzung';
         else if (gap < -0.15) msg += ' · du bist strenger zu dir als nötig';
-        else msg += ' · gut kalibriert 👍';
+        else msg += ' · deine Einschätzung passt gut';
         calibrationLine.textContent = msg;
         calibrationLine.classList.remove('hidden');
     } else {
@@ -3936,8 +3921,6 @@ function getCardKey(card) {
 /**
  * Pure projection of the ladder: given the current step and an answer score,
  * return the resulting step and how long to wait before the next review.
- * Shared by updateSpacedRepetition (to apply) and the rating buttons (to
- * preview the consequence), so the two can never drift apart.
  *   - score ≈ 1   → skip ahead two steps (mastered, like Anki's "Easy")
  *   - score ≥ 0.8 → advance one step
  *   - 0.5–0.8     → keep step, review at half the interval (partial recall)
@@ -3963,18 +3946,6 @@ function projectSR(step, score) {
         return { step, waitMinutes: Math.max(SR_STEP_MINUTES[step] / 2, SR_STEP_MINUTES[0]) };
     }
     return { step: 0, waitMinutes: SR_STEP_MINUTES[0] };
-}
-
-/**
- * Compact human label for a wait duration in minutes ("10 Min" / "2 Std" / "3 Tage").
- * @param {number} mins
- * @returns {string}
- */
-function formatWaitMinutes(mins) {
-    if (mins < 60) return `${Math.round(mins)} Min`;
-    if (mins < 1440) return `${Math.round(mins / 60)} Std`;
-    const days = Math.round(mins / 1440);
-    return `${days} Tag${days === 1 ? '' : 'e'}`;
 }
 
 /**
@@ -4013,27 +3984,6 @@ function updateSpacedRepetition(card, score, confidence = null) {
 
     spacedRepetitionData[key] = data;
     saveSpacedRepetitionData();
-}
-
-/**
- * Fill in the "next review" preview under each rating button, so the student
- * sees the consequence of each choice. Only meaningful while the ladder is
- * actually driving scheduling (SR mode / SR buckets); otherwise left blank.
- * @param {object} card - the card being answered
- */
-function updateRatingIntervals(card) {
-    const inSR =
-        studyMode === 'spaced-repetition' ||
-        (activeDecks.length === 1 && activeDecks[0] === 'SR Buckets');
-    const data = spacedRepetitionData[getCardKey(card)];
-    const step = data?.step ?? 0;
-    for (const btn of recallRating.querySelectorAll('.recall-rating-btn')) {
-        const intervalEl = btn.querySelector('.rating-interval');
-        if (!intervalEl) continue;
-        intervalEl.textContent = inSR
-            ? formatWaitMinutes(projectSR(step, Number(btn.dataset.score)).waitMinutes)
-            : '';
-    }
 }
 
 /**
@@ -5018,7 +4968,7 @@ function renderSRDashboard() {
     html += `<div class="sr-stat-card">Ø <span class="sr-stat-value">${totalAttempts > 0 ? avgScore + '%' : '–'}</span> richtig</div>`;
     html += `<div class="sr-stat-card"><span class="sr-stat-value">${totalAttempts}</span> Versuche</div>`;
     if (calibration !== null) {
-        html += `<div class="sr-stat-card" title="Wie gut deine Selbsteinschätzung „Wie sicher?“ mit dem tatsächlichen Ergebnis übereinstimmt (${calPairs} Einschätzungen).">🎯 Kalibrierung <span class="sr-stat-value">${calibration}%</span></div>`;
+        html += `<div class="sr-stat-card" title="Wie gut deine Selbsteinschätzung „Wie sicher?“ mit dem tatsächlichen Ergebnis übereinstimmt (${calPairs} Einschätzungen).">Treffsicherheit <span class="sr-stat-value">${calibration}%</span></div>`;
     }
 
     // Bucket distribution bar

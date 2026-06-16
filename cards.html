@@ -40,10 +40,10 @@
                 </select>
                 <label
                     class="calibration-toggle"
-                    title="Schätze vor dem Aufdecken ein, wie sicher du dir bist. Die App zeigt dir danach, wie gut du dich selbst einschätzt."
+                    title="Schätze vor dem Aufdecken ein, wie sicher du dir bist. Die App zeigt dir danach, wie gut deine Einschätzung mit dem Ergebnis übereinstimmt."
                 >
                     <input type="checkbox" id="calibration-mode" />
-                    🎯 Kalibrierung
+                    Selbsteinschätzung
                 </label>
                 <button
                     id="open-sr-manager"
@@ -277,33 +277,30 @@
                                 role="group"
                                 aria-label="Wie sicher bist du dir?"
                             >
-                                <span class="confidence-prompt-label">Wie sicher?</span>
+                                <span class="confidence-prompt-label">Wie sicher bist du?</span>
                                 <button
                                     type="button"
                                     class="confidence-btn"
                                     data-confidence="1"
                                     aria-pressed="false"
-                                    title="Unsicher"
                                 >
-                                    🤔
+                                    Unsicher
                                 </button>
                                 <button
                                     type="button"
                                     class="confidence-btn"
                                     data-confidence="2"
                                     aria-pressed="false"
-                                    title="Mittel"
                                 >
-                                    🙂
+                                    Mittel
                                 </button>
                                 <button
                                     type="button"
                                     class="confidence-btn"
                                     data-confidence="3"
                                     aria-pressed="false"
-                                    title="Sicher"
                                 >
-                                    😎
+                                    Sicher
                                 </button>
                             </div>
                             <div class="controls">
@@ -379,13 +376,6 @@
                                 >
                                     <!-- Matching results will be dynamically inserted here -->
                                 </div>
-
-                                <!-- Calibration cue (confidence vs. outcome) -->
-                                <div
-                                    id="calibration-cue"
-                                    class="calibration-cue hidden"
-                                    aria-live="polite"
-                                ></div>
                             </div>
                             <div class="controls">
                                 <button
@@ -408,8 +398,7 @@
                                         data-score="0"
                                         title="Gar nicht gewusst (Taste 1)"
                                     >
-                                        <span class="rating-label">Nochmal</span>
-                                        <span class="rating-interval"></span>
+                                        Nochmal
                                     </button>
                                     <button
                                         type="button"
@@ -417,8 +406,7 @@
                                         data-score="0.6"
                                         title="Mit Mühe (Taste 2)"
                                     >
-                                        <span class="rating-label">Schwer</span>
-                                        <span class="rating-interval"></span>
+                                        Schwer
                                     </button>
                                     <button
                                         type="button"
@@ -426,8 +414,7 @@
                                         data-score="0.85"
                                         title="Gewusst (Taste 3)"
                                     >
-                                        <span class="rating-label">Gut</span>
-                                        <span class="rating-interval"></span>
+                                        Gut
                                     </button>
                                     <button
                                         type="button"
@@ -435,8 +422,7 @@
                                         data-score="1"
                                         title="Sofort gewusst (Taste 4)"
                                     >
-                                        <span class="rating-label">Einfach</span>
-                                        <span class="rating-interval"></span>
+                                        Einfach
                                     </button>
                                 </div>
                                 <button class="btn btn-secondary" id="next-card">Nächste</button>
