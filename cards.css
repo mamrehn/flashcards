@@ -891,12 +891,11 @@ body {
     align-items: center;
     justify-content: space-between;
     gap: 0.5rem;
+    /* Flush row (no card padding) so the Fortschritt button right-aligns with
+       the Backup button in the header below. Divider keeps it set apart. */
     margin-bottom: 0.75rem;
-    padding: 0.5rem 0.75rem;
-    background: var(--surface-color);
-    border: 1px solid var(--input-border);
-    border-radius: 8px;
-    box-shadow: 0 1px 2px var(--shadow-color);
+    padding-bottom: 0.75rem;
+    border-bottom: 1px solid var(--input-border);
 }
 
 .menu-summary-stats {

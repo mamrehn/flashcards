@@ -5524,7 +5524,7 @@ function renderMenuSummary() {
             <span class="menu-stat"><strong>${mastered}/${total}</strong> gemeistert</span>
             <span class="menu-stat"><strong>${calStr}</strong> Treffsicherheit</span>
         </div>
-        <button class="btn btn-soft btn-sm" id="open-progress">Fortschritt ansehen →</button>
+        <button class="btn btn-soft" id="open-progress">Fortschritt ansehen →</button>
     `;
     el.classList.remove('hidden');
     const btn = el.querySelector('#open-progress');
