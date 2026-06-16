@@ -184,6 +184,7 @@ let showAnswerBtn;
 let recallRating;
 let nextCardBtn;
 let calibrationModeCheckbox;
+let calibrationToggle;
 let confidencePrompt;
 let progressBar;
 let cardsRemainingElement;
@@ -261,6 +262,7 @@ function initializeApp() {
     recallRating = document.querySelector('#recall-rating');
     nextCardBtn = document.querySelector('#next-card');
     calibrationModeCheckbox = document.querySelector('#calibration-mode');
+    calibrationToggle = document.querySelector('.calibration-toggle');
     confidencePrompt = document.querySelector('#confidence-prompt');
     progressBar = document.querySelector('#progress-bar');
     cardsRemainingElement = document.querySelector('#cards-remaining');
@@ -1931,9 +1933,11 @@ function initializeQuiz(loadedCards) {
     document.querySelector('#file-input-container').style.display = 'none';
     appContent.classList.remove('hidden');
 
-    // Hide mode switcher + SR button during active quiz (cannot change mode mid-quiz)
+    // Hide menu-only controls (mode switcher, SR button, self-assessment toggle)
+    // during an active quiz — they only apply before a deck is started.
     studyModeSelect.style.display = 'none';
     openSrManagerBtn.style.display = 'none';
+    calibrationToggle.style.display = 'none';
 
     // Auto-show keyboard hints on first ever quiz
     if (!localStorage.getItem('keyboardHintsShown')) {
@@ -3795,8 +3799,9 @@ function returnToSRManager() {
     // Hide the SR button — back-arrow is the only exit from this view
     openSrManagerBtn.style.display = 'none';
 
-    // Hide study mode selector in SR manager
+    // Hide study mode selector + self-assessment toggle in SR manager
     studyModeSelect.style.display = 'none';
+    calibrationToggle.style.display = 'none';
 
     // Refresh SR buckets display
     displaySpacedRepetitionBuckets();
@@ -3830,6 +3835,7 @@ function resetAndUpload() {
     appTitle.textContent = 'Lernkarten';
     appSubtitle.style.display = 'block';
     studyModeSelect.style.display = 'inline-block';
+    calibrationToggle.style.display = 'inline-flex';
 
     // Show SR button only if in spaced-repetition mode
     openSrManagerBtn.style.display = studyMode === 'spaced-repetition' ? 'inline-block' : 'none';
@@ -4663,6 +4669,7 @@ function openBookView(cardsToShow, title) {
     appContent.classList.add('hidden');
     studyModeSelect.style.display = 'none';
     openSrManagerBtn.style.display = 'none';
+    calibrationToggle.style.display = 'none';
     bookView.classList.remove('hidden');
 }
 
@@ -4886,6 +4893,7 @@ function openSpacedRepetitionManager() {
         if (subtitle) subtitle.classList.remove('hidden');
         studyModeSelect.style.display = 'inline-block';
         openSrManagerBtn.style.display = 'inline-block';
+        calibrationToggle.style.display = 'inline-flex';
         // Refresh saved decks display
         displaySavedDecks(deckSearchInput.value);
     } else {
@@ -4898,6 +4906,7 @@ function openSpacedRepetitionManager() {
         if (subtitle) subtitle.classList.add('hidden');
         studyModeSelect.style.display = 'none';
         openSrManagerBtn.style.display = 'none';
+        calibrationToggle.style.display = 'none';
         displaySpacedRepetitionBuckets();
     }
 }
@@ -5235,10 +5244,11 @@ function startSelectedBuckets() {
     // Set active decks for title display
     activeDecks = ['SR Buckets'];
 
-    // Ensure study mode is set to spaced-repetition and hide selector
+    // Ensure study mode is set to spaced-repetition and hide menu controls
     studyMode = 'spaced-repetition';
     studyModeSelect.value = 'spaced-repetition';
     studyModeSelect.style.display = 'none';
+    calibrationToggle.style.display = 'none';
 
     // Update the app title
     updateAppTitle(['SR Buckets']);

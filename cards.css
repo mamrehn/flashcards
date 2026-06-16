@@ -862,15 +862,17 @@ body {
     display: inline-flex;
     align-items: center;
     gap: 0.3rem;
-    font-size: 0.9rem;
-    color: var(--text-color);
+    font-size: 0.85rem;
+    color: var(--text-muted);
     cursor: pointer;
     white-space: nowrap;
 }
 
 .calibration-toggle input {
-    width: 1.05rem;
-    height: 1.05rem;
+    width: 0.95rem;
+    height: 0.95rem;
+    /* Match the calm app accent instead of the loud OS default (often orange). */
+    accent-color: var(--primary);
     cursor: pointer;
 }
 
