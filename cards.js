@@ -434,11 +434,11 @@ function initializeApp() {
     nextCardBtn.style.display = 'none';
 
     // Load saved decks + study data first, then render (so knowledge badges and
-    // the menu summary have their data on the very first paint).
+    // the menu summary have their data on the very first paint). Snapshots are
+    // recorded per completed session (in showFeedback), not on app open.
     loadSavedDecks();
     loadSpacedRepetitionData();
     loadProgressData();
-    recordLernstandSnapshot();
     displaySavedDecks();
 
     // Set up service worker update listener
@@ -5377,8 +5377,9 @@ function countDueCards() {
 }
 
 /**
- * Append (or overwrite for today) a snapshot of overall Lernstand so the journey
- * curve can be drawn later. No-op until at least one card has been studied.
+ * Append a snapshot of overall Lernstand after a completed session, so the
+ * journey curve grows per session (and therefore within a single cram day, not
+ * only across calendar days). No-op until at least one card has been studied.
  */
 function recordLernstandSnapshot() {
     const allDecks = Object.keys(savedDecks);
@@ -5393,20 +5394,16 @@ function recordLernstandSnapshot() {
         const k = computeDeckKnowledge([d]);
         if (k.attempted > 0) perDeck[d] = k.percent;
     }
-    const today = new Date().toISOString().slice(0, 10);
-    const entry = {
-        date: today,
+    lernstandHistory.push({
+        date: new Date().toISOString().slice(0, 10),
         overallPercent: knowledge.percent,
         attempted: knowledge.attempted,
         total: knowledge.total,
         masteredCount: mastered,
         calibration: cal.percent,
         perDeck,
-    };
-    const last = lernstandHistory.at(-1);
-    if (last && last.date === today) lernstandHistory[lernstandHistory.length - 1] = entry;
-    else lernstandHistory.push(entry);
-    if (lernstandHistory.length > 90) lernstandHistory = lernstandHistory.slice(-90);
+    });
+    if (lernstandHistory.length > 120) lernstandHistory = lernstandHistory.slice(-120);
     persistToStorage('lernstandHistory', JSON.stringify(lernstandHistory));
 }
 
@@ -5641,7 +5638,7 @@ function progressRing(percent, caption) {
 /** Lernstand-over-time line chart from the daily snapshots. */
 function progressTrend(points) {
     if (points.length < 2) {
-        return '<p class="progress-empty">Noch nicht genug Verlaufsdaten – lerne weiter, dann wächst hier deine Kurve.</p>';
+        return '<p class="progress-empty">Nach deiner zweiten Lernsitzung wächst hier deine Kurve.</p>';
     }
     const w = 320;
     const h = 90;
@@ -5660,7 +5657,7 @@ function progressTrend(points) {
             <path class="trend-line" d="${line}" vector-effect="non-scaling-stroke"></path>
             <circle class="trend-dot" cx="${x(n - 1).toFixed(1)}" cy="${y(last.overallPercent).toFixed(1)}" r="3"></circle>
         </svg>
-        <div class="progress-trend-labels"><span>${points[0].date.slice(5)}</span><span>heute · ${last.overallPercent} %</span></div>`;
+        <div class="progress-trend-labels"><span>${points[0].date.slice(5)}</span><span>zuletzt · ${last.overallPercent} %</span></div>`;
 }
 
 /** Confidence-vs-accuracy reliability chart (per confidence level). */
