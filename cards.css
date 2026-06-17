@@ -1142,7 +1142,12 @@ body {
     margin: 0.2rem 0 0.5rem;
 }
 
+.progress-trend-wrap {
+    position: relative;
+}
+
 .progress-trend {
+    display: block;
     width: 100%;
     height: 90px;
 }
@@ -1160,15 +1165,24 @@ body {
     stroke-linecap: round;
 }
 
+/* Session markers overlaid on the chart (HTML, so they stay round regardless of
+   the SVG's non-uniform stretch). Positioned by their inline left%/top px. */
 .trend-dot {
-    fill: var(--primary);
+    position: absolute;
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--primary);
     /* Halo in the card colour so each point stands out from the line. */
-    stroke: var(--surface-color);
-    stroke-width: 1.5;
+    border: 1.5px solid var(--surface-color);
+    box-sizing: border-box;
+    transform: translate(-50%, -50%);
 }
 
 .trend-dot-last {
-    fill: var(--success, #2ecc71);
+    width: 10px;
+    height: 10px;
+    background: var(--success, #2ecc71);
 }
 
 .progress-trend-labels {

@@ -5685,21 +5685,27 @@ function progressTrend(points) {
         .join(' ');
     const area = `${line} L${x(n - 1).toFixed(1)},${(h - pad).toFixed(1)} L${x(0).toFixed(1)},${(h - pad).toFixed(1)} Z`;
     const last = points.at(-1);
-    // A marker per session snapshot (the latest emphasized), each with a hover
-    // title. non-scaling-stroke keeps the halo crisp under the stretched viewBox.
+    // Markers are HTML, overlaid on the chart, not SVG <circle>s: the chart uses
+    // preserveAspectRatio="none" to stretch the line to full width, which would
+    // squash SVG circles into ovals. HTML dots stay perfectly round at any width.
+    // x → left%; y → top px (the SVG is a fixed 90px tall == the viewBox height,
+    // so vertical user-units map 1:1 to pixels).
     const dots = points
         .map((p, i) => {
             const isLast = i === n - 1;
-            const cls = isLast ? 'trend-dot trend-dot-last' : 'trend-dot';
-            return `<circle class="${cls}" cx="${x(i).toFixed(1)}" cy="${y(p.overallPercent).toFixed(1)}" r="${isLast ? 3.5 : 2.5}" vector-effect="non-scaling-stroke"><title>${sanitizeHTML(p.date.slice(5))} · ${p.overallPercent} %</title></circle>`;
+            const leftPct = ((x(i) / w) * 100).toFixed(2);
+            const topPx = y(p.overallPercent).toFixed(1);
+            return `<span class="trend-dot${isLast ? ' trend-dot-last' : ''}" style="left:${leftPct}%;top:${topPx}px" title="${sanitizeHTML(p.date.slice(5))} · ${p.overallPercent} %"></span>`;
         })
         .join('');
     return `
-        <svg class="progress-trend" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" role="img" aria-label="Lernstand-Verlauf">
-            <path class="trend-area" d="${area}"></path>
-            <path class="trend-line" d="${line}" vector-effect="non-scaling-stroke"></path>
+        <div class="progress-trend-wrap">
+            <svg class="progress-trend" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" role="img" aria-label="Lernstand-Verlauf">
+                <path class="trend-area" d="${area}"></path>
+                <path class="trend-line" d="${line}" vector-effect="non-scaling-stroke"></path>
+            </svg>
             ${dots}
-        </svg>
+        </div>
         <div class="progress-trend-labels"><span>${points[0].date.slice(5)}</span><span>zuletzt · ${last.overallPercent} %</span></div>`;
 }
 
