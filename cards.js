@@ -5472,7 +5472,8 @@ function checkAchievements() {
         const k = computeDeckKnowledge([d]);
         if (k.total > 0 && k.percent >= 80 && !achievements.deckMastered[d]) {
             achievements.deckMastered[d] = new Date().toISOString();
-            earned.push(`Deck gemeistert: ${d}`);
+            const cats = deckCategoriesLabel(d);
+            earned.push(cats ? `Deck gemeistert: ${d} · ${cats}` : `Deck gemeistert: ${d}`);
         }
     }
     if (earned.length > 0) saveProgressData();
@@ -5764,12 +5765,38 @@ function progressWeakSpots(allDecks) {
     return `<div class="weakspot-list">${rows}</div>${btn}`;
 }
 
+/**
+ * Comma-joined category list for a deck (the JSON file), so a mastery pill can
+ * name what was actually learned — a deck is usually one file inside a larger
+ * topic, not the whole subject. Uncategorized cards fall under "Allgemein".
+ * @param {string} deckName
+ * @returns {string}
+ */
+function deckCategoriesLabel(deckName) {
+    const deck = savedDecks[deckName];
+    if (!deck || !Array.isArray(deck.cards)) return '';
+    const cats = new Set();
+    for (const card of deck.cards) {
+        if (Array.isArray(card.categories) && card.categories.length > 0) {
+            for (const cat of card.categories) cats.add(cat);
+        } else {
+            cats.add('__uncategorized__');
+        }
+    }
+    return [...cats]
+        .map((c) => (c === '__uncategorized__' ? 'Allgemein' : c))
+        .sort((a, b) => a.localeCompare(b, 'de'))
+        .join(', ');
+}
+
 /** Earned milestones as calm text pills (no emoji). */
 function progressAchievements(cal) {
     const badges = [];
     for (const d of Object.keys(achievements.deckMastered || {})) {
-        if (savedDecks[d])
-            badges.push(`<span class="achv achv-master">Gemeistert: ${sanitizeHTML(d)}</span>`);
+        if (!savedDecks[d]) continue;
+        const cats = deckCategoriesLabel(d);
+        const label = cats ? `${d} · ${cats}` : d;
+        badges.push(`<span class="achv achv-master">Gemeistert: ${sanitizeHTML(label)}</span>`);
     }
     if (cal.pairs >= 10 && cal.percent !== null && cal.percent >= 80) {
         badges.push(`<span class="achv achv-cal">Gut kalibriert: ${cal.percent} %</span>`);
