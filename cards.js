@@ -3476,6 +3476,12 @@ function markAnswer(scoreOrBool) {
         if (deckStats[deckName]) {
             deckStats[deckName].incorrect += 1 - score;
         }
+        if (localStorage.getItem('flashcards-sound') === 'enabled') {
+            const audio = new Audio('fahhhhhhhhhhhhhh.mp3');
+            audio.play().catch(function (err) {
+                console.warn('Audio playback failed:', err);
+            });
+        }
     }
 
     if (isFullyCorrect) {
