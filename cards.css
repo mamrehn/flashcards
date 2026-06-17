@@ -1162,6 +1162,13 @@ body {
 
 .trend-dot {
     fill: var(--primary);
+    /* Halo in the card colour so each point stands out from the line. */
+    stroke: var(--surface-color);
+    stroke-width: 1.5;
+}
+
+.trend-dot-last {
+    fill: var(--success, #2ecc71);
 }
 
 .progress-trend-labels {

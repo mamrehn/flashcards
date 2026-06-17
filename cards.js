@@ -5685,11 +5685,20 @@ function progressTrend(points) {
         .join(' ');
     const area = `${line} L${x(n - 1).toFixed(1)},${(h - pad).toFixed(1)} L${x(0).toFixed(1)},${(h - pad).toFixed(1)} Z`;
     const last = points.at(-1);
+    // A marker per session snapshot (the latest emphasized), each with a hover
+    // title. non-scaling-stroke keeps the halo crisp under the stretched viewBox.
+    const dots = points
+        .map((p, i) => {
+            const isLast = i === n - 1;
+            const cls = isLast ? 'trend-dot trend-dot-last' : 'trend-dot';
+            return `<circle class="${cls}" cx="${x(i).toFixed(1)}" cy="${y(p.overallPercent).toFixed(1)}" r="${isLast ? 3.5 : 2.5}" vector-effect="non-scaling-stroke"><title>${sanitizeHTML(p.date.slice(5))} · ${p.overallPercent} %</title></circle>`;
+        })
+        .join('');
     return `
         <svg class="progress-trend" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" role="img" aria-label="Lernstand-Verlauf">
             <path class="trend-area" d="${area}"></path>
             <path class="trend-line" d="${line}" vector-effect="non-scaling-stroke"></path>
-            <circle class="trend-dot" cx="${x(n - 1).toFixed(1)}" cy="${y(last.overallPercent).toFixed(1)}" r="3"></circle>
+            ${dots}
         </svg>
         <div class="progress-trend-labels"><span>${points[0].date.slice(5)}</span><span>zuletzt · ${last.overallPercent} %</span></div>`;
 }
