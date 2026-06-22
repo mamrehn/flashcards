@@ -194,6 +194,13 @@ let examDate = null;
 /** @type {number} Overall Lernstand of the active decks when the current session started */
 let sessionStartLernstand = 0;
 
+/**
+ * @type {string} Active scope of the Fortschritt → Übersicht dashboard:
+ * '__all__' for the whole library, or a topic key (one imported ZIP/deck).
+ * Held in memory only — resets to the overview each fresh session.
+ */
+let progressScopeKey = '__all__';
+
 // ============================================================================
 // DOM Elements Cache
 // ============================================================================
@@ -3962,6 +3969,28 @@ function computeDeckKnowledge(deckNames) {
 }
 
 /**
+ * SR-data entries (values) belonging to the given decks. SR keys are
+ * `deckName|||question`, so we match against the exact key set derived from the
+ * decks' current cards — robust even when a deck name contains odd characters.
+ * Passing null/undefined returns every entry (the library-wide / "Gesamt" view,
+ * including any orphaned data from deleted decks — matching the legacy behaviour).
+ * @param {string[]|null} [deckNames]
+ * @returns {Array<object>}
+ */
+function srDataForDecks(deckNames) {
+    if (!deckNames) return Object.values(spacedRepetitionData);
+    const keys = new Set();
+    for (const d of deckNames) {
+        for (const c of savedDecks[d]?.cards || []) keys.add(`${d}|||${c.question}`);
+    }
+    const out = [];
+    for (const [key, value] of Object.entries(spacedRepetitionData)) {
+        if (keys.has(key)) out.push(value);
+    }
+    return out;
+}
+
+/**
  * Build the small "Lernstand" badge (mini progress bar + percent) shown in
  * deck rows. Returns null when no card of the decks was ever attempted.
  * @param {string[]} deckNames
@@ -4779,10 +4808,11 @@ function openBookViewForBucket(step) {
  * Build the ladder-distribution bar (how many cards sit in each consolidation
  * stage) plus a compact facts line. Rendered in the progress overview; reuses
  * the existing sr-bucket-bar styling.
+ * @param {string[]} [deckNames] Restrict to these decks; omit for the whole library.
  * @returns {string} HTML
  */
-function buildLadderDistributionHTML() {
-    const srEntries = Object.values(spacedRepetitionData);
+function buildLadderDistributionHTML(deckNames) {
+    const srEntries = srDataForDecks(deckNames);
     const total = srEntries.length;
     if (total === 0) {
         return '<p class="progress-empty">Noch keine Karten im Wiederholungssystem – starte eine Lernsitzung.</p>';
@@ -5368,9 +5398,10 @@ function countMastered(deckNames) {
  * Calibration across all confidence-rated answers: an overall agreement score
  * (1 − mean abs error of normalized confidence vs. outcome) plus a per-level
  * accuracy breakdown for the reliability chart.
+ * @param {string[]} [deckNames] Restrict to these decks; omit for the whole library.
  * @returns {{percent:number|null, pairs:number, byLevel:Array<{level:number,count:number,accuracy:number|null}>}}
  */
-function computeCalibration() {
+function computeCalibration(deckNames) {
     const byLevel = [
         { level: 1, sum: 0, n: 0 },
         { level: 2, sum: 0, n: 0 },
@@ -5378,7 +5409,7 @@ function computeCalibration() {
     ];
     let pairs = 0;
     let errSum = 0;
-    for (const data of Object.values(spacedRepetitionData)) {
+    for (const data of srDataForDecks(deckNames)) {
         if (!data.confHistory || !data.history) continue;
         for (const [i, c] of data.confHistory.entries()) {
             if (c === null || c === undefined) continue;
@@ -5403,10 +5434,13 @@ function computeCalibration() {
     };
 }
 
-/** Count of cards whose next review is due now. */
-function countDueCards() {
+/**
+ * Count of cards whose next review is due now.
+ * @param {string[]} [deckNames] Restrict to these decks; omit for the whole library.
+ */
+function countDueCards(deckNames) {
     const now = new Date();
-    return Object.values(spacedRepetitionData).filter((d) => new Date(d.nextReview) <= now).length;
+    return srDataForDecks(deckNames).filter((d) => new Date(d.nextReview) <= now).length;
 }
 
 /**
@@ -5605,29 +5639,113 @@ function closeProgressView() {
     displaySavedDecks(deckSearchInput.value);
 }
 
+/**
+ * Scope selector for the progress dashboard: a wrapping row of chips that
+ * switch the stats between the whole library ("Gesamt") and a single deck
+ * (one imported ZIP = one topic). Each chip carries a traffic-light dot so the
+ * selector itself doubles as an at-a-glance per-deck overview.
+ * @param {Array<{key:string,title:string,decks:string[]}>} topics
+ * @param {string} activeKey
+ * @returns {string} HTML
+ */
+function progressScopeSelector(topics, activeKey) {
+    const chip = (key, label, percent, attempted) => {
+        const active = key === activeKey;
+        const dotLevel = attempted > 0 ? levelClass(percent) : 'none';
+        const pct = attempted > 0 ? ` ${percent} %` : '';
+        const safeLabel = sanitizeHTML(label);
+        // sanitizeHTML encodes <>& but not quotes, so harden the attribute too.
+        const titleAttr = `${safeLabel}${pct}`.replaceAll('"', '&quot;');
+        return `<button type="button" class="scope-chip${active ? ' active' : ''}"
+            role="tab" aria-selected="${active}" data-scope="${encodeURIComponent(key)}"
+            title="${titleAttr}">
+            <span class="scope-dot scope-dot-${dotLevel}"></span>
+            <span class="scope-chip-label">${safeLabel}</span>
+        </button>`;
+    };
+    const all = computeDeckKnowledge(Object.keys(savedDecks));
+    let chips = chip('__all__', 'Gesamt', all.percent, all.attempted);
+    for (const t of topics) {
+        const k = computeDeckKnowledge(t.decks);
+        chips += chip(t.key, t.title, k.percent, k.attempted);
+    }
+    return `<div class="progress-scope" role="tablist" aria-label="Statistik nach Deck">${chips}</div>`;
+}
+
+/**
+ * Trend points (date + averaged Lernstand) for a scoped set of decks, drawn
+ * from the per-deck values stored in each daily snapshot. Mirrors the global
+ * `lernstandHistory` shape so `progressTrend` can render it unchanged.
+ * @param {string[]} deckNames
+ * @returns {Array<{date:string, overallPercent:number}>}
+ */
+function scopedTrendPoints(deckNames) {
+    const points = [];
+    for (const snap of lernstandHistory) {
+        const vals = deckNames.map((d) => snap.perDeck?.[d]).filter((v) => typeof v === 'number');
+        if (vals.length > 0) {
+            points.push({
+                date: snap.date,
+                overallPercent: Math.round(vals.reduce((a, b) => a + b, 0) / vals.length),
+            });
+        }
+    }
+    return points;
+}
+
 /** Build the whole progress page into #progress-content and wire its controls. */
 function renderProgressView() {
-    const allDecks = Object.keys(savedDecks);
-    const overall = computeDeckKnowledge(allDecks);
-    const cal = computeCalibration();
+    const topics = [...buildTopics().values()].sort((a, b) => a.title.localeCompare(b.title, 'de'));
+    // Resolve the active scope; fall back to "Gesamt" if its deck/topic is gone.
+    const activeTopic = topics.find((t) => t.key === progressScopeKey);
+    if (progressScopeKey !== '__all__' && !activeTopic) progressScopeKey = '__all__';
+    const isAll = progressScopeKey === '__all__';
+    const scopeDecks = isAll ? Object.keys(savedDecks) : activeTopic.decks;
+    // SR-data filter: undefined keeps the exact library-wide behaviour (incl. any
+    // orphaned entries); a deck array scopes everything to the selected deck.
+    const srScope = isAll ? undefined : scopeDecks;
+
+    const overall = computeDeckKnowledge(scopeDecks);
+    const cal = computeCalibration(srScope);
+    const trendPoints = isAll ? lernstandHistory : scopedTrendPoints(scopeDecks);
     const content = document.querySelector('#progress-content');
+
+    const scopeCaption =
+        isAll || !activeTopic.subtitle
+            ? ''
+            : `<p class="progress-scope-caption">${sanitizeHTML(activeTopic.subtitle)}</p>`;
+
     content.innerHTML = `
+        ${progressScopeSelector(topics, progressScopeKey)}
+        ${scopeCaption}
         <section class="progress-section progress-readiness">
             ${progressRing(overall.percent, 'Lernstand erreicht')}
             <div class="readiness-side">
                 <div class="readiness-goal">Ziel: Lernstand 80 % – dann „sitzt“ der Stoff.</div>
-                <div class="readiness-facts">${overall.attempted} von ${overall.total} Karten geübt · ${countDueCards()} fällig</div>
-                ${progressExam(allDecks)}
+                <div class="readiness-facts">${overall.attempted} von ${overall.total} Karten geübt · ${countDueCards(srScope)} fällig</div>
+                ${progressExam(scopeDecks, isAll)}
             </div>
         </section>
-        <section class="progress-section"><h4>Lernstand-Verlauf</h4>${progressTrend(lernstandHistory)}</section>
+        <section class="progress-section"><h4>Lernstand-Verlauf</h4>${progressTrend(trendPoints)}</section>
         <section class="progress-section"><h4>Selbsteinschätzung</h4>${progressReliability(cal)}</section>
-        <section class="progress-section"><h4>Abdeckung &amp; Beherrschung</h4>${progressCoverage(allDecks)}</section>
-        <section class="progress-section"><h4>Wiederholungs-Stufen</h4>${buildLadderDistributionHTML()}</section>
-        <section class="progress-section"><h4>Schwachstellen</h4>${progressWeakSpots(allDecks)}</section>
-        <section class="progress-section"><h4>Erfolge</h4>${progressAchievements(cal)}</section>
-        <section class="progress-section"><h4>Sitzungen</h4>${progressSessions()}</section>
+        <section class="progress-section"><h4>Abdeckung &amp; Beherrschung</h4>${progressCoverage(scopeDecks)}</section>
+        <section class="progress-section"><h4>Wiederholungs-Stufen</h4>${buildLadderDistributionHTML(srScope)}</section>
+        <section class="progress-section"><h4>${isAll ? 'Schwachstellen' : 'Schwachstellen je Lerneinheit'}</h4>${progressWeakSpots(scopeDecks)}</section>
+        <section class="progress-section"><h4>Erfolge</h4>${progressAchievements(cal, srScope)}</section>
+        <section class="progress-section"><h4>Sitzungen</h4>${progressSessions(srScope)}</section>
     `;
+
+    const scopeBar = content.querySelector('.progress-scope');
+    if (scopeBar) {
+        scopeBar.addEventListener('click', (e) => {
+            const chip = e.target.closest('.scope-chip');
+            if (!chip) return;
+            const key = decodeURIComponent(chip.dataset.scope);
+            if (key === progressScopeKey) return;
+            progressScopeKey = key;
+            renderProgressView();
+        });
+    }
 
     const examInput = content.querySelector('#exam-date-input');
     if (examInput) {
@@ -5804,22 +5922,32 @@ function deckCategoriesLabel(deckName) {
         .join(', ');
 }
 
-/** Earned milestones as calm text pills (no emoji). */
-function progressAchievements(cal) {
+/**
+ * Earned milestones as calm text pills (no emoji).
+ * @param {{pairs:number, percent:number|null}} cal
+ * @param {string[]} [deckNames] When given, scope mastery pills to these decks
+ *   and drop the library-wide calibration/best-session pills (those only make
+ *   sense in the "Gesamt" view).
+ */
+function progressAchievements(cal, deckNames) {
+    const scoped = deckNames ? new Set(deckNames) : null;
     const badges = [];
     for (const d of Object.keys(achievements.deckMastered || {})) {
         if (!savedDecks[d]) continue;
+        if (scoped && !scoped.has(d)) continue;
         const cats = deckCategoriesLabel(d);
         const label = cats ? `${d} · ${cats}` : d;
         badges.push(`<span class="achv achv-master">Gemeistert: ${sanitizeHTML(label)}</span>`);
     }
-    if (cal.pairs >= 10 && cal.percent !== null && cal.percent >= 80) {
-        badges.push(`<span class="achv achv-cal">Gut kalibriert: ${cal.percent} %</span>`);
-    }
-    if (achievements.bestSessionScore > 0) {
-        badges.push(
-            `<span class="achv achv-best">Bestleistung: ${achievements.bestSessionScore} %</span>`
-        );
+    if (!scoped) {
+        if (cal.pairs >= 10 && cal.percent !== null && cal.percent >= 80) {
+            badges.push(`<span class="achv achv-cal">Gut kalibriert: ${cal.percent} %</span>`);
+        }
+        if (achievements.bestSessionScore > 0) {
+            badges.push(
+                `<span class="achv achv-best">Bestleistung: ${achievements.bestSessionScore} %</span>`
+            );
+        }
     }
     if (badges.length === 0) {
         return '<p class="progress-empty">Noch keine Erfolge – meistere ein Deck (Lernstand ≥ 80 %).</p>';
@@ -5827,14 +5955,22 @@ function progressAchievements(cal) {
     return `<div class="achv-list">${badges.join('')}</div>`;
 }
 
-/** Recent session log. */
-function progressSessions() {
-    if (sessionHistory.length === 0) {
+/**
+ * Recent session log.
+ * @param {string[]} [deckNames] When given, only sessions that touched one of
+ *   these decks are listed (the per-deck scope).
+ */
+function progressSessions(deckNames) {
+    const scoped = deckNames ? new Set(deckNames) : null;
+    let sessions = [...sessionHistory].reverse();
+    if (scoped) {
+        sessions = sessions.filter((s) => (s.deckNames || []).some((d) => scoped.has(d)));
+    }
+    if (sessions.length === 0) {
         return '<p class="progress-empty">Noch keine abgeschlossenen Sitzungen.</p>';
     }
     const confLabels = ['', 'niedrig', 'mittel', 'hoch'];
-    const rows = [...sessionHistory]
-        .reverse()
+    const rows = sessions
         .slice(0, 10)
         .map((s) => {
             const d = new Date(s.endedAt);
@@ -5856,8 +5992,14 @@ function progressSessions() {
     return `<div class="session-list">${rows}</div>`;
 }
 
-/** Optional exam-date countdown + date picker. */
-function progressExam(allDecks) {
+/**
+ * Optional exam-date countdown + date picker. The exam date is a single,
+ * library-wide setting, so the picker is only shown in the "Gesamt" view; the
+ * countdown still appears per deck, reporting that deck's Lernstand.
+ * @param {string[]} allDecks Decks the reported Lernstand is computed over.
+ * @param {boolean} [includePicker=true] Render the date input (global view only).
+ */
+function progressExam(allDecks, includePicker = true) {
     const overall = computeDeckKnowledge(allDecks);
     let countdown = '';
     if (examDate) {
@@ -5867,10 +6009,12 @@ function progressExam(allDecks) {
                 ? `<div class="exam-countdown">Noch <strong>${days}</strong> ${days === 1 ? 'Tag' : 'Tage'} bis zur Prüfung · Lernstand <strong>${overall.percent} %</strong></div>`
                 : '<div class="exam-countdown">Der Prüfungstermin liegt in der Vergangenheit.</div>';
     }
-    return `${countdown}
-        <label class="exam-input-row">Prüfungstermin (optional):
+    const picker = includePicker
+        ? `<label class="exam-input-row">Prüfungstermin (optional):
             <input type="date" id="exam-date-input" value="${examDate || ''}">
-        </label>`;
+        </label>`
+        : '';
+    return `${countdown}${picker}`;
 }
 
 /** Average per-deck Lernstand series from the snapshots, for menu sparklines. */

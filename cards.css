@@ -1044,6 +1044,94 @@ body {
     outline-offset: 2px;
 }
 
+/* Scope selector on the Fortschritt → Übersicht panel: switches the dashboard
+   between the whole library ("Gesamt") and a single deck (one imported ZIP).
+   A wrapping pill row scales to many decks and stays touch-first. */
+.progress-scope {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+    margin-bottom: 0.9rem;
+}
+
+.scope-chip {
+    font: inherit;
+    font-size: 0.85rem;
+    font-weight: 600;
+    line-height: 1.1;
+    /* ≥44px tap target on a touch-first UI; stays pill-shaped via the radius. */
+    min-height: 44px;
+    padding: 0.3rem 0.85rem;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    max-width: 100%;
+    border-radius: 999px;
+    border: 1px solid var(--input-border);
+    background-color: var(--surface-color);
+    color: var(--text-muted);
+    cursor: pointer;
+    user-select: none;
+    transition:
+        background-color 0.15s ease,
+        color 0.15s ease,
+        border-color 0.15s ease;
+}
+
+.scope-chip:hover {
+    border-color: var(--primary);
+    color: var(--text-color);
+}
+
+.scope-chip.active {
+    background-color: var(--primary);
+    border-color: transparent;
+    color: #fff;
+}
+
+.scope-chip:focus-visible {
+    outline: 2px solid var(--primary);
+    outline-offset: 2px;
+}
+
+.scope-chip-label {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 13rem;
+}
+
+.scope-dot {
+    flex-shrink: 0;
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    background-color: var(--input-border);
+}
+
+.scope-dot-low {
+    background-color: var(--danger, #dc3545);
+}
+
+.scope-dot-mid {
+    background-color: var(--warning, #e67e22);
+}
+
+.scope-dot-high {
+    background-color: var(--success, #28a745);
+}
+
+.scope-chip.active .scope-dot-none {
+    background-color: rgba(255, 255, 255, 0.55);
+}
+
+.progress-scope-caption {
+    margin: -0.4rem 0 0.85rem;
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: var(--text-muted);
+}
+
 /* Compact facts line under the ladder-distribution bar */
 .ladder-facts {
     margin-top: 0.4rem;
