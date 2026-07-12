@@ -16,9 +16,18 @@ const {
     normalizeAnswer,
     dedupeCardsByQuestion,
     validateCards,
+    cardType,
+    canonicalLabel,
+    acceptedAnswers,
+    foldIdentitySet,
+    isSafeMediaSrc,
+    isPoolOnlyIdentify,
     SR_STEP_MINUTES,
     SR_PASS_SCORE,
 } = require('../cards.js');
+
+// A tiny but structurally valid inline image data URI for media tests.
+const IMG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAAB';
 
 test('projectSR: perfect recall jumps two ladder steps', () => {
     assert.deepEqual(projectSR(0, 1), { step: 2, waitMinutes: SR_STEP_MINUTES[2] });
@@ -110,4 +119,136 @@ test('cardKnowledge: empty history is zero, strong history is high', () => {
     assert.ok(strong >= 0.8, `expected strong knowledge, got ${strong}`);
     const weak = cardKnowledge({ history: [0, 0, 0], step: 0 });
     assert.ok(weak < strong);
+});
+
+// ---------------------------------------------------------------------------
+// Identify card type
+// ---------------------------------------------------------------------------
+
+test('cardType: explicit type wins; legacy shapes still infer correctly', () => {
+    assert.equal(cardType({ type: 'identify', labels: { name: 'X' }, media: IMG }), 'identify');
+    assert.equal(cardType({ type: 'IDENTIFY' }), 'identify'); // case-insensitive
+    // Back-compat: no type field → infer from shape exactly as before.
+    assert.equal(cardType({ question: 'Q', pairs: [] }), 'matching');
+    assert.equal(cardType({ question: 'Q', options: ['a'], correct: [0] }), 'mc');
+    assert.equal(cardType({ question: 'Q', answer: 'A' }), 'text');
+    // Shape fallback for identify (labels + media, no explicit type).
+    assert.equal(cardType({ labels: { name: 'X' }, media: IMG }), 'identify');
+});
+
+test('isSafeMediaSrc: allows image data URIs and http(s), rejects scripts', () => {
+    assert.ok(isSafeMediaSrc(IMG));
+    assert.ok(isSafeMediaSrc('https://example.com/a.png'));
+    assert.ok(!isSafeMediaSrc('javascript:alert(1)'));
+    assert.ok(!isSafeMediaSrc('data:text/html;base64,AAAA'));
+    assert.ok(!isSafeMediaSrc(''));
+    assert.ok(!isSafeMediaSrc(null));
+});
+
+test('canonicalLabel: joins labelParts in order', () => {
+    const card = { labels: { firstName: 'David', lastName: 'Adam' } };
+    const cfg = { labelParts: ['firstName', 'lastName'] };
+    assert.equal(canonicalLabel(card, cfg), 'David Adam');
+    // Missing parts are skipped, order preserved.
+    assert.equal(canonicalLabel({ labels: { lastName: 'Adam' } }, cfg), 'Adam');
+});
+
+test('acceptedAnswers: anyPart accepts each part and the full name', () => {
+    const card = { labels: { firstName: 'David', lastName: 'Adam' } };
+    const cfg = { labelParts: ['firstName', 'lastName'], accept: 'anyPart' };
+    const acc = acceptedAnswers(card, cfg);
+    assert.ok(acc.has(normalizeAnswer('David')));
+    assert.ok(acc.has(normalizeAnswer('Adam')));
+    assert.ok(acc.has(normalizeAnswer('David Adam')));
+    assert.ok(!acc.has(normalizeAnswer('Kevin')));
+});
+
+test('acceptedAnswers: full only accepts the full name; allParts allows reorder', () => {
+    const card = { labels: { firstName: 'David', lastName: 'Adam' } };
+    const full = acceptedAnswers(card, {
+        labelParts: ['firstName', 'lastName'],
+        accept: 'full',
+    });
+    assert.ok(full.has(normalizeAnswer('David Adam')));
+    assert.ok(!full.has(normalizeAnswer('David')));
+
+    const allParts = acceptedAnswers(card, {
+        labelParts: ['firstName', 'lastName'],
+        accept: 'allParts',
+    });
+    assert.ok(allParts.has(normalizeAnswer('David Adam')));
+    assert.ok(allParts.has(normalizeAnswer('Adam David')));
+    assert.ok(!allParts.has(normalizeAnswer('David')));
+});
+
+test('acceptedAnswers: per-card accept overrides add nicknames', () => {
+    const card = { labels: { firstName: 'David', lastName: 'Adam' }, accept: ['Dave'] };
+    const acc = acceptedAnswers(card, { labelParts: ['firstName', 'lastName'], accept: 'full' });
+    assert.ok(acc.has(normalizeAnswer('Dave')));
+});
+
+test('foldIdentitySet: folds set config and synthesizes the question key', () => {
+    const data = {
+        set: { labelParts: ['firstName', 'lastName'], prompt: 'Wer?' },
+        cards: [
+            { type: 'identify', media: IMG, labels: { firstName: 'David', lastName: 'Adam' } },
+            { question: 'Plain', answer: 'A' }, // untouched
+        ],
+    };
+    const [id, plain] = foldIdentitySet(data);
+    assert.equal(id.question, 'David Adam'); // synthesized from labels
+    assert.equal(id.identify.prompt, 'Wer?'); // folded from set
+    assert.equal(id.identify.accept, 'anyPart'); // default merged in
+    assert.deepEqual(plain, { question: 'Plain', answer: 'A' }); // non-identify unchanged
+});
+
+test('validateCards: accepts a folded identify card, rejects broken ones', () => {
+    const good = foldIdentitySet({
+        set: { labelParts: ['firstName', 'lastName'] },
+        cards: [{ type: 'identify', media: IMG, labels: { firstName: 'David', lastName: 'Adam' } }],
+    });
+    assert.equal(validateCards(good).length, 1);
+
+    // Absent media → kept (pool-only distractor), not rejected.
+    const noMedia = foldIdentitySet({
+        set: { labelParts: ['name'] },
+        cards: [{ type: 'identify', labels: { name: 'X' } }],
+    });
+    assert.equal(validateCards(noMedia).length, 1);
+    assert.ok(isPoolOnlyIdentify(validateCards(noMedia)[0]));
+
+    // Unsafe media → rejected.
+    const badMedia = foldIdentitySet({
+        set: { labelParts: ['name'] },
+        cards: [{ type: 'identify', media: 'javascript:1', labels: { name: 'X' } }],
+    });
+    assert.equal(validateCards(badMedia).length, 0);
+
+    // No usable label → rejected.
+    const noLabel = foldIdentitySet({
+        set: { labelParts: ['name'] },
+        cards: [{ type: 'identify', media: IMG, labels: { name: '' } }],
+    });
+    assert.equal(validateCards(noLabel).length, 0);
+});
+
+test('pool-only: a media:null identify card is valid but flagged pool-only', () => {
+    // A classmate with no photo — kept so its name can be a distractor.
+    const folded = foldIdentitySet({
+        set: { labelParts: ['firstName', 'lastName'] },
+        cards: [
+            { type: 'identify', media: null, labels: { firstName: 'Kevin', lastName: 'Engler' } },
+        ],
+    });
+    const valid = validateCards(folded);
+    assert.equal(valid.length, 1); // stored (reachable by the pool)
+    assert.equal(valid[0].question, 'Kevin Engler'); // still keyed by name
+    assert.ok(isPoolOnlyIdentify(valid[0])); // but not quizzable
+});
+
+test('isPoolOnlyIdentify: only media-less identify cards qualify', () => {
+    assert.ok(isPoolOnlyIdentify({ type: 'identify', media: null, labels: { name: 'X' } }));
+    assert.ok(isPoolOnlyIdentify({ type: 'identify', labels: { name: 'X' } })); // media absent
+    assert.ok(!isPoolOnlyIdentify({ type: 'identify', media: IMG, labels: { name: 'X' } }));
+    assert.ok(!isPoolOnlyIdentify({ question: 'Q', answer: 'A' })); // not identify
 });

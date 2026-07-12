@@ -97,6 +97,18 @@ const chipKey = (topicKey, category, type) => `${topicKey}${SEL_SEP}${category}$
 /** @type {Array<number>} Selected option indices for multiple choice questions */
 let selectedOptionIndices = [];
 
+/**
+ * @type {null | {
+ *   mode: 'recall'|'pickLabel'|'pickMedia',
+ *   card: object,
+ *   cfg: object,
+ *   choices: Array<{card: object, isCorrect: boolean, text?: string, media?: string}>|null,
+ *   selectedIndex: number,
+ * }} Per-showing state for the current "identify" card (which of the three
+ * modes is active, the generated choices, and the learner's selection).
+ */
+let identifyState = null;
+
 /** @type {Array<[number, number]>} Matching pairs: array of [leftIndex, shuffledRightIndex] tuples */
 let matchingPairs = [];
 
@@ -261,6 +273,9 @@ let undoBtn;
 let exportBackupBtn;
 let matchingContainer;
 let matchingResultContainer;
+let identifyMediaEl;
+let identifyChoicesEl;
+let identifyResultContainer;
 let matchingPairedSection = null;
 let matchingUnpairedSection = null;
 let matchingUnpairedLeftCol = null;
@@ -336,6 +351,9 @@ function initializeApp() {
     exportBackupBtn = document.querySelector('#export-backup-btn');
     matchingContainer = document.querySelector('#matching-container');
     matchingResultContainer = document.querySelector('#matching-result-container');
+    identifyMediaEl = document.querySelector('#identify-media');
+    identifyChoicesEl = document.querySelector('#identify-choices');
+    identifyResultContainer = document.querySelector('#identify-result-container');
     matchingContainer.addEventListener('keydown', (e) => {
         if (matchingDrag) return; // never re-render mid-drag (would break pointer capture)
         if (e.key === 'Escape' && (selectedLeftIndex !== null || selectedRightIndex !== null)) {
@@ -958,7 +976,7 @@ async function handleZipUpload(event) {
                     }
 
                     // Check card validity
-                    const validCards = validateCards(data.cards);
+                    const validCards = validateCards(foldIdentitySet(data));
 
                     if (validCards.length === 0) {
                         errorCount++;
@@ -1062,7 +1080,7 @@ async function handleLibraryImportDeepLink() {
                 continue;
             }
             if (!data || !Array.isArray(data.cards)) continue;
-            const validCards = validateCards(data.cards);
+            const validCards = validateCards(foldIdentitySet(data));
             if (validCards.length === 0) continue;
             const deckName = entry.name
                 .split('/')
@@ -1149,7 +1167,7 @@ function processJsonData(data, fileName) {
         return;
     }
 
-    const validCards = validateCards(data.cards);
+    const validCards = validateCards(foldIdentitySet(data));
 
     if (validCards.length === 0) {
         showError(
@@ -1256,6 +1274,21 @@ function dedupeCardsByQuestion(cards) {
  */
 function validateCards(cards) {
     const valid = cards.filter((card) => {
+        // Check identify format (at least one label; question is synthesized
+        // from labels by foldIdentitySet before this runs). Media may be a safe
+        // image source OR null/absent — a media-less card is kept as a
+        // pool-only distractor (see isPoolOnlyIdentify). A present-but-unsafe
+        // media (e.g. javascript:) is rejected.
+        if (cardType(card) === 'identify') {
+            const hasLabel =
+                card.labels &&
+                typeof card.labels === 'object' &&
+                Object.values(card.labels).some(
+                    (v) => typeof v === 'string' && v.trim().length > 0
+                );
+            const mediaOk = card.media == null || isSafeMediaSrc(card.media);
+            return mediaOk && hasLabel && !!card.question;
+        }
         // Check standard card format (question + answer)
         if (card.question && card.answer) {
             return true;
@@ -1366,13 +1399,244 @@ function persistToStorage(key, value) {
 // ============================================================================
 
 /**
- * Classify a card as multiple-choice, free-text, or matching based on shape.
+ * Classify a card. Prefers an explicit `type` field (the only reliable signal
+ * once the "identify" type exists), and falls back to shape-inference so every
+ * legacy deck — which has no `type` — keeps classifying exactly as before.
  * @param {object} card
- * @returns {'mc'|'text'|'matching'}
+ * @returns {'mc'|'text'|'matching'|'identify'}
  */
 function cardType(card) {
+    if (card && typeof card.type === 'string') {
+        switch (card.type.toLowerCase()) {
+            case 'identify': {
+                return 'identify';
+            }
+            case 'matching': {
+                return 'matching';
+            }
+            case 'mc': {
+                return 'mc';
+            }
+            case 'text':
+            case 'freetext':
+            case 'free_text': {
+                return 'text';
+            }
+            // No default — unknown labels fall through to shape-inference.
+        }
+    }
     if (Array.isArray(card.pairs)) return 'matching';
+    if (card.labels && typeof card.media === 'string') return 'identify';
     return Array.isArray(card.options) && Array.isArray(card.correct) ? 'mc' : 'text';
+}
+
+// ============================================================================
+// "Identify" card type — associate a media item (a face) with its label(s)
+// (a name), drawn from a pool of sibling entities. One card = one entity; the
+// three quiz modes (type the name / pick the name / pick the face) are chosen
+// at display time. See scripts/students-to-identify-deck.js for the authoring
+// side and the design notes in the deck's `set` block.
+// ============================================================================
+
+/** Defaults for a deck's `set` block, merged under any authored overrides. */
+const IDENTIFY_DEFAULTS = {
+    prompt: 'Worum handelt es sich?',
+    labelParts: ['name'],
+    accept: 'anyPart', // full | allParts | anyPart
+    modes: ['recall', 'pickLabel', 'pickMedia'],
+    distractors: 2,
+    mediaKind: 'image',
+};
+
+/**
+ * Guard a media source before it becomes an <img src>. Only inline image data
+ * URIs and http(s) URLs are allowed — never `javascript:` or other schemes.
+ * @param {unknown} src
+ * @returns {boolean}
+ */
+function isSafeMediaSrc(src) {
+    return (
+        typeof src === 'string' &&
+        (/^data:image\/[a-z0-9.+-]+;base64,/i.test(src) || /^https?:\/\//i.test(src))
+    );
+}
+
+/**
+ * A "pool-only" identify card is a labelled entity with no usable media
+ * (`media: null`, e.g. a classmate whose photo is missing). It can never be
+ * quizzed — every mode needs the face — but its name still enriches the
+ * distractor pool for the entities that do have a photo. Such cards are stored
+ * (so the pool can reach them) but excluded from the quiz rotation and counts.
+ * @param {object} card
+ * @returns {boolean}
+ */
+function isPoolOnlyIdentify(card) {
+    return cardType(card) === 'identify' && !isSafeMediaSrc(card.media);
+}
+
+/**
+ * The canonical, human-facing label for an identify card: its `labelParts`
+ * values joined in order (e.g. "David Adam"). Falls back to the pre-synthesized
+ * `question` field, then to any `name` label.
+ * @param {object} card
+ * @param {object} [cfg] - resolved set config (defaults to card.identify)
+ * @returns {string}
+ */
+function canonicalLabel(card, cfg = card.identify || IDENTIFY_DEFAULTS) {
+    const parts = (cfg.labelParts || [])
+        .map((p) => card.labels && card.labels[p])
+        .filter((v) => typeof v === 'string' && v.trim().length > 0)
+        .map((v) => v.trim());
+    if (parts.length > 0) return parts.join(' ');
+    if (typeof card.question === 'string' && card.question.trim()) return card.question.trim();
+    return (card.labels && card.labels.name) || '';
+}
+
+/**
+ * Build the set of accepted (normalized) free-text answers for `recall` mode
+ * from the card's labels, the set's `accept` policy, and any per-card `accept`
+ * override list (nicknames / alternate spellings).
+ *   - full      → only the full label, parts in order
+ *   - allParts  → all parts present (either ordering, for the common 2-part case)
+ *   - anyPart   → any single part, or the full label
+ * @param {object} card
+ * @param {object} cfg - resolved set config
+ * @returns {Set<string>} normalized accepted answers
+ */
+function acceptedAnswers(card, cfg) {
+    const parts = (cfg.labelParts || [])
+        .map((p) => card.labels && card.labels[p])
+        .filter((v) => typeof v === 'string' && v.trim().length > 0)
+        .map((v) => v.trim());
+    const accepted = new Set();
+    const full = parts.join(' ');
+    if (full) accepted.add(normalizeAnswer(full));
+    const policy = cfg.accept || 'anyPart';
+    if (policy === 'anyPart') {
+        for (const p of parts) accepted.add(normalizeAnswer(p));
+    } else if (policy === 'allParts' && parts.length > 1) {
+        accepted.add(normalizeAnswer([...parts].reverse().join(' ')));
+    }
+    if (Array.isArray(card.accept)) {
+        for (const a of card.accept) {
+            if (typeof a === 'string' && a.trim()) accepted.add(normalizeAnswer(a));
+        }
+    }
+    return accepted;
+}
+
+/**
+ * Fold a deck file's top-level `set` block onto each of its identify cards, and
+ * synthesize the `question`/key from the labels. Non-identify cards (and files
+ * without identify content) pass through untouched, so this is safe to run on
+ * every imported deck. Runs at import time, before validateCards, so the enriched
+ * cards are what gets stored in savedDecks.
+ * @param {object} data - parsed deck file ({ meta?, set?, cards })
+ * @returns {Array<object>} cards ready for validateCards
+ */
+function foldIdentitySet(data) {
+    const cardsIn = Array.isArray(data && data.cards) ? data.cards : [];
+    const setCfg = data && typeof data.set === 'object' && data.set ? data.set : {};
+    return cardsIn.map((card) => {
+        if (cardType(card) !== 'identify') return card;
+        const cfg = { ...IDENTIFY_DEFAULTS, ...setCfg };
+        const enriched = { ...card, type: 'identify', identify: cfg };
+        // Key/title = canonical label, so getCardKey/dedupe/browser all work
+        // exactly like the other types (which key on `question`).
+        if (!enriched.question) enriched.question = canonicalLabel(enriched, cfg);
+        return enriched;
+    });
+}
+
+/**
+ * All identify cards belonging to the same roster as `card` (its `sourceDeck`),
+ * excluding the card itself. This is the distractor pool. Reads from savedDecks
+ * (the full roster) so distractors are available even in a short/filtered
+ * session; falls back to the in-session `cards` list.
+ * @param {object} card
+ * @returns {Array<object>}
+ */
+function getIdentifyPool(card) {
+    const deck = savedDecks[card.sourceDeck];
+    const source = deck && Array.isArray(deck.cards) && deck.cards.length > 0 ? deck.cards : cards;
+    const selfKey = card.question;
+    return source.filter((c) => cardType(c) === 'identify' && c.question !== selfKey);
+}
+
+/**
+ * Fisher-Yates shuffle (in place) returning the same array, mirroring the
+ * shuffle used elsewhere for options/pairs.
+ * @template T
+ * @param {T[]} arr
+ * @returns {T[]}
+ */
+function shuffleInPlace(arr) {
+    for (let i = arr.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [arr[i], arr[j]] = [arr[j], arr[i]];
+    }
+    return arr;
+}
+
+/**
+ * Sample up to `n` distractor cards from the pool, preferring ones that share a
+ * category with the answer (harder, more useful discrimination) before falling
+ * back to the rest of the pool.
+ * @param {object} card - the answer card
+ * @param {Array<object>} pool
+ * @param {number} n
+ * @param {(c: object) => boolean} [usable] - extra feasibility filter
+ * @returns {Array<object>}
+ */
+function sampleDistractors(card, pool, n, usable = () => true) {
+    const cats = new Set(card.categories || []);
+    const candidates = pool.filter(usable);
+    const near = shuffleInPlace(
+        candidates.filter((c) => (c.categories || []).some((x) => cats.has(x)))
+    );
+    const far = shuffleInPlace(candidates.filter((c) => !near.includes(c)));
+    return [...near, ...far].slice(0, n);
+}
+
+/**
+ * Choose which of the three modes to show for an identify card, mastery-driven
+ * ("byMastery"): new/shaky cards get recognition (pick the name / pick the face),
+ * and once the card is sticking (SR step ≥ 2) it escalates to free-recall typing.
+ * Only modes that are enabled AND feasible for this card+pool are considered.
+ * @param {object} card
+ * @param {object} cfg - resolved set config
+ * @param {Array<object>} pool - distractor pool
+ * @returns {'recall'|'pickLabel'|'pickMedia'}
+ */
+function pickIdentifyMode(card, cfg, pool) {
+    const enabled = new Set(cfg.modes && cfg.modes.length ? cfg.modes : IDENTIFY_DEFAULTS.modes);
+    const need = Math.max(1, cfg.distractors || 0);
+    const mediaSiblings = pool.filter((c) => isSafeMediaSrc(c.media)).length;
+    const feasible = {
+        recall: enabled.has('recall'),
+        // pick-the-name needs enough sibling labels to fill the distractor slots
+        pickLabel: enabled.has('pickLabel') && pool.length >= need,
+        // pick-the-face needs this card AND enough siblings to have photos
+        pickMedia: enabled.has('pickMedia') && isSafeMediaSrc(card.media) && mediaSiblings >= need,
+    };
+    const recognition = ['pickLabel', 'pickMedia'].filter((m) => feasible[m]);
+    const data = spacedRepetitionData[getCardKey(card)];
+    const step = data && Number.isFinite(data.step) ? data.step : 0;
+
+    if (step >= 2 && feasible.recall) return 'recall';
+    if (recognition.length > 0) {
+        // Alternate the two recognition directions across repetitions so both the
+        // face→name and name→face bindings get exercised.
+        const reps = data && Number.isFinite(data.repetitions) ? data.repetitions : 0;
+        const idx =
+            (reps + (recognition.length === 2 ? Math.floor(Math.random() * 2) : 0)) %
+            recognition.length;
+        return recognition[idx];
+    }
+    if (feasible.recall) return 'recall';
+    // Nothing feasible (e.g. a lone card with no siblings): fall back to recall,
+    // which only needs the card itself.
+    return 'recall';
 }
 
 /**
@@ -1385,7 +1649,7 @@ function cardType(card) {
  *   subtitle: string,
  *   decks: string[],
  *   totalCards: number,
- *   categories: Map<string, {mc: number, text: number, matching: number}>,
+ *   categories: Map<string, {mc: number, text: number, matching: number, identify: number}>,
  * }>}
  */
 function buildTopics() {
@@ -1409,6 +1673,9 @@ function buildTopics() {
         }
         topic.decks.push(deckName);
         for (const card of deck.cards || []) {
+            // Pool-only identify cards (no photo) aren't quizzable, so they don't
+            // count toward the topic totals or the per-type chips.
+            if (isPoolOnlyIdentify(card)) continue;
             topic.totalCards++;
             const type = cardType(card);
             const cats =
@@ -1418,7 +1685,7 @@ function buildTopics() {
             for (const cat of cats) {
                 let agg = topic.categories.get(cat);
                 if (!agg) {
-                    agg = { mc: 0, text: 0, matching: 0 };
+                    agg = { mc: 0, text: 0, matching: 0, identify: 0 };
                     topic.categories.set(cat, agg);
                 }
                 agg[type]++;
@@ -1431,7 +1698,7 @@ function buildTopics() {
 /**
  * Build a category chip for a given type. Selected state is backed by the
  * `deselectedChips` model (chips are on by default), so it survives re-renders.
- * @param {'mc'|'text'|'matching'} type
+ * @param {'mc'|'text'|'matching'|'identify'} type
  * @param {number} count
  * @param {string} topicKey
  * @param {string} catName
@@ -1452,6 +1719,9 @@ function makeTypeChip(type, count, topicKey, catName) {
     } else if (type === 'matching') {
         chipLabel = 'ZO';
         chipTitle = 'Zuordnungsaufgaben in dieser Kategorie ein-/ausblenden';
+    } else if (type === 'identify') {
+        chipLabel = 'Erk';
+        chipTitle = 'Erkennen-Karten (Bild ↔ Name) in dieser Kategorie ein-/ausblenden';
     } else {
         chipLabel = 'Text';
         chipTitle = 'Freitext-Karten in dieser Kategorie ein-/ausblenden';
@@ -1656,6 +1926,9 @@ function displaySavedDecks(searchTerm = '', preselectDeckNames = []) {
             if ((counts.matching || 0) > 0) {
                 chips.append(makeTypeChip('matching', counts.matching, topic.key, catName));
             }
+            if ((counts.identify || 0) > 0) {
+                chips.append(makeTypeChip('identify', counts.identify, topic.key, catName));
+            }
 
             row.append(catCheckbox, labelEl, chips);
             catsContainer.append(row);
@@ -1767,7 +2040,7 @@ function getSelectedFilters() {
         for (const [catName, counts] of topic.categories.entries()) {
             if (!selectedCategories.has(catKey(topic.key, catName))) continue;
             const types = new Set();
-            for (const ty of ['mc', 'text', 'matching']) {
+            for (const ty of ['mc', 'text', 'matching', 'identify']) {
                 if (
                     (counts[ty] || 0) > 0 &&
                     !deselectedChips.has(chipKey(topic.key, catName, ty))
@@ -1796,6 +2069,8 @@ function getSelectedFilters() {
 function filterCards(cards, perCategory) {
     if (!perCategory || perCategory.size === 0) return [];
     return cards.filter((card) => {
+        // Pool-only identify cards (no photo) never enter the quiz rotation.
+        if (isPoolOnlyIdentify(card)) return false;
         const t = cardType(card);
         const cardCats =
             card.categories && card.categories.length > 0 ? card.categories : ['__uncategorized__'];
@@ -1944,8 +2219,10 @@ async function deleteSavedTopic(topic) {
  * @param {Array<object>} loadedCards - Cards to use in the quiz
  */
 function initializeQuiz(loadedCards) {
-    // Reset the quiz state
-    cards = loadedCards;
+    // Reset the quiz state. Pool-only identify cards (no photo) are dropped here
+    // as the universal chokepoint — every session entry point funnels through
+    // initializeQuiz — so they only ever serve as distractors, never questions.
+    cards = loadedCards.filter((card) => !isPoolOnlyIdentify(card));
     currentCardIndex = 0;
     correctCount = 0;
     incorrectCount = 0;
@@ -2076,6 +2353,7 @@ function showCurrentCard() {
     isMultiRight = false;
     isMultiLeft = false;
     isMultiCard = false;
+    identifyState = null;
     const card = cards[currentCardIndex];
 
     // Check if we're currently showing the back side
@@ -2672,6 +2950,238 @@ function matchingAutoScrollStep() {
 }
 
 /**
+ * Place a profile image into the front media slot, guarding the source. Empty /
+ * unsafe sources leave the slot hidden.
+ * @param {string} src - media data URI or URL
+ * @param {string} alt - accessible description (usually the person's name)
+ */
+function setIdentifyImage(src, alt) {
+    identifyMediaEl.innerHTML = '';
+    if (!isSafeMediaSrc(src)) {
+        identifyMediaEl.classList.add('hidden');
+        return;
+    }
+    const img = document.createElement('img');
+    img.className = 'identify-photo';
+    img.alt = alt || '';
+    img.loading = 'lazy';
+    img.src = src;
+    identifyMediaEl.append(img);
+    identifyMediaEl.classList.remove('hidden');
+}
+
+/**
+ * Build the choice set for "pick the name" mode: the correct label plus sampled
+ * distractor labels, shuffled.
+ * @param {object} card
+ * @param {Array<object>} pool
+ * @param {object} cfg
+ * @returns {Array<{card: object, isCorrect: boolean, text: string}>}
+ */
+function buildLabelChoices(card, pool, cfg) {
+    const n = Math.max(1, cfg.distractors || 0);
+    const distractors = sampleDistractors(card, pool, n);
+    const choices = [
+        { card, isCorrect: true, text: canonicalLabel(card, cfg) },
+        ...distractors.map((c) => ({ card: c, isCorrect: false, text: canonicalLabel(c, cfg) })),
+    ];
+    return shuffleInPlace(choices);
+}
+
+/**
+ * Build the choice set for "pick the face" mode: the correct photo plus sampled
+ * distractor photos (siblings that actually have a photo), shuffled.
+ * @param {object} card
+ * @param {Array<object>} pool
+ * @param {object} cfg
+ * @returns {Array<{card: object, isCorrect: boolean, media: string}>}
+ */
+function buildMediaChoices(card, pool, cfg) {
+    const n = Math.max(1, cfg.distractors || 0);
+    const distractors = sampleDistractors(card, pool, n, (c) => isSafeMediaSrc(c.media));
+    const choices = [
+        { card, isCorrect: true, media: card.media },
+        ...distractors.map((c) => ({ card: c, isCorrect: false, media: c.media })),
+    ];
+    return shuffleInPlace(choices);
+}
+
+/**
+ * Render the tappable choice buttons (labels or photos) for a pick mode.
+ * @param {Array<{isCorrect: boolean, text?: string, media?: string}>} choices
+ * @param {'label'|'media'} kind
+ */
+function renderIdentifyChoices(choices, kind) {
+    identifyChoicesEl.innerHTML = '';
+    identifyChoicesEl.classList.remove('hidden');
+    identifyChoicesEl.classList.toggle('identify-choices-media', kind === 'media');
+    identifyChoicesEl.classList.toggle('identify-choices-label', kind === 'label');
+    for (const [i, choice] of choices.entries()) {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'identify-choice';
+        btn.dataset.index = String(i);
+        btn.setAttribute('aria-pressed', 'false');
+        if (kind === 'media') {
+            const img = document.createElement('img');
+            img.className = 'identify-choice-photo';
+            img.alt = `Auswahl ${i + 1}`;
+            img.loading = 'lazy';
+            if (isSafeMediaSrc(choice.media)) img.src = choice.media;
+            btn.append(img);
+            btn.setAttribute('aria-label', `Bild ${i + 1} auswählen`);
+        } else {
+            btn.textContent = choice.text;
+        }
+        btn.addEventListener('click', () => selectIdentifyChoice(i));
+        identifyChoicesEl.append(btn);
+    }
+}
+
+/**
+ * Single-select a pick-mode choice (radio-style highlight). The grade is applied
+ * later on reveal, keeping the confidence-prompt + flip flow identical to MC.
+ * @param {number} index
+ */
+function selectIdentifyChoice(index) {
+    if (!identifyState || isAnswered) return;
+    identifyState.selectedIndex = index;
+    const btns = identifyChoicesEl.querySelectorAll('.identify-choice');
+    for (const [i, b] of btns.entries()) {
+        const sel = i === index;
+        b.classList.toggle('selected', sel);
+        b.setAttribute('aria-pressed', String(sel));
+    }
+}
+
+/**
+ * Render the front of an identify card: choose a mode (byMastery), show the
+ * media and/or prompt, and build the input or choices. Stashes the per-showing
+ * state in `identifyState` for the reveal step.
+ * @param {object} card
+ */
+function renderIdentifyCard(card) {
+    const cfg = card.identify || IDENTIFY_DEFAULTS;
+    const pool = getIdentifyPool(card);
+    const mode = pickIdentifyMode(card, cfg, pool);
+
+    // Hide the other types' front inputs; identify owns its media + choices.
+    userAnswerInput.classList.add('hidden');
+    optionsContainer.classList.add('hidden');
+    matchingContainer.classList.add('hidden');
+    showAnswerBtn.classList.remove('hidden');
+
+    identifyMediaEl.innerHTML = '';
+    identifyMediaEl.classList.add('hidden');
+    identifyChoicesEl.innerHTML = '';
+    identifyChoicesEl.classList.add('hidden');
+
+    let choices = null;
+    if (mode === 'recall') {
+        // Show the face, ask for the name typed free-form. Prompt must NOT reveal
+        // the name (that is the answer) — so override the question text.
+        questionText.textContent = cfg.prompt || IDENTIFY_DEFAULTS.prompt;
+        setIdentifyImage(card.media, cfg.prompt || '');
+        userAnswerInput.classList.remove('hidden');
+        userAnswerInput.value = '';
+        userAnswerInput.readOnly = false;
+    } else if (mode === 'pickLabel') {
+        questionText.textContent = cfg.prompt || IDENTIFY_DEFAULTS.prompt;
+        setIdentifyImage(card.media, cfg.prompt || '');
+        choices = buildLabelChoices(card, pool, cfg);
+        renderIdentifyChoices(choices, 'label');
+    } else {
+        // pickMedia: show the name, pick the matching face.
+        questionText.textContent = `Welches Bild zeigt ${canonicalLabel(card, cfg)}?`;
+        choices = buildMediaChoices(card, pool, cfg);
+        renderIdentifyChoices(choices, 'media');
+    }
+
+    identifyState = { mode, card, cfg, choices, selectedIndex: -1 };
+
+    // Back-side reveal is filled by showAnswer.
+    standardAnswerContainer.classList.add('hidden');
+    identifyResultContainer.classList.add('hidden');
+}
+
+/**
+ * Evaluate an identify card on reveal. The card flips to its back, so the whole
+ * result — correct photo + name, and (for pick modes) whether the pick was
+ * right — is rendered into the back-side reveal container. Recall mode grades
+ * the typed answer against the accepted set and otherwise falls back to
+ * self-grading, exactly like a free-text card.
+ * @param {object} card
+ */
+function evaluateIdentifyCard(card) {
+    const st = identifyState;
+    const cfg = (st && st.cfg) || card.identify || IDENTIFY_DEFAULTS;
+    const name = canonicalLabel(card, cfg);
+
+    // Reveal: the correct photo + the canonical name.
+    identifyResultContainer.innerHTML = '';
+    if (isSafeMediaSrc(card.media)) {
+        const img = document.createElement('img');
+        img.className = 'identify-reveal-photo';
+        img.alt = name;
+        img.src = card.media;
+        identifyResultContainer.append(img);
+    }
+    const nameEl = document.createElement('div');
+    nameEl.className = 'identify-reveal-name';
+    nameEl.textContent = name;
+    identifyResultContainer.append(nameEl);
+    identifyResultContainer.classList.remove('hidden');
+
+    if (!st || st.mode === 'recall') {
+        // Free-text recall: forgiving match against the accepted answer set;
+        // anything else drops to the 4-level self-grade like other text cards.
+        const userAnswer = userAnswerInput.value.trim();
+        if (userAnswer) {
+            userAnswerDisplay.textContent = userAnswer;
+            userAnswerContainer.classList.remove('hidden');
+        } else {
+            userAnswerContainer.classList.add('hidden');
+        }
+        const accepted = acceptedAnswers(card, cfg);
+        const ok = userAnswer.length > 0 && accepted.has(normalizeAnswer(userAnswer));
+        if (ok) {
+            markAnswer(true);
+            recallRating.classList.add('hidden');
+            nextCardBtn.style.display = 'inline-block';
+        } else {
+            recallRating.classList.remove('hidden');
+            nextCardBtn.style.display = 'none';
+        }
+        return;
+    }
+
+    // Pick modes: auto-grade from the selection. The choice buttons live on the
+    // (now-hidden) front, so correctness is communicated via the back reveal.
+    const choices = st.choices || [];
+    const sel = st.selectedIndex;
+    for (const b of identifyChoicesEl.querySelectorAll('.identify-choice')) {
+        b.disabled = true;
+        b.style.pointerEvents = 'none';
+    }
+    const picked = sel >= 0 ? choices[sel] : null;
+    const correct = !!(picked && picked.isCorrect);
+
+    const status = document.createElement('div');
+    status.className = `identify-reveal-status ${correct ? 'correct' : 'incorrect'}`;
+    if (correct) {
+        status.textContent = '✓ Richtig';
+    } else if (picked) {
+        status.textContent = `✗ Deine Auswahl: ${canonicalLabel(picked.card, cfg)}`;
+    } else {
+        status.textContent = '✗ Keine Auswahl';
+    }
+    identifyResultContainer.append(status);
+
+    markAnswer(correct ? 1 : 0);
+    nextCardBtn.style.display = 'inline-block';
+}
+
+/**
  * Update the card content with new question data
  * @param {object} card - The card object to display
  */
@@ -2683,11 +3193,15 @@ function updateCardContent(card) {
     // Show source deck info
     sourceDeckDisplay.textContent = `Quelle: ${card.sourceDeck}`;
 
-    // Check if current card is multiple choice, matching, or standard
-    const isMatching = Array.isArray(card.pairs) && card.pairs.length > 0;
-    const isMultipleChoice = !isMatching && Array.isArray(card.options) && card.options.length > 0;
+    // Check if current card is identify, multiple choice, matching, or standard
+    const isIdentify = cardType(card) === 'identify';
+    const isMatching = !isIdentify && Array.isArray(card.pairs) && card.pairs.length > 0;
+    const isMultipleChoice =
+        !isMatching && !isIdentify && Array.isArray(card.options) && card.options.length > 0;
 
-    if (isMatching) {
+    if (isIdentify) {
+        renderIdentifyCard(card);
+    } else if (isMatching) {
         // Handle matching question
         userAnswerInput.classList.add('hidden');
         optionsContainer.classList.add('hidden');
@@ -2998,6 +3512,13 @@ function updateCardContent(card) {
     textExplanationContent.classList.add('hidden');
     matchingResultContainer.classList.add('hidden');
     if (!isMatching) matchingContainer.classList.add('hidden');
+    // Identify media/choices are (re)built by renderIdentifyCard; only hide them
+    // for the other types. The back-side reveal is always hidden on the front.
+    if (!isIdentify) {
+        identifyMediaEl.classList.add('hidden');
+        identifyChoicesEl.classList.add('hidden');
+    }
+    identifyResultContainer.classList.add('hidden');
 
     // Reset explanation label and animation
     const explanationLabel = document.querySelector('.explanation-label');
@@ -3043,7 +3564,14 @@ function updateCardContent(card) {
 
     // Focus management: auto-focus the appropriate element
     setTimeout(() => {
-        if (isMatching) {
+        if (isIdentify) {
+            // Recall mode types into the input; pick modes act via the reveal button.
+            if (identifyState && identifyState.mode === 'recall') {
+                userAnswerInput.focus({ preventScroll: true });
+            } else {
+                showAnswerBtn.focus({ preventScroll: true });
+            }
+        } else if (isMatching) {
             showAnswerBtn.focus({ preventScroll: true });
         } else if (!isMultipleChoice && !userAnswerInput.classList.contains('hidden')) {
             userAnswerInput.focus({ preventScroll: true });
@@ -3187,11 +3715,14 @@ function showAnswer() {
     undoBtn.disabled = false;
 
     const card = cards[currentCardIndex];
-    const isMatching = Array.isArray(card.pairs) && card.pairs.length > 0;
+    const isIdentify = cardType(card) === 'identify';
+    const isMatching = !isIdentify && Array.isArray(card.pairs) && card.pairs.length > 0;
     const isMultipleChoice =
-        !isMatching && Array.isArray(card.options) && Array.isArray(card.correct);
+        !isMatching && !isIdentify && Array.isArray(card.options) && Array.isArray(card.correct);
 
-    if (isMatching) {
+    if (isIdentify) {
+        evaluateIdentifyCard(card);
+    } else if (isMatching) {
         // Evaluate matching pairs
         let correctPairCount = 0;
         matchingResultContainer.innerHTML = '';
@@ -6058,10 +6589,11 @@ function startDecksByNames(deckNames) {
     let merged = [];
     deckStats = {};
     for (const deckName of valid) {
-        const withSource = savedDecks[deckName].cards.map((card) => ({
-            ...card,
-            sourceDeck: deckName,
-        }));
+        // Skip pool-only identify cards (no photo): they're distractors, not
+        // questions, so they don't belong in the rotation or the deck total.
+        const withSource = savedDecks[deckName].cards
+            .filter((card) => !isPoolOnlyIdentify(card))
+            .map((card) => ({ ...card, sourceDeck: deckName }));
         merged = [...merged, ...withSource];
         deckStats[deckName] = { correct: 0, incorrect: 0, total: withSource.length };
     }
@@ -6081,6 +6613,12 @@ if (typeof module !== 'undefined' && module.exports) {
         normalizeAnswer,
         dedupeCardsByQuestion,
         validateCards,
+        cardType,
+        canonicalLabel,
+        acceptedAnswers,
+        foldIdentitySet,
+        isSafeMediaSrc,
+        isPoolOnlyIdentify,
         SR_STEP_MINUTES,
         SR_PASS_SCORE,
         SR_FAIL_SCORE,

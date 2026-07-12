@@ -248,6 +248,13 @@
                         <div class="card-front">
                             <div class="card-content">
                                 <div class="question" id="question-text">Frage erscheint hier</div>
+
+                                <!-- Identify: profile image — shown above the input/choices so
+                                     the face (stimulus) comes before the answer (response) -->
+                                <div id="identify-media" class="identify-media hidden">
+                                    <!-- <img> inserted dynamically -->
+                                </div>
+
                                 <!-- Text input for standard questions -->
                                 <input
                                     type="text"
@@ -264,6 +271,11 @@
                                 <!-- Matching container -->
                                 <div id="matching-container" class="matching-container hidden">
                                     <!-- Matching UI will be dynamically inserted here -->
+                                </div>
+
+                                <!-- Identify: tappable choices (pick-the-name / pick-the-face) -->
+                                <div id="identify-choices" class="identify-choices hidden">
+                                    <!-- Choice buttons inserted dynamically -->
                                 </div>
                             </div>
                             <div
@@ -362,6 +374,14 @@
                                     class="matching-result-container hidden"
                                 >
                                     <!-- Matching results will be dynamically inserted here -->
+                                </div>
+
+                                <!-- Identify reveal: correct photo + name (+ pick result) -->
+                                <div
+                                    id="identify-result-container"
+                                    class="identify-result-container hidden"
+                                >
+                                    <!-- Identify result inserted dynamically -->
                                 </div>
                             </div>
                             <div class="controls">
