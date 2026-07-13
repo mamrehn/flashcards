@@ -140,6 +140,11 @@ test('cardType: explicit type wins; legacy shapes still infer correctly', () => 
 
 test('isSafeMediaSrc: allows image data URIs and http(s), rejects scripts', () => {
     assert.ok(isSafeMediaSrc(IMG));
+    // Any image subtype is accepted, not just PNG — photos should be provided as
+    // webp/jpeg (far smaller than PNG) to stay under the localStorage quota.
+    assert.ok(isSafeMediaSrc('data:image/webp;base64,AAAA'));
+    assert.ok(isSafeMediaSrc('data:image/jpeg;base64,AAAA'));
+    assert.ok(isSafeMediaSrc('data:image/jpg;base64,AAAA'));
     assert.ok(isSafeMediaSrc('https://example.com/a.png'));
     assert.ok(!isSafeMediaSrc('javascript:alert(1)'));
     assert.ok(!isSafeMediaSrc('data:text/html;base64,AAAA'));
