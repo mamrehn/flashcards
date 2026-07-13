@@ -579,13 +579,43 @@ function handleCardFrontKeys(e) {
         return;
     }
 
+    // Identify pick modes (pickLabel / pickMedia): number keys 1-9 select a
+    // choice by position, arrow keys move the selection (radio-group style).
+    // Handled before the confidence shortcut so the digits pick a name/face
+    // instead of setting confidence — mirroring how MC options claim 1-9.
+    if (!identifyChoicesEl.classList.contains('hidden')) {
+        const choices = [...identifyChoicesEl.querySelectorAll('.identify-choice')];
+        if (choices.length > 0) {
+            const pick = Number.parseInt(e.key);
+            if (pick >= 1 && pick <= choices.length) {
+                e.preventDefault();
+                selectIdentifyChoice(pick - 1);
+                return;
+            }
+            if (['ArrowRight', 'ArrowDown', 'ArrowLeft', 'ArrowUp'].includes(e.key)) {
+                e.preventDefault();
+                const forward = e.key === 'ArrowRight' || e.key === 'ArrowDown';
+                const cur = identifyState ? identifyState.selectedIndex : -1;
+                const next =
+                    cur < 0
+                        ? forward
+                            ? 0
+                            : choices.length - 1
+                        : (cur + (forward ? 1 : -1) + choices.length) % choices.length;
+                selectIdentifyChoice(next);
+                return;
+            }
+        }
+    }
+
     // Number keys 1-3: set the pre-reveal confidence — only on cards without MC
-    // options (text/matching), where the 1-9 option shortcut below is inactive,
-    // so the two never collide.
+    // options or identify choices (text/matching), where the position shortcuts
+    // above are inactive, so the digit shortcuts never collide.
     const confNum = Number.parseInt(e.key);
     if (
         !confidencePrompt.classList.contains('hidden') &&
         optionsContainer.classList.contains('hidden') &&
+        identifyChoicesEl.classList.contains('hidden') &&
         confNum >= 1 &&
         confNum <= 3
     ) {
@@ -3659,8 +3689,11 @@ function updateCardContent(card) {
     // Focus management: auto-focus the appropriate element
     setTimeout(() => {
         if (isIdentify) {
-            // Recall mode types into the input; pick modes act via the reveal button.
-            if (identifyState && identifyState.mode === 'recall') {
+            // Recall modes type into the input; pick modes act via the reveal button.
+            if (
+                identifyState &&
+                (identifyState.mode === 'recall' || identifyState.mode === 'recallPart')
+            ) {
                 userAnswerInput.focus({ preventScroll: true });
             } else {
                 showAnswerBtn.focus({ preventScroll: true });
