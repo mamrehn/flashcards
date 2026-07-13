@@ -2127,7 +2127,9 @@ function resetDeckStats(deckNames, selectedPerDeck) {
     deckStats = {};
     for (const deckName of deckNames) {
         const allCards = savedDecks[deckName].cards;
-        let total = allCards.length;
+        // Exclude pool-only identify cards (no photo) — they are distractors,
+        // not questions, so they must not inflate the deck total.
+        let total = allCards.filter((c) => !isPoolOnlyIdentify(c)).length;
         if (selectedPerDeck && selectedPerDeck.has(deckName)) {
             total = filterCards(allCards, selectedPerDeck.get(deckName)).length;
         }
@@ -3116,6 +3118,11 @@ function evaluateIdentifyCard(card) {
     const st = identifyState;
     const cfg = (st && st.cfg) || card.identify || IDENTIFY_DEFAULTS;
     const name = canonicalLabel(card, cfg);
+
+    // Back heading = the prompt (the question being answered), not the name —
+    // otherwise the name appears twice, since the reveal below already shows it.
+    // updateCardContent seeded questionBack with card.question (the name).
+    questionBack.textContent = questionText.textContent;
 
     // Reveal: the correct photo + the canonical name.
     identifyResultContainer.innerHTML = '';
@@ -4488,6 +4495,9 @@ function computeDeckKnowledge(deckNames) {
         const deck = savedDecks[deckName];
         if (!deck?.cards) continue;
         for (const c of deck.cards) {
+            // Pool-only identify cards (no photo) are never quizzed, so counting
+            // them would permanently understate the readiness denominator.
+            if (isPoolOnlyIdentify(c)) continue;
             total++;
             const data = spacedRepetitionData[`${deckName}|||${c.question}`];
             if (data?.history?.length) {
@@ -5914,6 +5924,9 @@ function countMastered(deckNames) {
         const deck = savedDecks[deckName];
         if (!deck?.cards) continue;
         for (const c of deck.cards) {
+            // Pool-only identify cards (no photo) are never quizzed, so counting
+            // them would permanently understate the readiness denominator.
+            if (isPoolOnlyIdentify(c)) continue;
             total++;
             const data = spacedRepetitionData[`${deckName}|||${c.question}`];
             if (data?.history?.length) {
