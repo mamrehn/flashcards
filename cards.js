@@ -173,6 +173,16 @@ const SR_PASS_SCORE = 0.8;
 /** Score below which the card falls back to the first ladder step */
 const SR_FAIL_SCORE = 0.5;
 
+/** Default Lernstand target (%) at which a set of cards counts as "mastered". */
+const MASTERY_TARGET = 80;
+
+/**
+ * Higher bar for identify decks: learning a whole roster (a class, a set of
+ * flags…) means knowing *everyone*, so a set made up entirely of identify cards
+ * only counts as mastered at 95 %, not the usual 80 %.
+ */
+const MASTERY_TARGET_IDENTIFY = 95;
+
 /** @type {{[cardKey: string]: {step: number, repetitions: number, nextReview: Date, lastReview?: Date, history: number[], confHistory: Array<number|null>}}} Spaced repetition data per card */
 let spacedRepetitionData = {};
 
@@ -1433,9 +1443,10 @@ function cardType(card) {
 // ============================================================================
 // "Identify" card type — associate a media item (a face) with its label(s)
 // (a name), drawn from a pool of sibling entities. One card = one entity; the
-// three quiz modes (type the name / pick the name / pick the face) are chosen
-// at display time. See scripts/students-to-identify-deck.js for the authoring
-// side and the design notes in the deck's `set` block.
+// quiz modes (pick the name / pick the face / type the missing part / type the
+// whole name) are chosen at display time and escalate in difficulty as the card
+// sticks. See scripts/students-to-identify-deck.js for the authoring side and
+// the design notes in the deck's `set` block.
 // ============================================================================
 
 /** Defaults for a deck's `set` block, merged under any authored overrides. */
@@ -1443,7 +1454,9 @@ const IDENTIFY_DEFAULTS = {
     prompt: 'Worum handelt es sich?',
     labelParts: ['name'],
     accept: 'anyPart', // full | allParts | anyPart
-    modes: ['recall', 'pickLabel', 'pickMedia'],
+    // Difficulty ladder: recognition → cued recall → full free recall.
+    // `recallPart` needs ≥2 label parts, so single-part decks skip it.
+    modes: ['recall', 'recallPart', 'pickLabel', 'pickMedia'],
     distractors: 2,
     mediaKind: 'image',
 };
@@ -1526,6 +1539,49 @@ function acceptedAnswers(card, cfg) {
 }
 
 /**
+ * Split a card's labels for cued-recall (`recallPart`) mode: the student types
+ * the FIRST present label part (e.g. the first name) while the remaining parts
+ * (e.g. the last name) are revealed as a cue alongside the face. Returns null
+ * when fewer than two parts are present (nothing to cue with), which is what
+ * gates the mode off for single-part decks.
+ * @param {object} card
+ * @param {object} cfg - resolved set config
+ * @returns {{answerKey:string, answer:string, cueParts:string[]}|null}
+ */
+function identifyRecallSplit(card, cfg = card.identify || IDENTIFY_DEFAULTS) {
+    const present = (cfg.labelParts || [])
+        .map((p) => ({ key: p, val: card.labels && card.labels[p] }))
+        .filter((x) => typeof x.val === 'string' && x.val.trim().length > 0)
+        .map((x) => ({ key: x.key, val: x.val.trim() }));
+    if (present.length < 2) return null;
+    const [answer, ...cue] = present;
+    return { answerKey: answer.key, answer: answer.val, cueParts: cue.map((c) => c.val) };
+}
+
+/**
+ * Accepted (normalized) answers for cued-recall mode: only the missing part
+ * (e.g. the first name) — NOT the cue part, which was handed to the student —
+ * plus the full label for anyone who types the whole name, plus any per-card
+ * nickname overrides.
+ * @param {object} card
+ * @param {object} cfg - resolved set config
+ * @param {{answer:string}|null} split - result of identifyRecallSplit
+ * @returns {Set<string>} normalized accepted answers
+ */
+function recallPartAccepted(card, cfg, split) {
+    const accepted = new Set();
+    if (split && split.answer) accepted.add(normalizeAnswer(split.answer));
+    const full = canonicalLabel(card, cfg);
+    if (full) accepted.add(normalizeAnswer(full));
+    if (Array.isArray(card.accept)) {
+        for (const a of card.accept) {
+            if (typeof a === 'string' && a.trim()) accepted.add(normalizeAnswer(a));
+        }
+    }
+    return accepted;
+}
+
+/**
  * Fold a deck file's top-level `set` block onto each of its identify cards, and
  * synthesize the `question`/key from the labels. Non-identify cards (and files
  * without identify content) pass through untouched, so this is safe to run on
@@ -1599,14 +1655,16 @@ function sampleDistractors(card, pool, n, usable = () => true) {
 }
 
 /**
- * Choose which of the three modes to show for an identify card, mastery-driven
- * ("byMastery"): new/shaky cards get recognition (pick the name / pick the face),
- * and once the card is sticking (SR step ≥ 2) it escalates to free-recall typing.
+ * Choose which mode to show for an identify card, mastery-driven ("byMastery"):
+ * new/shaky cards get recognition (pick the name / pick the face); once the card
+ * is sticking it escalates to cued recall (type the first name given the last,
+ * at SR step 2) and then full free-recall typing (step 3+). Where cued recall
+ * isn't available (single-part labels), full recall keeps its step-2 entry.
  * Only modes that are enabled AND feasible for this card+pool are considered.
  * @param {object} card
  * @param {object} cfg - resolved set config
  * @param {Array<object>} pool - distractor pool
- * @returns {'recall'|'pickLabel'|'pickMedia'}
+ * @returns {'recall'|'recallPart'|'pickLabel'|'pickMedia'}
  */
 function pickIdentifyMode(card, cfg, pool) {
     const enabled = new Set(cfg.modes && cfg.modes.length ? cfg.modes : IDENTIFY_DEFAULTS.modes);
@@ -1614,6 +1672,12 @@ function pickIdentifyMode(card, cfg, pool) {
     const mediaSiblings = pool.filter((c) => isSafeMediaSrc(c.media)).length;
     const feasible = {
         recall: enabled.has('recall'),
+        // Cued recall (show last name, type first name). Enabling `recall`
+        // implies it, so legacy decks get the intermediate step for free; it
+        // still needs ≥2 present label parts (one to cue with, one to ask for).
+        recallPart:
+            (enabled.has('recallPart') || enabled.has('recall')) &&
+            !!identifyRecallSplit(card, cfg),
         // pick-the-name needs enough sibling labels to fill the distractor slots
         pickLabel: enabled.has('pickLabel') && pool.length >= need,
         // pick-the-face needs this card AND enough siblings to have photos
@@ -1623,7 +1687,11 @@ function pickIdentifyMode(card, cfg, pool) {
     const data = spacedRepetitionData[getCardKey(card)];
     const step = data && Number.isFinite(data.step) ? data.step : 0;
 
-    if (step >= 2 && feasible.recall) return 'recall';
+    // Difficulty ramp: recognition (steps 0–1) → cued recall (step 2) → full
+    // free recall (step 3+). Where cued recall isn't available (single-part
+    // labels), full recall keeps its original step-2 entry point.
+    if (feasible.recall && step >= (feasible.recallPart ? 3 : 2)) return 'recall';
+    if (feasible.recallPart && step >= 2) return 'recallPart';
     if (recognition.length > 0) {
         // Alternate the two recognition directions across repetitions so both the
         // face→name and name→face bindings get exercised.
@@ -1633,6 +1701,7 @@ function pickIdentifyMode(card, cfg, pool) {
             recognition.length;
         return recognition[idx];
     }
+    if (feasible.recallPart) return 'recallPart';
     if (feasible.recall) return 'recall';
     // Nothing feasible (e.g. a lone card with no siblings): fall back to recall,
     // which only needs the card itself.
@@ -3087,6 +3156,19 @@ function renderIdentifyCard(card) {
         userAnswerInput.classList.remove('hidden');
         userAnswerInput.value = '';
         userAnswerInput.readOnly = false;
+    } else if (mode === 'recallPart') {
+        // Cued recall: show the face plus the trailing part(s) as a fill-in-the-
+        // blank (e.g. "＿＿ Müller"), and ask the student to type the missing
+        // first part. Easier than full recall, harder than picking from a list.
+        const split = identifyRecallSplit(card, cfg);
+        const cue = split ? split.cueParts.join(' ') : '';
+        questionText.textContent = cue
+            ? `${cfg.prompt || IDENTIFY_DEFAULTS.prompt} · ＿＿ ${cue}`
+            : cfg.prompt || IDENTIFY_DEFAULTS.prompt;
+        setIdentifyImage(card.media, cfg.prompt || '');
+        userAnswerInput.classList.remove('hidden');
+        userAnswerInput.value = '';
+        userAnswerInput.readOnly = false;
     } else if (mode === 'pickLabel') {
         questionText.textContent = cfg.prompt || IDENTIFY_DEFAULTS.prompt;
         setIdentifyImage(card.media, cfg.prompt || '');
@@ -3139,9 +3221,11 @@ function evaluateIdentifyCard(card) {
     identifyResultContainer.append(nameEl);
     identifyResultContainer.classList.remove('hidden');
 
-    if (!st || st.mode === 'recall') {
+    if (!st || st.mode === 'recall' || st.mode === 'recallPart') {
         // Free-text recall: forgiving match against the accepted answer set;
         // anything else drops to the 4-level self-grade like other text cards.
+        // Cued recall (`recallPart`) grades only the missing part, so the cue the
+        // student was already given doesn't count as a correct answer.
         const userAnswer = userAnswerInput.value.trim();
         if (userAnswer) {
             userAnswerDisplay.textContent = userAnswer;
@@ -3149,7 +3233,10 @@ function evaluateIdentifyCard(card) {
         } else {
             userAnswerContainer.classList.add('hidden');
         }
-        const accepted = acceptedAnswers(card, cfg);
+        const accepted =
+            st && st.mode === 'recallPart'
+                ? recallPartAccepted(card, cfg, identifyRecallSplit(card, cfg))
+                : acceptedAnswers(card, cfg);
         const ok = userAnswer.length > 0 && accepted.has(normalizeAnswer(userAnswer));
         if (ok) {
             markAnswer(true);
@@ -4142,7 +4229,7 @@ function showFeedback() {
     const realDecks = activeDecks.filter((d) => savedDecks[d]);
     const knowledge = computeDeckKnowledge(realDecks);
     if (knowledge.total > 0) {
-        const level = knowledge.percent >= 80 ? 'high' : knowledge.percent >= 50 ? 'mid' : 'low';
+        const level = levelClass(knowledge.percent, masteryTargetPercent(realDecks));
         knowledgeLine.className = `feedback-knowledge feedback-knowledge-${level}`;
         knowledgeLine.textContent = `📈 Lernstand: ${knowledge.percent} % (${knowledge.attempted} von ${knowledge.total} Karten geübt)`;
         knowledgeLine.classList.remove('hidden');
@@ -4510,6 +4597,27 @@ function computeDeckKnowledge(deckNames) {
 }
 
 /**
+ * The Lernstand target (%) at which the given set of decks counts as mastered.
+ * 95 % when every quizzable card in scope is an identify card (knowing a class
+ * means knowing everyone); 80 % otherwise — including the mixed library-wide
+ * "Gesamt" view, where deckNames is null/empty.
+ * @param {string[]|null} [deckNames]
+ * @returns {number}
+ */
+function masteryTargetPercent(deckNames) {
+    if (!deckNames || deckNames.length === 0) return MASTERY_TARGET;
+    let sawIdentify = false;
+    for (const deckName of deckNames) {
+        for (const c of savedDecks[deckName]?.cards || []) {
+            if (isPoolOnlyIdentify(c)) continue; // never quizzed → ignore
+            if (cardType(c) === 'identify') sawIdentify = true;
+            else return MASTERY_TARGET; // any non-identify card → normal bar
+        }
+    }
+    return sawIdentify ? MASTERY_TARGET_IDENTIFY : MASTERY_TARGET;
+}
+
+/**
  * SR-data entries (values) belonging to the given decks. SR keys are
  * `deckName|||question`, so we match against the exact key set derived from the
  * decks' current cards — robust even when a deck name contains odd characters.
@@ -4542,7 +4650,7 @@ function buildKnowledgeBadge(deckNames) {
     if (knowledge.attempted === 0) return null;
 
     const badge = document.createElement('span');
-    const level = knowledge.percent >= 80 ? 'high' : knowledge.percent >= 50 ? 'mid' : 'low';
+    const level = levelClass(knowledge.percent, masteryTargetPercent(deckNames));
     badge.className = `topic-knowledge topic-knowledge-${level}`;
     badge.title =
         `Lernstand: berücksichtigt deine letzten Antworten und wie sicher die Karten ` +
@@ -6041,14 +6149,19 @@ function recordSession() {
 }
 
 /**
- * Record any newly-crossed mastery milestones (deck Lernstand ≥ 80 %).
+ * Record any newly-crossed mastery milestones (deck Lernstand ≥ its target —
+ * 80 %, or 95 % for identify decks).
  * @returns {string[]} human-readable labels for milestones earned just now
  */
 function checkAchievements() {
     const earned = [];
     for (const d of activeDecks.filter((x) => savedDecks[x])) {
         const k = computeDeckKnowledge([d]);
-        if (k.total > 0 && k.percent >= 80 && !achievements.deckMastered[d]) {
+        if (
+            k.total > 0 &&
+            k.percent >= masteryTargetPercent([d]) &&
+            !achievements.deckMastered[d]
+        ) {
             achievements.deckMastered[d] = new Date().toISOString();
             const cats = deckCategoriesLabel(d);
             earned.push(cats ? `Deck gemeistert: ${d} · ${cats}` : `Deck gemeistert: ${d}`);
@@ -6193,9 +6306,9 @@ function closeProgressView() {
  * @returns {string} HTML
  */
 function progressScopeSelector(topics, activeKey) {
-    const chip = (key, label, percent, attempted) => {
+    const chip = (key, label, percent, attempted, target = MASTERY_TARGET) => {
         const active = key === activeKey;
-        const dotLevel = attempted > 0 ? levelClass(percent) : 'none';
+        const dotLevel = attempted > 0 ? levelClass(percent, target) : 'none';
         const pct = attempted > 0 ? ` ${percent} %` : '';
         const safeLabel = sanitizeHTML(label);
         // sanitizeHTML encodes <>& but not quotes, so harden the attribute too.
@@ -6211,7 +6324,7 @@ function progressScopeSelector(topics, activeKey) {
     let chips = chip('__all__', 'Gesamt', all.percent, all.attempted);
     for (const t of topics) {
         const k = computeDeckKnowledge(t.decks);
-        chips += chip(t.key, t.title, k.percent, k.attempted);
+        chips += chip(t.key, t.title, k.percent, k.attempted, masteryTargetPercent(t.decks));
     }
     return `<div class="progress-scope" role="tablist" aria-label="Statistik nach Deck">${chips}</div>`;
 }
@@ -6263,9 +6376,9 @@ function renderProgressView() {
         ${progressScopeSelector(topics, progressScopeKey)}
         ${scopeCaption}
         <section class="progress-section progress-readiness">
-            ${progressRing(overall.percent, 'Lernstand erreicht')}
+            ${progressRing(overall.percent, 'Lernstand erreicht', masteryTargetPercent(scopeDecks))}
             <div class="readiness-side">
-                <div class="readiness-goal">Ziel: Lernstand 80 % – dann „sitzt“ der Stoff.</div>
+                <div class="readiness-goal">Ziel: Lernstand ${masteryTargetPercent(scopeDecks)} % – dann „sitzt“ der Stoff.</div>
                 <div class="readiness-facts">${overall.attempted} von ${overall.total} Karten geübt · ${countDueCards(srScope)} fällig</div>
                 ${progressExam(scopeDecks, isAll)}
             </div>
@@ -6308,18 +6421,23 @@ function renderProgressView() {
     }
 }
 
-/** A traffic-light level class from a 0–100 percentage. */
-function levelClass(percent) {
-    return percent >= 80 ? 'high' : percent >= 50 ? 'mid' : 'low';
+/**
+ * A traffic-light level class from a 0–100 percentage. `target` is the % that
+ * counts as fully mastered ("high") — 95 for identify sets, 80 otherwise.
+ * @param {number} percent
+ * @param {number} [target=MASTERY_TARGET]
+ */
+function levelClass(percent, target = MASTERY_TARGET) {
+    return percent >= target ? 'high' : percent >= 50 ? 'mid' : 'low';
 }
 
 /** Readiness ring (SVG donut + centered percentage). */
-function progressRing(percent, caption) {
+function progressRing(percent, caption, target = MASTERY_TARGET) {
     const r = 46;
     const circ = 2 * Math.PI * r;
     const off = circ * (1 - Math.max(0, Math.min(100, percent)) / 100);
     return `
-        <div class="progress-ring progress-ring-${levelClass(percent)}">
+        <div class="progress-ring progress-ring-${levelClass(percent, target)}">
             <svg viewBox="0 0 120 120" role="img" aria-label="${caption}: ${percent} Prozent">
                 <circle class="ring-track" cx="60" cy="60" r="${r}"></circle>
                 <circle class="ring-value" cx="60" cy="60" r="${r}"
@@ -6426,13 +6544,13 @@ function progressWeakSpots(allDecks) {
         .map(
             (x) => `<div class="weakspot-row">
             <span class="weakspot-name">${sanitizeHTML(x.d)}</span>
-            <span class="weakspot-bar"><span class="weakspot-fill weakspot-${levelClass(x.k.percent)}" style="width:${x.k.percent}%"></span></span>
+            <span class="weakspot-bar"><span class="weakspot-fill weakspot-${levelClass(x.k.percent, masteryTargetPercent([x.d]))}" style="width:${x.k.percent}%"></span></span>
             <span class="weakspot-val">${x.k.percent} %</span>
         </div>`
         )
         .join('');
     const weakest = arr
-        .filter((x) => x.k.percent < 80)
+        .filter((x) => x.k.percent < masteryTargetPercent([x.d]))
         .slice(0, 3)
         .map((x) => x.d);
     const btn =
@@ -6629,11 +6747,15 @@ if (typeof module !== 'undefined' && module.exports) {
         cardType,
         canonicalLabel,
         acceptedAnswers,
+        identifyRecallSplit,
+        recallPartAccepted,
         foldIdentitySet,
         isSafeMediaSrc,
         isPoolOnlyIdentify,
         SR_STEP_MINUTES,
         SR_PASS_SCORE,
         SR_FAIL_SCORE,
+        MASTERY_TARGET,
+        MASTERY_TARGET_IDENTIFY,
     };
 }

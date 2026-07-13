@@ -19,6 +19,8 @@ const {
     cardType,
     canonicalLabel,
     acceptedAnswers,
+    identifyRecallSplit,
+    recallPartAccepted,
     foldIdentitySet,
     isSafeMediaSrc,
     isPoolOnlyIdentify,
@@ -185,6 +187,39 @@ test('acceptedAnswers: per-card accept overrides add nicknames', () => {
     const card = { labels: { firstName: 'David', lastName: 'Adam' }, accept: ['Dave'] };
     const acc = acceptedAnswers(card, { labelParts: ['firstName', 'lastName'], accept: 'full' });
     assert.ok(acc.has(normalizeAnswer('Dave')));
+});
+
+test('identifyRecallSplit: first part is the answer, the rest is the cue', () => {
+    const card = { labels: { firstName: 'David', lastName: 'Adam' } };
+    const cfg = { labelParts: ['firstName', 'lastName'] };
+    const split = identifyRecallSplit(card, cfg);
+    assert.equal(split.answerKey, 'firstName');
+    assert.equal(split.answer, 'David');
+    assert.deepEqual(split.cueParts, ['Adam']);
+});
+
+test('identifyRecallSplit: null when fewer than two label parts are present', () => {
+    // Single-part deck → no cued-recall step.
+    assert.equal(identifyRecallSplit({ labels: { name: 'Solo' } }, { labelParts: ['name'] }), null);
+    // Two configured parts but only one present on the card.
+    assert.equal(
+        identifyRecallSplit(
+            { labels: { firstName: 'David' } },
+            { labelParts: ['firstName', 'lastName'] }
+        ),
+        null
+    );
+});
+
+test('recallPartAccepted: accepts the missing part and the full name, not the cue', () => {
+    const card = { labels: { firstName: 'David', lastName: 'Adam' }, accept: ['Dave'] };
+    const cfg = { labelParts: ['firstName', 'lastName'], accept: 'anyPart' };
+    const acc = recallPartAccepted(card, cfg, identifyRecallSplit(card, cfg));
+    assert.ok(acc.has(normalizeAnswer('David'))); // the missing first name
+    assert.ok(acc.has(normalizeAnswer('David Adam'))); // typing the whole name still counts
+    assert.ok(acc.has(normalizeAnswer('Dave'))); // per-card nickname
+    // The cue (last name) was handed to the student, so it must NOT be accepted.
+    assert.ok(!acc.has(normalizeAnswer('Adam')));
 });
 
 test('foldIdentitySet: folds set config and synthesizes the question key', () => {
