@@ -1,10 +1,9 @@
 {
-  "generatedAt": "2026-05-19T07:30:09.837Z",
-  "deckCount": 7,
+  "deckCount": 11,
   "decks": [
     {
-      "id": "fu-it10-ls1-mac-ip-subnetting-lernkarten",
-      "filename": "FU-IT10_LS1_MAC_IP_Subnetting_Lernkarten.zip",
+      "id": "fu-it10-ls1-mac-ip-subnetting",
+      "filename": "FU-IT10_LS1_MAC_IP_Subnetting.zip",
       "title": "Subnetting und IP-Adressen",
       "meta": {
         "name": "Subnetting und IP-Adressen",
@@ -16,18 +15,48 @@
         "description": "MAC- und IPv4-Adressen, Aufteilung in Netz- und Hostanteil sowie Subnetting mit Subnetzmasken und CIDR-Notation.",
         "author": "Mario Amrehn"
       },
-      "version": "c9b3a02a546b",
-      "size": 9422,
-      "questionCount": 60,
+      "version": "6d7852e48afe",
+      "size": 10974,
+      "questionCount": 62,
       "invalidCount": 0,
       "types": {
         "text": 30,
         "multipleChoice": 30,
-        "matching": 0
+        "matching": 2
       },
-      "categories": [],
+      "categories": [
+        {
+          "name": "Virtualisierung",
+          "count": 14
+        },
+        {
+          "name": "IPv4 und IPv6",
+          "count": 12
+        },
+        {
+          "name": "DHCP, DNS und Gateway",
+          "count": 11
+        },
+        {
+          "name": "MAC-Adressen",
+          "count": 9
+        },
+        {
+          "name": "Subnetting",
+          "count": 8
+        },
+        {
+          "name": "Netzwerk-Grundlagen",
+          "count": 5
+        },
+        {
+          "name": "Netzwerk-Befehle",
+          "count": 4
+        }
+      ],
       "sourceFiles": [
         "FU-IT10_LS1_MAC_IP_Subnetting_MC.json",
+        "FU-IT10_LS1_MAC_IP_Subnetting_Zuordnung.json",
         "FU-IT10_LS1_MAC_IP_Subnetting_text.json",
         "longDescription.md",
         "manifest.json"
@@ -35,8 +64,8 @@
       "longDescription": "*   Netzwerkschnittstellen\n    \n*   LAN Geschwindigkeiten\n    \n*   Vollduplex und halbduplex\n    \n*   Netzwerktypen\n    \n*   Aufbau und Funktion einer MAC-Adresse\n    \n*   Aufbau und Funktion einer IPv4-Adresse\n    \n*   Aufbau einer IPv6-Adresse\n    \n*   Grund für die Weiterentwicklung des IP Protokolls auf IPv6\n    \n*   IPv4 Subnetzmasken und deren Verwendung für logische Sub-Netze\n    \n*   Konsolenbefehl(e) um die eigene IP-Adresse und MAC-Adresse herauszufinden\n    \n*   Netzwerkklassen\n    \n*   Standardnetzwerkmasken\n    \n*   Private IPv4-Adressbereiche und deren Funktion\n    \n*   Netzteil und Hostteil einer IPv4-Adresse\n    \n*   Funktion eines Standardgateways\n    \n*   Funktion eines DNS Servers / Protokolls\n    \n*   Funktion eines DHCP Servers / Protokolls\n    \n*   VMs: Nutzen und Nachteile von Virtualisierung\n    \n*   VMs: Übersicht über Ressourcenverteilung und Anforderungen von Windows"
     },
     {
-      "id": "fu-it10-ls2-nw-planung-lernkarten",
-      "filename": "FU-IT10_LS2_NW_Planung_Lernkarten.zip",
+      "id": "fu-it10-ls2-nw-planung",
+      "filename": "FU-IT10_LS2_NW_Planung.zip",
       "title": "Netzwerkplanung",
       "meta": {
         "name": "Netzwerkplanung",
@@ -48,19 +77,19 @@
         "description": "Planung realer Netzwerke: Topologien, strukturierte Verkabelung, Verkabelungs- und Gebäudeplan, Netzwerkschrank, Kabelschirmung und Projektdokumentation.",
         "author": "Mario Amrehn"
       },
-      "version": "31259da210ab",
-      "size": 21818,
-      "questionCount": 70,
+      "version": "20159e305bf1",
+      "size": 22941,
+      "questionCount": 73,
       "invalidCount": 0,
       "types": {
         "text": 40,
         "multipleChoice": 30,
-        "matching": 0
+        "matching": 3
       },
       "categories": [
         {
           "name": "Netzwerktopologien",
-          "count": 17
+          "count": 18
         },
         {
           "name": "Verkabelungsplan und Gebäudeplan",
@@ -68,11 +97,11 @@
         },
         {
           "name": "Kabel und Schirmung",
-          "count": 11
+          "count": 12
         },
         {
           "name": "Strukturierte Verkabelung",
-          "count": 11
+          "count": 12
         },
         {
           "name": "Projektdokumentation",
@@ -88,16 +117,17 @@
         }
       ],
       "sourceFiles": [
-        "LS2_Netzwerkplanung_Freitext.json",
-        "LS2_Netzwerkplanung_MC.json",
+        "FU-IT10_LS2_Netzwerkplanung_Freitext.json",
+        "FU-IT10_LS2_Netzwerkplanung_MC.json",
+        "FU-IT10_LS2_Netzwerkplanung_Zuordnung.json",
         "longDescription.md",
         "manifest.json"
       ],
       "longDescription": "**Logischer Netzwerkplan:**\n\n*   Aufbau und Bestandteile eines logischen Netzwerkplans\n    \n*   Standardisierte Symbole und Legenden\n    \n*   Netzwerkkonfigurationstabelle (Hostname, IP, Subnetzmaske, Gateway, DNS)\n    \n*   IP-Adressierungsschema und -strategie\n    \n\n**Verkabelungsplan und Gebäudeplan:**\n\n*   Aufbau eines Verkabelungsplans (Patchpanel, Port, Kabelkanal, Raum, Dose)\n    \n*   Notation im Verkabelungsplan (Wege)\n    \n*   Gebäudeplan mit Dosenstandorten und Kabelkanälen, Kabellängen und -anzahl\n    \n*   Revisionsvermerk im Plan\n    \n\n**Netzwerktopologien:**\n\n*   Stern-, Bus-, Ring-, Mesh- und Baumtopologie\n    \n*   Vor- und Nachteile der verschiedenen Topologien\n    \n*   Begründete Auswahl einer Topologie je Kunde\n    \n\n**Strukturierte Verkabelung:**\n\n*   Begriff und Vorteile der strukturierten Verkabelung\n    \n*   Primär-, Sekundär- und Tertiärverkabelung\n    \n*   Unterschied Verlegekabel/Installationskabel vs. Patchkabel\n    \n*   Passive vs. aktive Netzwerkkomponenten\n    \n\n**Kabel und Schirmung:**\n\n*   Kabelkategorien (Cat5e, Cat6, Cat6a, Cat7, Cat8) und deren Übertragungsgeschwindigkeiten und Maximallängen\n    \n*   Schirmungsarten (wie U/UTP, F/UTP, SF/UTP, S/FTP) und deren Bedeutung\n    \n\n**Netzwerkschrank:**\n\n*   Komponenten im Netzwerkschrank (Patchpanel, Switch, Router)\n    \n*   Zusammenspiel Patchpanel und Switch\n    \n*   Grob: Funktion und Aufbau eines Patchpanels / Doppeldose\n    \n\n**Projektdokumentation:**\n\n*   Deckblatt, Anschreiben, Projektbeschreibung\n    \n*   Stückliste mit passiven und aktiven Komponenten\n    \n*   Legende und Beschriftung in allen Plänen"
     },
     {
-      "id": "fu-it10-ls3-switch-lernkarten",
-      "filename": "FU-IT10_LS3_Switch_Lernkarten.zip",
+      "id": "fu-it10-ls3-switch",
+      "filename": "FU-IT10_LS3_Switch.zip",
       "title": "Switch Grundlagen",
       "meta": {
         "name": "Switch Grundlagen",
@@ -109,48 +139,49 @@
         "description": "Funktionsweise von Switches: Ethernet-Frame, MAC-Adresstabelle (SAT), ARP und Switching-Verfahren (Store-and-Forward, Cut-Through).",
         "author": "Mario Amrehn"
       },
-      "version": "723a1be031b8",
-      "size": 15445,
-      "questionCount": 49,
+      "version": "415547f8f9f2",
+      "size": 16661,
+      "questionCount": 52,
       "invalidCount": 0,
       "types": {
         "text": 23,
         "multipleChoice": 26,
-        "matching": 0
+        "matching": 3
       },
       "categories": [
         {
           "name": "Switch Grundlagen",
-          "count": 20
+          "count": 21
         },
         {
           "name": "Ethernet Frame",
-          "count": 12
+          "count": 13
         },
         {
           "name": "SAT Forwarding",
-          "count": 12
+          "count": 13
         },
         {
           "name": "ARP",
-          "count": 11
+          "count": 12
         },
         {
           "name": "Switching Verfahren",
-          "count": 6
+          "count": 7
         }
       ],
       "sourceFiles": [
-        "LS3_Switch_Freitext.json",
-        "LS3_Switch_MC.json",
+        "FU-IT10_LS3_Switch_Freitext.json",
+        "FU-IT10_LS3_Switch_MC.json",
+        "FU-IT10_LS3_Switch_Zuordnung.json",
         "longDescription.md",
         "manifest.json"
       ],
       "longDescription": "**Ethernet Frame:**\n\n*   Aufbau eines Ethernet II Frames (5 Felder nach SFD)\n    \n*   Destination MAC, Source MAC, EtherType, Payload, CRC/FCS – Funktionen und Größen in Bytes\n    \n*   Minimale und maximale Framegröße (64–1518 Bytes)\n    \n*   Datenübertragungseffizienz eines Frames (variable Payload Größe vs. Overhead durch Header)\n    \n\n**ARP (Address Resolution Protocol):**\n\n*   Funktion erklären: IP-Adresse → MAC-Adresse auflösen\n    \n*   ARP-Request (Broadcast) und ARP-Reply (Unicast)\n    \n*   ARP-Cache / ARP-Tabelle auf Endgeräten\n    \n*   Konsolenbefehle: arp -a, arp -d\n    \n*   Zusammenspiel der drei Zuordnungstabellen: DNS → ARP → SAT\n    \n\n**Switching-Verfahren:**\n\n*   Cut-Through\n    \n*   Store-and-Forward\n    \n*   Adaptive Cut-Through\n    \n\n**Source Address Table (SAT):**\n\n*   SAT / MAC-Adresstabelle / Forwarding Table (nur unterschiedliche Namen, selbes Konzept)\n    \n*   Funktion: Zuordnung MAC-Adresse → Port\n    \n*   Lernprozess aus Quell-MAC eingehender Frames\n    \n*   Flooding bei unbekannter Ziel-MAC\n    \n*   Aging-Mechanismus der SAT Einträge\n    \n*   Flooding vs. Broadcast\n    \n*   Unicast vs. Broadcast\n    \n\n**Switch-Leistungsmerkmale:**\n\n*   Switching Capacity berechnen\n    \n*   Non-blocking vs. Blocking Switch\n    \n*   Vollduplex vs. Halbduplex für Berechnung\n    \n\n**Switch-Typen und Funktionen:**\n\n*   Managed vs. Unmanaged Switch (Einsatzszenarien)\n    \n*   Power over Ethernet (PoE)\n    \n*   Switch vs. Hub (SAT vs. kein lernen, Prüfsumme checken)"
     },
     {
-      "id": "fu-it10-ls4-wlan-flashcards",
-      "filename": "FU-IT10_LS4_WLAN_flashcards.zip",
+      "id": "fu-it10-ls4-wlan",
+      "filename": "FU-IT10_LS4_WLAN.zip",
       "title": "WLAN Grundlagen und Sicherheit",
       "meta": {
         "name": "WLAN Grundlagen und Sicherheit",
@@ -162,69 +193,65 @@
         "description": "WLAN-Grundlagen, Standards (802.11n/ac/ax), Sicherheit, Authentifizierung und Schutzbedarf.",
         "author": "Mario Amrehn"
       },
-      "version": "ce1f8505b0a4",
-      "size": 19021,
-      "questionCount": 59,
+      "version": "3fdeefd92f62",
+      "size": 9136,
+      "questionCount": 28,
       "invalidCount": 0,
       "types": {
-        "text": 29,
-        "multipleChoice": 28,
-        "matching": 2
+        "text": 9,
+        "multipleChoice": 15,
+        "matching": 4
       },
       "categories": [
         {
-          "name": "Schutzbedarf",
-          "count": 10
-        },
-        {
           "name": "Risiken und Schutzmaßnahmen",
-          "count": 9
-        },
-        {
-          "name": "WLAN Sicherheitsstandards",
-          "count": 9
-        },
-        {
-          "name": "Frequenz und Kanäle",
-          "count": 7
-        },
-        {
-          "name": "Authentifizierung",
           "count": 6
         },
         {
-          "name": "WLAN Standards",
-          "count": 5
-        },
-        {
-          "name": "SSID und Sicherheit",
+          "name": "Schutzbedarf",
           "count": 4
         },
         {
-          "name": "WLAN Grundlagen",
-          "count": 4
+          "name": "Authentifizierung",
+          "count": 3
+        },
+        {
+          "name": "Frequenz und Kanäle",
+          "count": 3
         },
         {
           "name": "Konfiguration und Praxis",
-          "count": 2
+          "count": 3
+        },
+        {
+          "name": "WLAN Sicherheitsstandards",
+          "count": 3
         },
         {
           "name": "Sichere Datenübertragung",
           "count": 2
         },
         {
+          "name": "SSID und Sicherheit",
+          "count": 2
+        },
+        {
           "name": "Praxis und Auswertung",
+          "count": 1
+        },
+        {
+          "name": "WLAN Grundlagen",
           "count": 1
         }
       ],
       "sourceFiles": [
-        "LS4_WLAN_Freitext.json",
-        "LS4_WLAN_MC.json",
-        "LS4_WLAN_Zuordnung.json",
+        "FU-IT10_LS4_WLAN_Freitext.json",
+        "FU-IT10_LS4_WLAN_MC.json",
+        "FU-IT10_LS4_WLAN_Zuordnung.json",
         "longDescription.md",
         "manifest.json"
       ],
-      "longDescription": "**Frequenzbänder und Kanäle:**\n\n*   2,4-GHz- vs. 5-GHz-Band (Vor- und Nachteile)\n    \n*   13 Kanäle im 2,4-GHz-Band in Deutschland\n    \n*   Nicht überlappende Kanäle (1, 6, 11) und (1, 5, 9, 13)\n    \n*   Kanalbandbreite und Abstand der Kanäle\n    \n\n**Sichere Datenübertragung:**\n\n*   Authentifizierung und Verschlüsselung (Details siehe unten)\n    \n*   VLAN-Trennung von Kunden- und Mitarbeiter-WLAN\n    \n*   Hidden SSID als unwirksame Sicherheitsmaßnahme\n    \n*   Sendeleistung – Begrenzung auf das nötige Minimum\n    \n\n**WLAN-Sicherheitsstandards:**\n\n*   WEP – Schwächen, gilt als unsicher\n    \n*   Verbesserungen von WPA3 gegenüber WPA2\n    \n\n**Authentifizierung im WLAN:**\n\n*   WPA2-Personal (PSK) – typischer Anwendungsfall\n    \n*   WPA2-Enterprise mit RADIUS-Server\n    \n*   Captive Portal für Kunden-/Gast-WLAN\n    \n*   Offenes WLAN\n    \n*   WPS (Wi-Fi Protected Setup) – Risiken, im Unternehmen deaktivieren\n    \n*   MAC-Adressfilterung als unwirksame Schutzmaßnahme\n    \n\n**Schutzbedarf (BSI):**\n\n*   Drei Schutzbedarfskategorien (normal, hoch, sehr hoch)\n    \n*   Faktoren und Beispiele für die Einstufung\n    \n\n**Risiken und Schutzmaßnahmen:**\n\n*   Typische WLAN-Sicherheitsrisiken im Unternehmen (z. B. öffentlich ausgehängtes Passwort)\n    \n*   Bestandteile eines sicheren Kunden-WLAN-Konzepts"
+      "longDescription": "**Frequenzbänder und Kanäle:**\n\n*   2,4-GHz- vs. 5-GHz-Band (Vor- und Nachteile)\n    \n*   13 Kanäle im 2,4-GHz-Band in Deutschland\n    \n*   Nicht überlappende Kanäle (1, 6, 11) und (1, 5, 9, 13)\n    \n*   Kanalbandbreite und Abstand der Kanäle\n    \n\n**Sichere Datenübertragung:**\n\n*   Authentifizierung und Verschlüsselung (Details siehe unten)\n    \n*   Vorteil der Trennung von Kunden- und Mitarbeiter-WLAN\n    \n*   Hidden SSID als wenig wirksame Sicherheitsmaßnahme\n    \n*   Sendeleistungsbegrenzung auf das nötige Minimum\n    \n\n**WLAN-Sicherheitsstandards:**\n\n*   WEP – Schwächen, gilt als unsicher\n    \n*   Verbesserungen von WPA3 gegenüber WPA2\n    \n\n**Authentifizierung im WLAN:**\n\n*   WPA2-Personal (PSK) – typischer Anwendungsfall\n    \n*   WPA2-Enterprise mit RADIUS-Server\n    \n*   Captive Portal für Kunden-/Gast-WLAN\n    \n*   Offenes WLAN\n    \n*   WPS (Wi-Fi Protected Setup) – Risiken, im Unternehmen deaktivieren\n    \n*   MAC-Adressfilterung als wenig wirksame Schutzmaßnahme\n    \n\n**Schutzbedarf (BSI):**\n\n*   Drei Schutzbedarfskategorien (normal, hoch, sehr hoch)\n    \n*   Beispiele für die Einstufung (normal / hoch / sehr hoch)\n    \n\n**Risiken und Schutzmaßnahmen:**\n\n*   Typische WLAN-Sicherheitsrisiken im Unternehmen (z. B. öffentlich ausgehängtes Passwort, keine Firmware Updates des APs)\n    \n*   Mögliche Schutzmaßnahmen eines sicheren WLAN-Konzepts"
     },
     {
       "id": "itt11-ls1-3-1-5-ls2-4-cps",
@@ -240,14 +267,14 @@
         "description": "Vertikale Kommunikation, Automatisierungspyramide, SCADA, Kommunikationsmodelle, MQTT und OPC UA.",
         "author": "Mario Amrehn"
       },
-      "version": "8510e358a9fe",
-      "size": 22868,
-      "questionCount": 122,
+      "version": "6fcc5f847fee",
+      "size": 26923,
+      "questionCount": 125,
       "invalidCount": 0,
       "types": {
         "text": 55,
         "multipleChoice": 67,
-        "matching": 0
+        "matching": 3
       },
       "categories": [
         {
@@ -260,7 +287,7 @@
         },
         {
           "name": "LS1.3 Automatisierungspyramide",
-          "count": 10
+          "count": 11
         },
         {
           "name": "LS2.4 OPC UA Informationsmodell",
@@ -275,6 +302,10 @@
           "count": 8
         },
         {
+          "name": "LS1.5 MQTT QoS",
+          "count": 8
+        },
+        {
           "name": "LS2.4 OPC UA Grundlagen",
           "count": 8
         },
@@ -283,16 +314,12 @@
           "count": 8
         },
         {
-          "name": "LS1.5 MQTT QoS",
+          "name": "LS1.4 Kommunikationsmodelle",
           "count": 7
         },
         {
           "name": "LS1.5 MQTT Topics",
           "count": 7
-        },
-        {
-          "name": "LS1.4 Kommunikationsmodelle",
-          "count": 6
         },
         {
           "name": "LS1.4 Request/Response",
@@ -326,12 +353,97 @@
       "sourceFiles": [
         "ITT11_LS1.3-1.5_LS2.4_CPS_Freitext.json",
         "ITT11_LS1.3-1.5_LS2.4_CPS_MC.json",
+        "ITT11_LS1.3-1.5_LS2.4_CPS_Zuordnung.json",
+        "longDescription.md",
         "manifest.json"
-      ]
+      ],
+      "longDescription": "**Automatisierungspyramide (LS1.3):**\n\n*   Die fünf Ebenen: Feldebene, Steuerungsebene, Prozessleitebene, Betriebsleitebene, Unternehmensleitebene\n    \n*   Typische Geräte/Systeme je Ebene (Sensor/Aktor, SPS, SCADA/HMI, MES, ERP)\n    \n*   Latenzanforderungen je Ebene (µs/ms bis Stunden/Tage)\n    \n*   Echtzeitfähigkeit, Determinismus\n    \n*   IT vs. OT (Information Technology vs. Operational Technology)\n    \n*   Klassische Pyramide vs. Mesh-/Cloud-Topologie (Industrie 4.0)\n    \n*   Cloud-Service-Modelle: IaaS, PaaS, SaaS, DBaaS\n    \n\n**Vertikale vs. horizontale Kommunikation (LS1.3):**\n\n*   Definition vertikal (zwischen Ebenen) vs. horizontal (innerhalb einer Ebene)\n    \n*   Beispiele zuordnen können (PROFINET zwischen zwei Robotern → horizontal; SPS → MES via OPC UA → vertikal)\n    \n*   Feldbusse: PROFINET, Modbus, CANopen, Industrial Ethernet\n    \n*   Schichten überspringen (Sensor → Cloud direkt) im Industrie-4.0-Ansatz\n    \n\n**SCADA – Supervisory Control and Data Acquisition (LS1.3):**\n\n*   Bedeutung der Abkürzung und Verortung auf der Prozessleitebene\n    \n*   Vier Hauptaufgaben: Datenerfassung, Visualisierung/Überwachung, Alarmierung/Eingriff, Historisierung\n    \n*   HMI (Human Machine Interface): Aufgabe, Visualisierung, Sollwert-/Rezepturanpassung\n    \n*   SCADA-Datenbank / Historian – Zeitreihen, Trendanalyse\n    \n*   Datenschutz: Maschinen-/Auftrags-IDs ja, Personalien nein\n    \n*   Condition Monitoring / Predictive Maintenance (Pumpenlaufzeit, Ventilbetätigungen)\n    \n*   Lokales SCADA vs. Remote-SCADA\n    \n*   RTU (Remote Terminal Unit) und MTU (Master Terminal Unit)\n    \n*   Anwendungsbeispiele (Lackierstraße, Wassertank-Befüllung, Gewächshaus)\n    \n\n**Kommunikationsmodelle (LS1.4):**\n\n*   Request/Response (synchron, Pull) – Beispiel HTTP, Polling als Nachteil\n    \n*   Subscription/Notify (asynchron, Push, ohne Broker) – ereignisgetrieben\n    \n*   Publish/Subscribe (asynchron, Push, mit Broker) – m:n-Verteilung\n    \n*   Lose Kopplung (räumlich, zeitlich, funktional)\n    \n*   Synchron vs. asynchron einordnen können\n    \n*   Vorteile/Nachteile pro Modell\n    \n*   Broker als Single Point of Failure\n    \n*   OPC UA vereint alle drei Modelle\n    \n*   Übergeordnete Anforderungen: Echtzeitfähigkeit, Skalierbarkeit, Flexibilität\n    \n*   Publisher/Subscriber/Broker im Diagramm zuordnen können\n    \n\n**MQTT – Message Queuing Telemetry Transport (LS1.5):**\n\n*   Bedeutung der Abkürzung, Transport TCP/IP\n    \n*   Standard-Ports: 1883 (unverschlüsselt), 8883 (TLS)\n    \n*   Rollen: Broker, Publisher, Subscriber (ein Client kann beides sein)\n    \n*   CONNECT-Parameter: ClientID, Username/Passwort, Keepalive, Last Will, Clean Session\n    \n*   Topic-Aufbau: hierarchisch, Slash-getrennt, case-sensitive, keine Leerzeichen, kein führender Slash\n    \n*   Wildcards in Subscriptions: + (eine Ebene), # (mehrere Ebenen, nur am Ende)\n    \n*   Wildcards NICHT beim Publish erlaubt\n    \n*   Topic-Hierarchien entwerfen (Ort/Etage/Raum/Sensor)\n    \n*   QoS-Stufen 0 (höchstens einmal), 1 (mindestens einmal), 2 (genau einmal)\n    \n*   QoS-Handshakes: PUBACK (1), PUBREC/PUBREL/PUBCOMP (2)\n    \n*   Retain-Flag: letzte Nachricht je Topic für späte Subscriber\n    \n*   Last Will and Testament (LWT) – wann wird er ausgelöst\n    \n*   Keepalive und 1,5×-Regel\n    \n*   Sicherheit: TLS, Username/Passwort, ggf. Client-Zertifikate\n    \n*   MQTT vs. HTTP (Overhead, Pattern, Einsatzgebiet)\n    \n*   Tools: MQTT Explorer (Desktop), MQTT Dash (Smartphone)\n    \n*   IBH Link UA als Gateway OPC UA ⇄ MQTT\n    \n*   Mosquitto als typischer Broker\n    \n\n**OPC UA – Open Platform Communications Unified Architecture (LS2.4):**\n\n*   Norm IEC 62541, Standard-Port 4840, Schema opc.tcp://\n    \n*   Abgrenzung zu Classic OPC (kein COM/DCOM, plattformunabhängig, internet-/firewall-tauglich, integrierte Sicherheit)\n    \n*   Vier Kern-Kompetenzen: Plattform-/Internet-Fähigkeit, semantisches Informationsmodell, Service-orientierte Architektur (SOA), vertikale Integration\n    \n*   Zwei Säulen: Informationsmodellierung und Übertragungsmechanismen\n    \n\n**OPC UA Informationsmodell (LS2.4):**\n\n*   Adressraum (Address Space) als typisierter Knotenbaum\n    \n*   Knotenklassen: Object, Variable, Method, View\n    \n*   Typ-Knoten: ObjectType, VariableType, ReferenceType, DataType\n    \n*   Referenzen (HasComponent, HasTypeDefinition, Organizes)\n    \n*   NodeId-Aufbau: ns=<index>;<idtype>=<id> mit i/s/b/g\n    \n*   Namespace-Index: ns=0 = OPC-Standardraum, höhere Indizes = Hersteller/Anwendung/Companion\n    \n*   Companion Specifications (Euromap 77, PLCopen, VDMA, EDDL)\n    \n*   Variable vs. Methode (Zustand vs. Aktion)\n    \n\n**OPC UA Übertragung (LS2.4):**\n\n*   Drei Mechanismen: Request/Response, Subscription/Notify, Pub/Sub\n    \n*   Subscription mit Monitored Items (data-change, event, aggregate)\n    \n*   Sampling Interval vs. Publishing Interval\n    \n*   Encoding: OPC UA Binary über opc.tcp (effizient) vs. XML/JSON über HTTPS/SOAP\n    \n*   Pub/Sub-Variante mit Broker (MQTT-ähnlich)\n    \n\n**OPC UA Sicherheit (LS2.4):**\n\n*   Drei Säulen: Authentifizierung, Integrität (Signatur), Vertraulichkeit (Verschlüsselung)\n    \n*   Security Modes: None, Sign, SignAndEncrypt\n    \n*   X.509-Zertifikate\n    \n*   Secure Channel vs. Session (Leitung vs. Login)\n    \n\n**OPC UA Praxis (LS2.4):**\n\n*   UAExpert (Endpunkt verbinden, Adressraum browsen, Data-Access-View, Knotenattribute inspizieren)\n    \n*   IBH Link UA als Gateway OPC UA ⇄ MQTT (XML-Konfiguration lesen können)\n    \n*   Aufbau eines minimalen OPC-UA-Servers in Python: Server-Endpoint, Namespace registrieren, Objects-Knoten, add_object/add_folder/add_variable, set_writable, server.start\n    \n*   OPC UA vs. MQTT – Datenmodell, Sicherheit, typischer Einsatz\n"
     },
     {
-      "id": "itt11-ls1-cps-linux-python-lernkarten",
-      "filename": "ITT11_LS1_CPS_Linux_Python_Lernkarten.zip",
+      "id": "itt11-ls1-6-ls1-7-ls2-6-nosql-cloud-middleware",
+      "filename": "ITT11_LS1.6_LS1.7_LS2.6_NoSQL_Cloud_Middleware.zip",
+      "title": "NoSQL, Cloud & Middleware",
+      "meta": {
+        "name": "NoSQL, Cloud & Middleware",
+        "institution": "Berufsschule",
+        "program": "Fachinformatik",
+        "subject": "ITT",
+        "gradeLevel": "11",
+        "learningUnit": "LS1.6, LS1.7, LS2.6",
+        "description": "NoSQL-Datenbankmodelle, BASE/ACID, Skalierung und Ausfallsicherheit in der Cloud (MongoDB Atlas, Replica Sets, Sharding, CAP-Theorem) sowie Middleware mit dem OPC Router.",
+        "author": "Mario Amrehn"
+      },
+      "version": "9f678717af30",
+      "size": 16829,
+      "questionCount": 46,
+      "invalidCount": 0,
+      "types": {
+        "text": 18,
+        "multipleChoice": 18,
+        "matching": 10
+      },
+      "categories": [
+        {
+          "name": "LS1.6 NoSQL-Datenbankmodelle",
+          "count": 6
+        },
+        {
+          "name": "LS1.6 BASE und ACID",
+          "count": 5
+        },
+        {
+          "name": "LS1.6 NoSQL vs. Relational",
+          "count": 5
+        },
+        {
+          "name": "LS1.7 Skalierung",
+          "count": 5
+        },
+        {
+          "name": "LS2.6 Middleware Grundlagen",
+          "count": 5
+        },
+        {
+          "name": "LS1.7 Cloud und DBaaS",
+          "count": 4
+        },
+        {
+          "name": "LS1.7 Replica Set",
+          "count": 4
+        },
+        {
+          "name": "LS1.6 NoSQL Grundlagen",
+          "count": 3
+        },
+        {
+          "name": "LS1.7 CAP-Theorem",
+          "count": 3
+        },
+        {
+          "name": "LS1.7 Sharding",
+          "count": 3
+        },
+        {
+          "name": "LS2.6 OPC Router",
+          "count": 2
+        },
+        {
+          "name": "LS1.7 MongoDB Atlas",
+          "count": 1
+        }
+      ],
+      "sourceFiles": [
+        "ITT11_LS1.6_LS1.7_LS2.6_NoSQL_Cloud_Middleware_Freitext.json",
+        "ITT11_LS1.6_LS1.7_LS2.6_NoSQL_Cloud_Middleware_MC.json",
+        "ITT11_LS1.6_LS1.7_LS2.6_NoSQL_Cloud_Middleware_Zuordnung.json",
+        "longDescription.md",
+        "manifest.json"
+      ],
+      "longDescription": "**NoSQL-Grundlagen (LS1.6):**\n\n*   „Not only SQL\" – Zugriff über APIs und Datenverwaltungsschicht\n\n*   Konsistenzmodelle BASE (Basic Availability, Soft-state, Eventual Consistency) vs. ACID\n\n*   Die vier NoSQL-Datenbankmodelle: dokumentenorientiert (MongoDB), spaltenorientiert (Cassandra), Graphdatenbank (Neo4j), Key-Value (Redis)\n\n*   Abgrenzung zu relationalen Datenbanken: Schema-Flexibilität, Beziehungen, Redundanzen, Skalierung, Abfragesprache\n\n*   Anwendungsfälle: Wann NoSQL, wann relational? (Banktransaktionen vs. Chatnachrichten/Statusmeldungen)\n\n**Skalierung und Cloud (LS1.7):**\n\n*   Vertikale Skalierung (Scale-up) vs. horizontale Skalierung (Scale-out)\n\n*   Database as a Service (DBaaS) – Leistungen des Providers\n\n*   Cluster, Replica Sets (Primary/Secondary, Wahl bei Ausfall), Sharding (bereichsbasiert, Geo, gehasht), Query Router\n\n*   CAP-Theorem: Konsistenz, Verfügbarkeit, Ausfalltoleranz – nur 2 von 3\n\n**Middleware (LS2.6):**\n\n*   Definition: Vermittlung zwischen heterogenen Systemen und Datenquellen\n\n*   OPC Router (Inray): (Plugin-Bereich, Verbindungen, Transferobjekte und) Trigger\n\n*   Vor- und Nachteile von Middleware (fertige Plugins vs. Lizenzkosten/Herstellerabhängigkeit)\n"
+    },
+    {
+      "id": "itt11-ls1-cps-linux-python",
+      "filename": "ITT11_LS1_CPS_Linux_Python.zip",
       "title": "Cyber-physische Systeme mit Linux & Python",
       "meta": {
         "name": "Cyber-physische Systeme mit Linux & Python",
@@ -339,27 +451,27 @@
         "program": "Fachinformatik",
         "subject": "ITT",
         "gradeLevel": "11",
-        "learningUnit": "LS1",
+        "learningUnit": "LS1.0, LS1.1, LS1.2",
         "description": "Cyber-physische Systeme und IoT/Industrie 4.0 mit Grundlagen zu Linux-Kommandozeile und Python-Programmierung.",
         "author": "Mario Amrehn"
       },
-      "version": "c669d461986a",
-      "size": 21935,
-      "questionCount": 63,
+      "version": "37a92d4299c1",
+      "size": 23824,
+      "questionCount": 66,
       "invalidCount": 0,
       "types": {
         "text": 21,
         "multipleChoice": 42,
-        "matching": 0
+        "matching": 3
       },
       "categories": [
         {
           "name": "Cyber-physische Systeme",
-          "count": 36
+          "count": 37
         },
         {
           "name": "Python Grundlagen",
-          "count": 12
+          "count": 13
         },
         {
           "name": "CPS Grundlagen",
@@ -379,18 +491,144 @@
         },
         {
           "name": "Linux Grundlagen",
-          "count": 8
+          "count": 9
         },
         {
           "name": "CPS Modellierung",
-          "count": 6
+          "count": 7
         }
       ],
       "sourceFiles": [
-        "ITT11_LS1_CPS_Freitext.json",
+        "ITT11_LS1_CPS_Linux_Python_Freitext.json",
         "ITT11_LS1_CPS_Linux_Python_MC.json",
+        "ITT11_LS1_CPS_Linux_Python_Zuordnung.json",
+        "longDescription.md",
         "manifest.json"
-      ]
+      ],
+      "longDescription": "**CPS-Grundlagen:**\n\n*   Definition Cyber-physisches System (Mechanik + Software + IT, vernetzt)\n\n*   Komponenten: Sensoren, Aktoren, eingebettete Systeme\n\n*   Bidirektionaler Datenaustausch zwischen physischer und digitaler Welt (geschlossene Regelschleife)\n\n*   Abgrenzung Embedded System vs. CPS (Vernetzung, Autonomie, dynamische Anpassung)\n\n*   Vorteile (Rekonfigurierbarkeit, Selbstoptimierung, Predictive Maintenance) und Herausforderungen (Cyber-Security, Emergent Behavior, Single Point of Failure)\n\n*   Safety vs. Security\n\n**IoT und Industrie 4.0:**\n\n*   Internet of Things (IoT) vs. Industrial IoT (IIoT)\n\n*   Industrie 4.0 als vierte industrielle Revolution\n\n*   Einsatzbereiche: Logistik, Produktion, Medizintechnik, Smart Grid\n\n*   Edge / Fog / Cloud Computing (OPTIONAL)\n\n*   Digital Twin und horizontale/vertikale Integration\n\n**CPS-Modellierung:**\n\n*   Flussarten: Stofffluss, Informationsfluss, Energiefluss\n\n**Linux-Grundlagen:**\n\n*   Navigation und Dateiverwaltung: ls, cd, pwd, mkdir, cp, mv, rm, cat\n\n**Python-Grundlagen:**\n\n*   Ausgabe mit print(), Kommentare, Datentypen (int, float, str, bool), type()\n\n*   Datenstrukturen: Liste, Tupel, Set, Dictionary (Syntax und Eigenschaften)\n\n*   Listen-Methoden: append(), insert(), remove()\n\n*   Funktionen (def) und Schleifen (for, while, List Comprehensions)\n"
+    },
+    {
+      "id": "itt11-ls2-4-mqtt-opcua-cps",
+      "filename": "ITT11_LS2.4_MQTT_OPCUA_CPS.zip",
+      "title": "OPC UA und Abgrenzung zu MQTT",
+      "meta": {
+        "name": "OPC UA und Abgrenzung zu MQTT",
+        "institution": "Berufsschule",
+        "program": "Fachinformatik",
+        "subject": "ITT",
+        "gradeLevel": "11",
+        "learningUnit": "LS2.4",
+        "description": "OPC Classic, OPC UA (Informationsmodell, Übertragungsmechanismen, Sicherheit, Companion Specifications) und die Abgrenzung zu MQTT.",
+        "author": "Mario Amrehn"
+      },
+      "version": "4ce5068d145e",
+      "size": 7295,
+      "questionCount": 16,
+      "invalidCount": 0,
+      "types": {
+        "text": 0,
+        "multipleChoice": 13,
+        "matching": 3
+      },
+      "categories": [
+        {
+          "name": "LS2.4 OPC UA Informationsmodell",
+          "count": 4
+        },
+        {
+          "name": "LS2.4 OPC UA Übertragung",
+          "count": 4
+        },
+        {
+          "name": "LS2.4 OPC Classic",
+          "count": 3
+        },
+        {
+          "name": "LS2.4 OPC UA Grundlagen",
+          "count": 3
+        },
+        {
+          "name": "LS2.4 OPC UA Sicherheit",
+          "count": 1
+        },
+        {
+          "name": "LS2.4 OPC UA vs. MQTT",
+          "count": 1
+        },
+        {
+          "name": "LS2.4 Vertikale Kommunikation",
+          "count": 1
+        }
+      ],
+      "sourceFiles": [
+        "ITT11_LS2.4_MQTT_OPCUA_CPS_MC.json",
+        "ITT11_LS2.4_MQTT_OPCUA_CPS_Zuordnung.json",
+        "longDescription.md",
+        "manifest.json"
+      ],
+      "longDescription": "**Von OPC Classic zu OPC UA:**\n\n*   Problemstellung der 1990er: herstellerspezifische Treiber zwischen Steuerung und SCADA\n\n*   Schwächen von OPC Classic: COM/DCOM (Windows-Bindung), kaum internetfähig\n\n*   OPC UA ab 2008: plattformunabhängig, TCP-Port 4840, integrierte Verschlüsselung\n\n**Kern-Kompetenzen von OPC UA:**\n\n*   Cross Platform & Internet Ready\n\n*   Komplexes, semantisches Informationsmodell\n\n*   Service Oriented Architecture (SOA)\n\n*   Vertikale Kommunikation: Shopfloor (OT) → Operations Level (IT) → Enterprise Level (Cloud)\n\n**Informationsmodell:**\n\n*   Adressraum als Full-Mesh-Network aus Nodes (Attribute, Methoden, Ereignisse)\n\n*   NodeID (z. B. ns=2;i=3): Namespace-Index, Identifier-Typ, Identifier-Wert\n\n*   Companion Specifications (z. B. Euromap77) mit NodeSet-XML\n\n**Übertragungsmechanismen:**\n\n*   Request and Response\n\n*   Subscription and Notify (Secure Channel, Session, Monitored Items, individuelle Abtastintervalle)\n\n*   Publish and Subscribe (Broker über MQTT/AMQP oder brokerlos per UDP-Multicast)\n\n**Sicherheit:**\n\n*   Zertifikatsbasierte Authentifizierung, Signierung von Nachrichten, Verschlüsselung (SSL/TLS/AES)\n\n**OPC UA vs. MQTT:**\n\n*   OPC UA standardisiert Transport UND Datenmodell – MQTT nur den Transport\n\n*   Semantische Interoperabilität durch Companion Specifications\n"
+    },
+    {
+      "id": "itt11-ls2-8-rest-api",
+      "filename": "ITT11_LS2.8_REST_API.zip",
+      "title": "REST-APIs",
+      "meta": {
+        "name": "REST-APIs",
+        "institution": "Berufsschule",
+        "program": "Fachinformatik",
+        "subject": "ITT",
+        "gradeLevel": "11",
+        "learningUnit": "LS2.8",
+        "description": "REST-APIs: Grundlagen und Design-Prinzipien (Representational State Transfer, Zustandslosigkeit, lose Kopplung), CRUD und HTTP-Methoden, Aufbau von HTTP-Request und -Response, URL/Endpunkte mit Parametern, HTTP-Statuscodes, Vor- und Nachteile sowie Abgrenzung zu SOAP/RPC/GraphQL und die praktische Umsetzung mit dem Flask-Framework auf dem Raspberry Pi (Werkstatttor-Überwachung Autohaus Nettmann).",
+        "author": "Mario Amrehn"
+      },
+      "version": "7a3dbdc00e5a",
+      "size": 13377,
+      "questionCount": 50,
+      "invalidCount": 0,
+      "types": {
+        "text": 16,
+        "multipleChoice": 24,
+        "matching": 10
+      },
+      "categories": [
+        {
+          "name": "LS2.8 Flask & Raspberry Pi",
+          "count": 10
+        },
+        {
+          "name": "LS2.8 REST-Grundlagen",
+          "count": 10
+        },
+        {
+          "name": "LS2.8 CRUD & HTTP-Methoden",
+          "count": 8
+        },
+        {
+          "name": "LS2.8 HTTP-Request & Response",
+          "count": 6
+        },
+        {
+          "name": "LS2.8 HTTP-Statuscodes",
+          "count": 6
+        },
+        {
+          "name": "LS2.8 URL & Endpunkte",
+          "count": 5
+        },
+        {
+          "name": "LS2.8 Vor- & Nachteile / API-Vergleich",
+          "count": 5
+        }
+      ],
+      "sourceFiles": [
+        "ITT11_LS2.8_REST_API_Freitext.json",
+        "ITT11_LS2.8_REST_API_MC.json",
+        "ITT11_LS2.8_REST_API_Zuordnung.json",
+        "longDescription.md",
+        "manifest.json"
+      ],
+      "longDescription": "**REST-Grundlagen (LS2.8):**\n\n*   REST = Representational State Transfer – ein Paradigma für die Softwarearchitektur verteilter Systeme (Abstraktion des World Wide Web)\n\n*   Ressource über Webserver verfügbar und eindeutig über eine URL identifiziert; Client und Server lose gekoppelt\n\n*   Zustandslosigkeit (jede Anfrage in sich geschlossen) und ihr Nutzen für die Skalierung\n\n*   Die 6 REST-Design-Prinzipien: Client-Server, Zustandslosigkeit, Caching, Einheitliche Schnittstelle, Mehrschichtige Systemarchitektur, Code on Demand (optional)\n\n**CRUD und HTTP-Methoden (LS2.8):**\n\n*   CRUD ↔ HTTP-Methoden: Create→POST, Read→GET, Update→PUT, Delete→DELETE (Webshop-Beispiel)\n\n*   Ablauf eines POST (Daten im Body, Token/API-Key im Header, Validierung, 201 Created)\n\n*   Warum GET und DELETE ohne Body auskommen (Parameter statt Nutzdaten)\n\n**HTTP-Request und -Response (LS2.8):**\n\n*   Request: Request Line (Methode, URL, Protokoll), Header (Metainfos, Token, Cookies, API-Key), Leerzeile, Body (optional)\n\n*   Response: Status Line (Protokoll, Statuscode, Beschreibung), Header, Leerzeile, Body (JSON/XML/HTML)\n\n**URL und Endpunkte (LS2.8):**\n\n*   Aufbau einer URL: Protokoll, Host, Port, Application Context, Version, Resource, Parameter\n\n*   Endpunkt, Platzhalter ({} oder :) und Query-Parameter (? und &) zum Filtern/Sortieren\n\n**HTTP-Statuscodes (LS2.8):**\n\n*   Klassen 1xx–5xx, Schwerpunkt 2xx (Erfolg), 4xx (Clientfehler), 5xx (Serverfehler)\n\n*   Konkrete Codes: 200 OK, 201 Created, 204 No Content, 404 Not Found, 500 Internal Server Error\n\n**Vor- und Nachteile / API-Vergleich (LS2.8):**\n\n*   Vorteile (plattform-/sprachunabhängig, skalierbar, zustandslos) und Nachteile (Datenmodellierung, uneinheitliche Fehlerbehandlung, Traffic)\n\n*   Abgrenzung REST ↔ SOAP (XML only, ACID, Sicherheit) sowie RPC und GraphQL\n\n**Flask und Raspberry Pi (LS2.8):**\n\n*   Flask als minimales Python-Webframework (Abgrenzung zu Django/Web2py), Installation mit pip\n\n*   App-Instanz (Flask(__name__)), Routing mit @app.route(), Pfad-Platzhalter, app.run(host/port)\n\n*   request.get_json() und request.args.get() lesen, jsonify(data) mit Statuscode zurückgeben\n\n*   Templates (render_template, {{…}}-Platzhalter) und die GPIO-Routen der Werkstatttor-Überwachung (Autohaus Nettmann)\n"
     },
     {
       "id": "beispiel-allgemeinwissen",
@@ -427,6 +665,75 @@
       ],
       "sourceFiles": [
         "beispiel-allgemeinwissen.json"
+      ]
+    },
+    {
+      "id": "it-trivia",
+      "filename": "it-trivia.json",
+      "title": "IT-Trivia: Mythen & Meilensteine",
+      "meta": {
+        "name": "IT-Trivia: Mythen & Meilensteine",
+        "subject": "IT-Wissen",
+        "description": "Fakten, hartnäckige Mythen und IT Anekdoten.",
+        "author": "Flashcards Demo"
+      },
+      "version": "573dfcf0a3cd",
+      "size": 17561,
+      "questionCount": 16,
+      "invalidCount": 0,
+      "types": {
+        "text": 0,
+        "multipleChoice": 16,
+        "matching": 0
+      },
+      "categories": [
+        {
+          "name": "Fun Facts",
+          "count": 7
+        },
+        {
+          "name": "IT-Historie",
+          "count": 6
+        },
+        {
+          "name": "Internet",
+          "count": 4
+        },
+        {
+          "name": "Hardware",
+          "count": 3
+        },
+        {
+          "name": "Softwareentwicklung",
+          "count": 3
+        },
+        {
+          "name": "Netzwerk",
+          "count": 2
+        },
+        {
+          "name": "Protokolle",
+          "count": 2
+        },
+        {
+          "name": "Software",
+          "count": 2
+        },
+        {
+          "name": "Betriebssysteme",
+          "count": 1
+        },
+        {
+          "name": "Community",
+          "count": 1
+        },
+        {
+          "name": "KI",
+          "count": 1
+        }
+      ],
+      "sourceFiles": [
+        "it-trivia.json"
       ]
     }
   ]
