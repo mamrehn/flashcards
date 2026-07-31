@@ -133,7 +133,15 @@ function sanitizeName(name) {
  */
 function send(ws, data) {
     if (ws && ws.readyState === 1) {
-        ws.send(JSON.stringify(data));
+        // A socket can transition to CLOSING between the readyState check and
+        // the write, in which case `ws` emits an error. Swallow it here: an
+        // exception escaping a message handler would take down the whole
+        // process (and with it every room on this machine).
+        try {
+            ws.send(JSON.stringify(data));
+        } catch (error) {
+            console.warn('send failed:', error.message);
+        }
     }
 }
 
@@ -146,7 +154,14 @@ function broadcastToPlayers(room, data) {
     const msg = JSON.stringify(data);
     for (const player of room.players.values()) {
         if (player.ws && player.ws.readyState === 1) {
-            player.ws.send(msg);
+            // Per-socket try/catch: one player whose socket died mid-broadcast
+            // must not stop the question/result from reaching the rest of the
+            // class.
+            try {
+                player.ws.send(msg);
+            } catch (error) {
+                console.warn('broadcast failed:', error.message);
+            }
         }
     }
 }
@@ -178,7 +193,17 @@ const httpServer = http.createServer((req, res) => {
 // --- WebSocket Server ---
 
 const MAX_PLAYERS_PER_ROOM = 240;
+// Token bucket: RATE_LIMIT_PER_SECOND sustained, RATE_LIMIT_BURST instantaneous.
+// The burst headroom is what makes a legitimate classroom work. A poll host
+// reconciling after a reconnect emits one `append_option` per player
+// back-to-back; under the old flat per-second cliff those options were silently
+// dropped, and past 3x the cliff the host's socket was terminated outright —
+// disconnecting the whole room mid-lesson.
 const RATE_LIMIT_PER_SECOND = 20;
+const RATE_LIMIT_BURST = 60;
+// Only a client still hammering long after its bucket ran dry is abusive;
+// legitimate clients back off as soon as their queue drains.
+const RATE_LIMIT_MAX_DROPPED = 200;
 // Per-question options ceiling. Quiz questions use ~4 options; polls in
 // "source: players" mode encode every connected name as an option (plus a
 // metadata sentinel in slot 0), so this must cover MAX_PLAYERS_PER_ROOM + 1.
@@ -240,22 +265,36 @@ wss.on('connection', (ws) => {
         ws.missedPongs = 0;
     });
 
-    // Rate limiting: track messages per second
-    ws._msgCount = 0;
-    ws._msgResetTimer = setInterval(() => {
-        ws._msgCount = 0;
-    }, 1000);
+    // Rate limiting: token bucket, refilled lazily on each message so there is
+    // no per-connection timer to leak.
+    ws._tokens = RATE_LIMIT_BURST;
+    ws._tokensAt = Date.now();
+    ws._droppedMsgs = 0;
+    ws._lastRateWarn = 0;
 
     ws.on('message', (raw) => {
         // Rate limit check
-        if (++ws._msgCount > RATE_LIMIT_PER_SECOND) {
-            send(ws, { type: 'error', message: 'Zu viele Nachrichten. Bitte warte einen Moment.' });
-            if (ws._msgCount > RATE_LIMIT_PER_SECOND * 3) {
-                clearInterval(ws._msgResetTimer);
-                ws.terminate();
+        const nowMs = Date.now();
+        ws._tokens = Math.min(
+            RATE_LIMIT_BURST,
+            ws._tokens + ((nowMs - ws._tokensAt) * RATE_LIMIT_PER_SECOND) / 1000
+        );
+        ws._tokensAt = nowMs;
+        if (ws._tokens < 1) {
+            // At most one warning per second. Replying to every dropped frame
+            // is its own amplification, and on the client each reply pops a
+            // toast — and on the poll host it used to abort the running vote.
+            if (nowMs - ws._lastRateWarn > 1000) {
+                ws._lastRateWarn = nowMs;
+                send(ws, {
+                    type: 'error',
+                    message: 'Zu viele Nachrichten. Bitte warte einen Moment.',
+                });
             }
+            if (++ws._droppedMsgs > RATE_LIMIT_MAX_DROPPED) ws.terminate();
             return;
         }
+        ws._tokens--;
 
         let msg;
         try {
@@ -350,12 +389,10 @@ wss.on('connection', (ws) => {
     });
 
     ws.on('close', () => {
-        clearInterval(ws._msgResetTimer);
         handleDisconnect(ws);
     });
     ws.on('error', (err) => {
         console.error('WebSocket error:', err.message);
-        clearInterval(ws._msgResetTimer);
     });
 });
 
@@ -1196,15 +1233,24 @@ function handleDisconnect(ws) {
 // terminated mid-session whenever their phone briefly slept.
 const heartbeatInterval = setInterval(() => {
     for (const ws of wss.clients) {
-        if (!ws.isAlive) {
-            ws.missedPongs = (ws.missedPongs || 0) + 1;
-            if (ws.missedPongs >= 2) {
-                ws.terminate();
-                continue;
+        // Each socket is isolated: `ping()` on a socket that just entered
+        // CLOSING throws, and an exception escaping a setInterval callback is
+        // an uncaught exception — it would crash the process and drop every
+        // room on this machine, which is exactly the "everyone got kicked at
+        // once" failure we are trying to eliminate.
+        try {
+            if (!ws.isAlive) {
+                ws.missedPongs = (ws.missedPongs || 0) + 1;
+                if (ws.missedPongs >= 2) {
+                    ws.terminate();
+                    continue;
+                }
             }
+            ws.isAlive = false;
+            ws.ping();
+        } catch (error) {
+            console.warn('heartbeat ping failed:', error.message);
         }
-        ws.isAlive = false;
-        ws.ping();
     }
 }, 30_000);
 

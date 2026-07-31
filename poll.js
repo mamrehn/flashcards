@@ -59,7 +59,9 @@ const MAX_RECONNECT_ATTEMPTS = 30;
 // `{type:'heartbeat_ack'}`. A watchdog on the client side checks how long ago
 // we last heard *anything* from the server (heartbeat ack, game message, etc.)
 // — if > HEARTBEAT_TIMEOUT_MS, we force-close the socket and let the unified
-// reconnect logic take over.
+// reconnect logic take over. The watchdog only trusts that measurement when its
+// own tick cadence was healthy: a locked phone freezes our timers, and reading
+// that silence as a dead socket kicked students out on their way back.
 const HEARTBEAT_INTERVAL_MS = 25_000;
 const HEARTBEAT_TIMEOUT_MS = 60_000;
 const HEARTBEAT_WATCHDOG_INTERVAL_MS = 10_000;
@@ -325,12 +327,28 @@ function reconnectBackoffMs(attempt) {
  * in attachXWsHandlers) on every received frame, so an active stream of
  * server-pushed messages keeps the watchdog quiet without a redundant
  * heartbeat round-trip.
+ *
+ * The watchdog measures its own tick gap and stands down whenever it finds it
+ * was throttled or frozen — see the comment at the interval body. Without that
+ * it reads a backgrounded tab's clamped timers as a dead socket.
  * @param {WebSocket} ws
- * @returns {{heartbeatTimer:number, watchdog:number, lastMsgTime:number, lastSendTime:number}}
+ * @returns {{heartbeatTimer:number, watchdog:number, lastMsgTime:number, lastSendTime:number, lastTickTime:number}}
  */
 function startHeartbeat(ws) {
     const now = Date.now();
-    const state = { lastMsgTime: now, lastSendTime: now, heartbeatTimer: null };
+    const state = {
+        lastMsgTime: now,
+        lastSendTime: now,
+        heartbeatTimer: null,
+        // Wall-clock time of the previous watchdog tick. Comparing it against
+        // the configured interval tells us whether *we* were frozen.
+        lastTickTime: now,
+    };
+    // Bind the state to the socket so message handlers update the state that
+    // belongs to their own connection. During a reconnect two sockets are
+    // briefly live at once, and a late frame on the outgoing socket must not
+    // vouch for the liveness of the incoming one (or vice versa).
+    ws.__heartbeatState = state;
 
     function scheduleNextHeartbeat() {
         if (state.heartbeatTimer !== null) clearTimeout(state.heartbeatTimer);
@@ -364,8 +382,36 @@ function startHeartbeat(ws) {
     scheduleNextHeartbeat();
 
     state.watchdog = setInterval(() => {
+        const tickNow = Date.now();
+        const tickGap = tickNow - state.lastTickTime;
+        state.lastTickTime = tickNow;
         if (!ws || ws.readyState !== WebSocket.OPEN) return;
-        const silentMs = Date.now() - state.lastMsgTime;
+
+        // Silence only proves the socket is dead if *we* were awake to listen.
+        // A locked phone or a backgrounded tab has its timers clamped (commonly
+        // 1/min) or frozen outright, so both our heartbeat sends and this
+        // watchdog stop running — `lastMsgTime` then goes stale for reasons
+        // that have nothing to do with the connection. Force-closing on that
+        // dropped students the moment they came back to the tab, which is the
+        // single most common "it kicked me out" report. A tick gap far larger
+        // than the configured interval is the tell; re-arm the window and probe
+        // instead. If the socket really is dead, the probe goes unanswered and
+        // the next unthrottled tick closes it ~10 s later.
+        const wasThrottled =
+            tickGap > HEARTBEAT_WATCHDOG_INTERVAL_MS * 2 || document.visibilityState !== 'visible';
+        if (wasThrottled) {
+            state.lastMsgTime = tickNow;
+            if (document.visibilityState === 'visible') {
+                try {
+                    ws.send(HEARTBEAT_PAYLOAD);
+                } catch {
+                    /* close handler will reconnect if the path is dead */
+                }
+            }
+            return;
+        }
+
+        const silentMs = tickNow - state.lastMsgTime;
         if (silentMs > HEARTBEAT_TIMEOUT_MS) {
             logger.warn(
                 `No server activity for ${Math.round(silentMs / 1000)}s — forcing reconnect.`
@@ -544,6 +590,19 @@ let hostPendingResults = null;
 // before the vote closes around them.
 let hostDisconnectGraceTimeout = null;
 const DISCONNECT_GRACE_MS = 10_000;
+// Outbound `append_option` labels waiting for a send slot, plus the timer that
+// drains them. Callers arrive in bursts — the host_reconnected reconcile walks
+// every player in one synchronous loop — and an unpaced burst that big trips
+// the server's rate limiter, which drops late-joiners from the ballot and, past
+// the abuse threshold, terminated the host's socket outright.
+const hostAppendQueue = [];
+let hostAppendTimer = null;
+// The server refills its per-connection token bucket at 20 messages/s. Draining
+// at 8 per 500 ms (16/s) stays under that indefinitely, so even a full class
+// reconciling at once never drains the bucket. Kept honest by
+// tests/server.ratelimit.test.js.
+const HOST_APPEND_BATCH = 8;
+const HOST_APPEND_INTERVAL_MS = 500;
 
 // Player state
 let playerWs = null;
@@ -856,8 +915,10 @@ function initHostReconnect(info) {
 function attachHostWsHandlers(ws) {
     ws.addEventListener('message', (ev) => {
         // Any incoming frame (heartbeat_ack or real game message) counts as
-        // server liveness — keeps the watchdog quiet.
-        if (hostHeartbeat) hostHeartbeat.lastMsgTime = Date.now();
+        // server liveness — keeps the watchdog quiet. Credit the state of the
+        // socket that actually received it, not whichever socket happens to be
+        // current: during a reconnect both are briefly live.
+        if (ws.__heartbeatState) ws.__heartbeatState.lastMsgTime = Date.now();
         let msg;
         try {
             msg = JSON.parse(ev.data);
@@ -945,6 +1006,8 @@ async function reconnectHostWs() {
         hostWs.send(JSON.stringify(hostPendingResults));
         hostPendingResults = null;
     }
+    // Late-joiner options queued while the socket was down.
+    flushAppendQueue();
     // Counter resets to 0 in the 'host_reconnected' message handler.
 }
 
@@ -1052,7 +1115,6 @@ function appendPlayerToActivePoll(rawName, sessionId) {
     ) {
         return;
     }
-    if (!hostWs || hostWs.readyState !== WebSocket.OPEN) return;
 
     const taken = new Set(hostActivePoll.realOptions);
     const baseName = (rawName || 'Spieler').trim() || 'Spieler';
@@ -1078,8 +1140,55 @@ function appendPlayerToActivePoll(rawName, sessionId) {
     if (sessionId && hostActivePoll.optionPlayerIds) {
         hostActivePoll.optionPlayerIds.add(sessionId);
     }
-    hostWs.send(JSON.stringify({ type: 'append_option', option: label }));
+    // Queue rather than send: callers arrive in bursts (the host_reconnected
+    // reconcile walks every player in one synchronous loop), and a burst that
+    // big trips the server's rate limiter — dropping options at best and
+    // terminating the host's socket at worst.
+    hostAppendQueue.push(label);
+    flushAppendQueue();
     renderHostVotingView();
+}
+
+/**
+ * Drain `hostAppendQueue` at a rate the server's rate limiter tolerates. Sends
+ * the first batch immediately so a lone late-joiner still appears instantly;
+ * only a genuine burst gets spread out. Labels stay queued while the host
+ * socket is down and go out once it is back.
+ */
+function flushAppendQueue() {
+    if (hostAppendTimer !== null) return;
+    if (hostAppendQueue.length === 0) return;
+    if (!hostWs || hostWs.readyState !== WebSocket.OPEN) return;
+
+    for (let i = 0; i < HOST_APPEND_BATCH && hostAppendQueue.length > 0; i++) {
+        const option = hostAppendQueue.shift();
+        try {
+            hostWs.send(JSON.stringify({ type: 'append_option', option }));
+        } catch {
+            // Socket died mid-drain — put it back and let the reconnect retry.
+            hostAppendQueue.unshift(option);
+            break;
+        }
+    }
+
+    if (hostAppendQueue.length > 0) {
+        hostAppendTimer = setTimeout(() => {
+            hostAppendTimer = null;
+            flushAppendQueue();
+        }, HOST_APPEND_INTERVAL_MS);
+    }
+}
+
+/**
+ * Drop any queued appends. Called when a vote ends or a new one starts —
+ * labels from the previous round would land on the wrong option list.
+ */
+function clearAppendQueue() {
+    hostAppendQueue.length = 0;
+    if (hostAppendTimer !== null) {
+        clearTimeout(hostAppendTimer);
+        hostAppendTimer = null;
+    }
 }
 
 /**
@@ -1119,6 +1228,26 @@ function maybeAutoEndVote() {
 }
 
 const HOST_PLAYER_UPDATE_TYPES = new Set(['player_joined', 'player_reconnected', 'player_left']);
+
+// Server-side `start_question` validation failures, matched by prefix because
+// one of them interpolates the option ceiling. Deliberately excludes the
+// `append_option` rejections ("Ungültige Option.", "Keine aktive Frage.",
+// "Maximale Anzahl Optionen (…) erreicht.") and the rate-limit warning — those
+// say nothing about whether the running vote is still valid.
+const QUESTION_REJECTION_PREFIXES = [
+    'Frage ist zu lang',
+    'Zu viele Optionen',
+    'Eine Option ist zu lang',
+];
+
+/**
+ * @param {string|undefined} message
+ * @returns {boolean} True if the server rejected our start_question outright.
+ */
+function isQuestionRejection(message) {
+    if (typeof message !== 'string') return false;
+    return QUESTION_REJECTION_PREFIXES.some((p) => message.startsWith(p));
+}
 
 /**
  * Host-side message dispatcher.
@@ -1224,7 +1353,12 @@ function handleHostMessage(msg) {
             // host UI has already transitioned into "host-voting" with a
             // running timer — but no players will ever see the question.
             // Roll back to the composer so the host can fix the input.
-            if (hostActivePoll && !hostPollEnding) {
+            //
+            // Only for *that* class of error. Rolling back on any error at all
+            // meant an unrelated frame — a rate-limit warning, a rejected
+            // late-joiner append — destroyed a vote that was running fine for
+            // everyone else.
+            if (hostActivePoll && !hostPollEnding && isQuestionRejection(msg.message)) {
                 if (hostTimerInterval) {
                     clearInterval(hostTimerInterval);
                     hostTimerInterval = null;
@@ -1643,6 +1777,8 @@ function startVote() {
     };
     hostPollEnding = false;
     hostAnswers.clear();
+    // Queued appends target the previous round's option list — drop them.
+    clearAppendQueue();
     // A grace timer from a prior round must not bleed into this one.
     if (hostDisconnectGraceTimeout) {
         clearTimeout(hostDisconnectGraceTimeout);
@@ -1720,6 +1856,7 @@ function startHostTimer(seconds) {
 function endVote() {
     if (!hostActivePoll || hostPollEnding) return;
     hostPollEnding = true;
+    clearAppendQueue();
     if (hostTimerInterval) {
         clearInterval(hostTimerInterval);
         hostTimerInterval = null;
@@ -2009,7 +2146,8 @@ function initPlayerReconnect(info) {
  */
 function attachPlayerWsHandlers(ws) {
     ws.addEventListener('message', (ev) => {
-        if (playerHeartbeat) playerHeartbeat.lastMsgTime = Date.now();
+        // See attachHostWsHandlers — credit this socket's own heartbeat state.
+        if (ws.__heartbeatState) ws.__heartbeatState.lastMsgTime = Date.now();
         let msg;
         try {
             msg = JSON.parse(ev.data);
@@ -2045,7 +2183,12 @@ function attachPlayerWsHandlers(ws) {
 async function reconnectPlayerWs() {
     if (playerReconnecting) return;
     if (playerSuppressReconnect) return;
-    if (!playerRoomCode || !playerSessionId) return;
+    // `playerSessionId` only exists once the server has answered our join.
+    // Requiring it here stranded anyone whose socket died inside that handshake
+    // window: no retry, no error, just a join button that did nothing. A room
+    // code and a name are enough to retry — the server treats a join without a
+    // session id as a fresh one.
+    if (!playerRoomCode || !playerName) return;
     if (playerWs && playerWs.readyState === WebSocket.OPEN) return;
     if (playerWsReconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
         showMessage('Verbindung zur Umfrage verloren. Bitte lade die Seite neu.', 'error');
@@ -2071,14 +2214,13 @@ async function reconnectPlayerWs() {
     playerWs = connectedWs;
     attachPlayerWsHandlers(playerWs);
     playerReconnecting = false;
-    playerWs.send(
-        JSON.stringify({
-            type: 'join',
-            roomCode: playerRoomCode,
-            playerName: playerName,
-            sessionId: playerSessionId,
-        })
-    );
+    const joinPayload = {
+        type: 'join',
+        roomCode: playerRoomCode,
+        playerName: playerName,
+    };
+    if (playerSessionId) joinPayload.sessionId = playerSessionId;
+    playerWs.send(JSON.stringify(joinPayload));
     // Counter resets to 0 in the 'joined' message handler.
 }
 
@@ -2616,7 +2758,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         if (
             playerRoomCode &&
-            playerSessionId &&
+            playerName &&
             !playerSuppressReconnect &&
             !playerReconnecting &&
             (!playerWs || playerWs.readyState !== WebSocket.OPEN)
@@ -2643,7 +2785,7 @@ document.addEventListener('DOMContentLoaded', () => {
     globalThis.addEventListener('online', () => {
         if (
             playerRoomCode &&
-            playerSessionId &&
+            playerName &&
             !playerSuppressReconnect &&
             !playerReconnecting &&
             (!playerWs || playerWs.readyState !== WebSocket.OPEN)
