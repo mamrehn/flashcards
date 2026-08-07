@@ -112,6 +112,49 @@ html.theme-transition *::after {
     border-color: rgba(128, 128, 128, 0.4);
 }
 
+/* Sound Toggle Button */
+.sound-toggle {
+    position: fixed;
+    bottom: calc(1rem + env(safe-area-inset-bottom));
+    right: calc(1rem + 44px + 0.5rem + env(safe-area-inset-right));
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    border: 2px solid rgba(128, 128, 128, 0.3);
+    background-color: rgba(255, 255, 255, 0.9);
+    cursor: pointer;
+    z-index: 9999;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.3rem;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+    transition:
+        background-color 0.3s,
+        transform 0.2s;
+    -webkit-tap-highlight-color: transparent;
+    padding: 0;
+    line-height: 1;
+}
+
+.sound-toggle:hover {
+    transform: scale(1.1);
+}
+
+.sound-toggle:active {
+    transform: scale(0.95);
+}
+
+.sound-toggle:focus-visible {
+    outline: 3px solid #1a73e8;
+    outline-offset: 2px;
+}
+
+[data-theme='dark'] .sound-toggle {
+    background-color: rgba(50, 50, 50, 0.9);
+    border-color: rgba(128, 128, 128, 0.4);
+}
+
 @media (max-width: 768px) {
     .theme-toggle {
         top: calc(0.5rem + env(safe-area-inset-top));
@@ -119,6 +162,15 @@ html.theme-transition *::after {
         bottom: auto;
         /* 40px keeps the tap target close to the 44px guideline while staying
            unobtrusive in the corner on small screens (was 32px). */
+        width: 40px;
+        height: 40px;
+        font-size: 1.05rem;
+        border-width: 1px;
+    }
+    .sound-toggle {
+        top: calc(0.5rem + env(safe-area-inset-top));
+        right: calc(0.5rem + 40px + 0.5rem + env(safe-area-inset-right));
+        bottom: auto;
         width: 40px;
         height: 40px;
         font-size: 1.05rem;
