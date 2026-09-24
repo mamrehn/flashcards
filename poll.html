@@ -5,7 +5,7 @@
         <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
         <meta
             http-equiv="Content-Security-Policy"
-            content="default-src 'self'; script-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com; style-src 'self' 'unsafe-inline'; connect-src 'self' wss://qlash-server.fly.dev; img-src 'self' data:; font-src 'self'; base-uri 'self'; form-action 'self';"
+            content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src 'self' wss://qlash-server.fly.dev; img-src 'self' data:; font-src 'self'; base-uri 'self'; form-action 'self';"
         />
         <meta name="referrer" content="no-referrer" />
         <meta
@@ -20,16 +20,13 @@
             href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='7' fill='%230f9a9a'/><rect x='6.8' y='17' width='4.6' height='8' rx='1.2' fill='%23fff' opacity='.72'/><rect x='13.7' y='12' width='4.6' height='13' rx='1.2' fill='%23fff'/><rect x='20.6' y='8' width='4.6' height='17' rx='1.2' fill='%23fff' opacity='.86'/><rect x='6' y='25.2' width='20' height='1.9' rx='.95' fill='%23fff'/></svg>"
         />
         <title>Umfrage</title>
-        <script
-            src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"
-            integrity="sha512-CNgIRecGo7nphbeZ04Sc13ka07paqdeTu0WR1IM4kNcpmBAUSHSQX0FslNhTDadL4O5SAGapGt4FodqL8My0mA=="
-            crossorigin="anonymous"
-            referrerpolicy="no-referrer"
-        ></script>
+        <script src="vendor/qrcode-1.0.0.min.js"></script>
         <link rel="stylesheet" href="theme.css" />
         <script src="theme.js"></script>
         <script src="logger.js"></script>
         <script src="sanitize.js"></script>
+        <script src="ui-dialog.js"></script>
+        <script src="ws-client.js"></script>
         <link rel="stylesheet" href="poll.css" />
     </head>
 
@@ -81,6 +78,28 @@
             </div>
 
             <div id="host-view" class="view card">
+                <!-- Door: visible in every host step, so a student who drops out
+                     mid-vote (e.g. laptop restart without saved session) can be
+                     let back in without leaving the voting screen. -->
+                <div class="host-door">
+                    <button
+                        id="room-lock-btn"
+                        type="button"
+                        class="room-lock-btn"
+                        aria-pressed="false"
+                    >
+                        🔓 Raum offen
+                    </button>
+                    <div id="knock-panel" class="knock-panel hidden" aria-live="polite">
+                        <h3>Klopft an</h3>
+                        <p class="knock-help">
+                            Geräte ohne gespeicherte Sitzung. Wer vorher schon drin war, bekommt
+                            seinen alten Platz zurück (Name und Stimme bleiben erhalten).
+                        </p>
+                        <ul id="knock-list" class="knock-list"></ul>
+                    </div>
+                </div>
+
                 <section id="host-lobby">
                     <h2>Lobby</h2>
                     <div id="qr-container">
@@ -104,6 +123,11 @@
                         </p>
                         <p>Verbundene Spieler: <span id="player-count">0</span></p>
                         <div class="players-list" id="players-list"></div>
+                        <p id="duplicate-names-hint" class="duplicate-names-hint hidden">
+                            ⚠️ Manche Namen kommen doppelt vor – oft dieselbe Person auf zwei
+                            Geräten. Tippe auf einen Namen, um ihn zu ändern.
+                        </p>
+                        <p class="player-hint">Tippe auf einen Namen, um ihn zu ändern.</p>
                     </div>
                     <button id="show-composer-btn" class="btn btn-accent">Frage erstellen</button>
                 </section>
@@ -206,15 +230,19 @@
                     </div>
 
                     <div class="composer-row">
-                        <label for="composer-duration">Dauer (Sekunden, max 80):</label>
+                        <label for="composer-duration">Dauer (Sekunden, max 600):</label>
                         <input
                             type="number"
                             id="composer-duration"
                             min="5"
-                            max="80"
+                            max="600"
                             value="45"
                             class="duration-input"
                         />
+                        <label class="checkbox-label">
+                            <input type="checkbox" id="composer-untimed" />
+                            Ohne Zeitlimit (du beendest die Umfrage)
+                        </label>
                     </div>
 
                     <div class="reveal-primary-actions">
@@ -230,7 +258,7 @@
                 <section id="host-voting" class="hidden">
                     <h2>Umfrage läuft…</h2>
                     <h3 id="host-question-display" aria-live="polite"></h3>
-                    <div class="timer-bar-container">
+                    <div class="timer-bar-container" id="host-timer-container">
                         <div class="timer-bar" id="host-timer-bar"></div>
                     </div>
                     <p>
@@ -297,7 +325,7 @@
 
                 <div id="player-vote" class="hidden">
                     <h3 id="player-question-text" aria-live="polite"></h3>
-                    <div class="timer-bar-container">
+                    <div class="timer-bar-container" id="player-timer-container">
                         <div class="timer-bar" id="player-timer-bar"></div>
                     </div>
                     <p id="player-vote-hint" class="player-hint"></p>
@@ -364,6 +392,12 @@
                 </p>
             </div>
         </div>
+
+        <!-- Privacy notice: only on the start screen, so nobody leaves a running
+             session by tapping it (toggled in showTopView). -->
+        <footer id="privacy-footer" style="text-align: center; margin-top: 20px; font-size: 0.9em">
+            <p><a href="datenschutz.html" class="footer-link">Datenschutzhinweise</a></p>
+        </footer>
 
         <script src="poll.js"></script>
 

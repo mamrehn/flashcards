@@ -24,6 +24,11 @@ const {
     foldIdentitySet,
     isSafeMediaSrc,
     isPoolOnlyIdentify,
+    sanitizeBackup,
+    sanitizeLernstandHistory,
+    sanitizeSessionHistory,
+    sanitizeAchievements,
+    sanitizeSRData,
     SR_STEP_MINUTES,
     SR_PASS_SCORE,
 } = require('../cards.js');
@@ -84,7 +89,7 @@ test('normalizeAnswer: case, whitespace and trailing punctuation are ignored', (
 });
 
 test('normalizeAnswer: tolerates non-strings', () => {
-    assert.equal(normalizeAnswer(undefined), '');
+    assert.equal(normalizeAnswer(), '');
     assert.equal(normalizeAnswer(null), '');
 });
 
@@ -138,18 +143,74 @@ test('cardType: explicit type wins; legacy shapes still infer correctly', () => 
     assert.equal(cardType({ labels: { name: 'X' }, media: IMG }), 'identify');
 });
 
-test('isSafeMediaSrc: allows image data URIs and http(s), rejects scripts', () => {
+test('isSafeMediaSrc: allows what the CSP loads (data URIs, same-origin paths)', () => {
     assert.ok(isSafeMediaSrc(IMG));
     // Any image subtype is accepted, not just PNG — photos should be provided as
     // webp/jpeg (far smaller than PNG) to stay under the localStorage quota.
     assert.ok(isSafeMediaSrc('data:image/webp;base64,AAAA'));
     assert.ok(isSafeMediaSrc('data:image/jpeg;base64,AAAA'));
     assert.ok(isSafeMediaSrc('data:image/jpg;base64,AAAA'));
-    assert.ok(isSafeMediaSrc('https://example.com/a.png'));
+    // Images hosted next to the app (same origin, allowed by img-src 'self').
+    assert.ok(isSafeMediaSrc('decks/media/berlin.webp'));
+    assert.ok(isSafeMediaSrc('decks/media/Mona%20Lisa.JPG'));
+    // Remote images are blocked by the CSP and would leak IPs — rejected.
+    assert.ok(!isSafeMediaSrc('https://example.com/a.png'));
+    assert.ok(!isSafeMediaSrc('//example.com/a.png'));
+    assert.ok(!isSafeMediaSrc('/etc/a.png'));
+    assert.ok(!isSafeMediaSrc('decks/../../other-app/a.png'));
+    assert.ok(!isSafeMediaSrc('decks/media/notes.txt'));
     assert.ok(!isSafeMediaSrc('javascript:alert(1)'));
     assert.ok(!isSafeMediaSrc('data:text/html;base64,AAAA'));
     assert.ok(!isSafeMediaSrc(''));
     assert.ok(!isSafeMediaSrc(null));
+});
+
+test('sanitizeBackup: keeps valid data, drops malformed and hostile values', () => {
+    const clean = sanitizeBackup({
+        flashcardDecks: {
+            good: { cards: [{ question: 'Q', answer: 'A' }], meta: { name: 'Topic' } },
+            broken: { cards: 'nope' },
+            empty: { cards: [{ foo: 1 }] },
+        },
+        spacedRepetitionData: {
+            'good|||Q': { step: 2, history: [1, 'x', 0.5], nextReview: '2026-01-01T00:00:00Z' },
+            nokey: { step: 1 },
+            'good|||R': { step: 99, interval: 3, nextReview: 'garbage' },
+        },
+        lernstandHistory: [
+            { date: '2026-09-01', overallPercent: 40, perDeck: { good: 40, bad: '<b>' } },
+            { date: '2026-<img src=x onerror=alert(1)>', overallPercent: 50 },
+        ],
+        sessionHistory: [
+            { endedAt: '2026-09-01T10:00:00Z', cardsAnswered: '<img src=x>', avgScore: 80 },
+            { endedAt: 'not a date' },
+        ],
+        achievements: { deckMastered: { good: '2026-09-01', bad: 5 }, bestSessionScore: 'x' },
+        examDate: '"><script>',
+    });
+    assert.deepEqual(Object.keys(clean.flashcardDecks), ['good']);
+    assert.equal(clean.droppedDecks, 2);
+    assert.deepEqual(Object.keys(clean.spacedRepetitionData), ['good|||Q', 'good|||R']);
+    assert.deepEqual(clean.spacedRepetitionData['good|||Q'].history, [1, 0.5]);
+    assert.equal(clean.spacedRepetitionData['good|||R'].step, undefined);
+    assert.equal(clean.spacedRepetitionData['good|||R'].interval, 3);
+    assert.equal(clean.spacedRepetitionData['good|||R'].nextReview.getTime(), 0, 'due now');
+    assert.equal(clean.lernstandHistory.length, 1);
+    assert.deepEqual(clean.lernstandHistory[0].perDeck, { good: 40 });
+    assert.equal(clean.sessionHistory.length, 1);
+    assert.equal(clean.sessionHistory[0].cardsAnswered, 0);
+    assert.deepEqual(clean.achievements, {
+        deckMastered: { good: '2026-09-01' },
+        bestSessionScore: 0,
+    });
+    assert.equal(clean.examDate, null);
+});
+
+test('sanitize journals: non-arrays become empty instead of breaking the app', () => {
+    assert.deepEqual(sanitizeLernstandHistory({ oops: true }), []);
+    assert.deepEqual(sanitizeSessionHistory('x'), []);
+    assert.deepEqual(sanitizeAchievements(null), { deckMastered: {}, bestSessionScore: 0 });
+    assert.deepEqual(sanitizeSRData([1, 2]), {});
 });
 
 test('canonicalLabel: joins labelParts in order', () => {

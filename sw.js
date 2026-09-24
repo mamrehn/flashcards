@@ -13,7 +13,7 @@ const SW_DEBUG =
 // eslint-disable-next-line no-console
 const swLog = SW_DEBUG ? console.log.bind(console) : () => {};
 
-const CACHE_NAME = 'flashcards-v5';
+const CACHE_NAME = 'flashcards-v6';
 const ASSETS_TO_CACHE = [
     './',
     './index.html',
@@ -35,7 +35,15 @@ const ASSETS_TO_CACHE = [
     './sanitize.js',
     './theme.js',
     './logger.js',
+    './ws-client.js',
+    './ui-dialog.js',
     './manifest.json',
+    // Self-hosted libraries (vendor/README.md) — cached so ZIP import, the
+    // library and the join QR code also work offline.
+    './vendor/jszip-3.10.1.min.js',
+    './vendor/qrcode-1.0.0.min.js',
+    './vendor/marked-16.3.0.umd.min.js',
+    './vendor/purify-3.2.7.min.js',
 ];
 
 // Library deck files (decks/library.json and decks/*.zip) are intentionally
@@ -105,21 +113,39 @@ self.addEventListener('fetch', (event) => {
         return;
     }
 
+    const url = new URL(event.request.url);
+
+    // Host audio is streamed by <audio> with Range requests: a cached full
+    // response doesn't satisfy those everywhere (Safari needs 206), and 206
+    // partials can't be cached. The browser's HTTP cache handles it
+    // (quiz.js warms it with `cache: 'force-cache'`).
+    if (url.pathname.includes('/audio/')) {
+        return;
+    }
+
+    // Pages are cached without their query (?host=AB12, ?import=…, ?room=…):
+    // the query only steers the app, the HTML is the same — so an invite
+    // link still opens offline, and every room code doesn't add a new entry.
+    const isNavigation = event.request.mode === 'navigate';
+    const matchOptions = isNavigation ? { ignoreSearch: true } : undefined;
+    const cacheKey = isNavigation ? url.origin + url.pathname : event.request;
+
     event.respondWith(
         caches.open(CACHE_NAME).then((cache) => {
-            return cache.match(event.request).then((cachedResponse) => {
+            return cache.match(event.request, matchOptions).then((cachedResponse) => {
                 // Start network fetch in parallel
                 const networkFetch = fetch(event.request)
                     .then((networkResponse) => {
-                        // Only cache successful responses
-                        if (networkResponse.ok) {
+                        // Only cache complete successful responses (a 206
+                        // partial would make cache.put reject).
+                        if (networkResponse.status === 200) {
                             // Always refresh the cache with the fresh response
                             // (true stale-while-revalidate). The previous logic
                             // only wrote when Last-Modified changed, so an asset
                             // served without that header — or with an unchanged
                             // one despite new content — could be served stale
                             // forever until the cache name was bumped.
-                            cache.put(event.request, networkResponse.clone());
+                            cache.put(cacheKey, networkResponse.clone()).catch(logCacheWriteError);
 
                             // Best-effort "update available" signal for the
                             // in-app reload toast: only fire when we can prove
@@ -138,7 +164,11 @@ self.addEventListener('fetch', (event) => {
                     })
                     .catch((error) => {
                         swLog('[Service Worker] Network fetch failed, using cache:', error);
-                        return cachedResponse;
+                        if (cachedResponse) return cachedResponse;
+                        // Offline and never visited this page: fall back to
+                        // the start page rather than the browser's error page.
+                        if (isNavigation) return cache.match('./index.html');
+                        return Response.error();
                     });
 
                 // Return cached version immediately, or wait for network
@@ -147,6 +177,14 @@ self.addEventListener('fetch', (event) => {
         })
     );
 });
+
+/**
+ * Quota exceeded or similar — serving the response still works.
+ * @param {Error} error
+ */
+function logCacheWriteError(error) {
+    swLog('[Service Worker] Cache write failed:', error);
+}
 
 /**
  * Best-effort detection of whether a freshly-fetched response differs from the

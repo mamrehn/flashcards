@@ -259,9 +259,7 @@ function matchesFacets(deck, skipKey) {
  * Decks visible under the current full filter state.
  */
 function visibleDecks() {
-    return manifest.decks.filter(
-        (d) => matchesText(d, filterState.text) && matchesFacets(d, null)
-    );
+    return manifest.decks.filter((d) => matchesText(d, filterState.text) && matchesFacets(d, null));
 }
 
 /**
@@ -438,9 +436,7 @@ function renderGrid() {
 function renderEmptyState() {
     els.empty.innerHTML = '';
     if (filterState.text || filterState.facets.size > 0) {
-        els.empty.append(
-            document.createTextNode('Keine Decks passen zu den aktiven Filtern. ')
-        );
+        els.empty.append(document.createTextNode('Keine Decks passen zu den aktiven Filtern. '));
         const reset = document.createElement('a');
         reset.href = '#';
         reset.textContent = 'Filter zurücksetzen';
@@ -659,6 +655,7 @@ function formatTypeBreakdown(types, prefix, suffix) {
     if (types.text > 0) parts.push(`${types.text} Text`);
     if (types.multipleChoice > 0) parts.push(`${types.multipleChoice} MC`);
     if ((types.matching ?? 0) > 0) parts.push(`${types.matching} ZO`);
+    if ((types.identify ?? 0) > 0) parts.push(`${types.identify} Erkennen`);
     if (parts.length < 2) return '';
     return `${prefix}${parts.join(' + ')}${suffix}`;
 }
@@ -889,6 +886,7 @@ function formatDetailBreakdown(types) {
     if (types.text > 0) parts.push(`${types.text} Text-Antworten`);
     if (types.multipleChoice > 0) parts.push(`${types.multipleChoice} Multiple Choice`);
     if ((types.matching ?? 0) > 0) parts.push(`${types.matching} Zuordnungsaufgaben`);
+    if ((types.identify ?? 0) > 0) parts.push(`${types.identify} Erkennungsaufgaben`);
     if (parts.length < 2) return '';
     return `davon ${parts.join(' · ')}`;
 }

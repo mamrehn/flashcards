@@ -3,7 +3,7 @@
     <head>
         <meta charset="UTF-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-        <title>Datenschutz & Datenbank</title>
+        <title>Datenschutz</title>
         <link
             rel="icon"
             type="image/svg+xml"
@@ -21,31 +21,131 @@
             </header>
 
             <div class="card">
-                <h2>Datenschutzinformationen zur Nutzung der Quiz App</h2>
-
-                <p>
-                    Beim Verwenden dieser Quiz App werden bestimmte Daten des Spielers temporär im
-                    Arbeitsspeicher des Servers verarbeitet, um den Fortschritt und die
-                    Interaktionen während einer Fragerunde zu ermöglichen.
-                </p>
-
-                <h2>Gespeicherte Daten</h2>
-                <p>Folgende Daten werden temporär erhoben und verarbeitet:</p>
+                <h2>Kurz gesagt</h2>
                 <ul>
-                    <li>Nickname (frei wählbar, keine Pflicht zur echten Namensangabe)</li>
-                    <li>Session-ID (automatisch generiert)</li>
-                    <li>Antworten auf Aufgaben bzw. Lernkarten</li>
-                    <li>Statistische Informationen wie Antwortzeiten oder Fortschritt</li>
+                    <li>Du brauchst kein Konto und musst keinen echten Namen angeben.</li>
+                    <li>Keine Cookies, kein Tracking, keine Werbung, keine Analyse-Dienste.</li>
+                    <li>
+                        Lernkarten und dein Lernfortschritt bleiben auf deinem Gerät und werden
+                        nicht übertragen.
+                    </li>
+                    <li>
+                        Für Quiz und Umfragen läuft ein kleiner Server, der Namen und Antworten nur
+                        im Arbeitsspeicher hält und spätestens nach 2 Stunden vergisst.
+                    </li>
+                    <li>
+                        Bei Umfragen sieht niemand – auch die Lehrkraft nicht –, wer wie abgestimmt
+                        hat.
+                    </li>
                 </ul>
 
-                <h2>Datensicherheit und Löschkonzept</h2>
+                <h2>Verantwortlich</h2>
                 <p>
-                    Die Daten werden ausschließlich in Echtzeit über eine WebSocket-Verbindung
-                    verarbeitet und nur im Arbeitsspeicher des Servers gehalten. Es erfolgt keine
-                    dauerhafte Speicherung in einer Datenbank. Die Daten werden automatisch
-                    gelöscht, wenn der Raum beendet wird oder spätestens nach
-                    <strong>2 Stunden</strong>. Es erfolgt keine Profilbildung. Die Nutzung erfolgt
-                    anonymisiert.
+                    Verantwortlich für diese Web-App ist ihr Betreiber, der Autor des Projekts
+                    <a href="https://github.com/mamrehn" rel="noopener">github.com/mamrehn</a>.
+                    Fragen und Anliegen zum Datenschutz kannst du über das Projekt stellen:
+                    <a href="https://github.com/mamrehn/flashcards/issues" rel="noopener"
+                        >github.com/mamrehn/flashcards/issues</a
+                    >.
+                </p>
+                <p>
+                    Setzt eine Lehrkraft die App im Unterricht ein, gelten zusätzlich die
+                    Datenschutzregeln der jeweiligen Schule.
+                </p>
+
+                <h2>Aufruf der Webseite (Hosting)</h2>
+                <p>
+                    Die Webseite wird über <strong>GitHub Pages</strong> ausgeliefert (GitHub, Inc.,
+                    USA). Beim Aufruf verarbeitet GitHub technisch notwendige Daten wie IP-Adresse,
+                    Zeitpunkt, aufgerufene Datei und Browser-Angaben, um die Seite auszuliefern und
+                    abzusichern. Details:
+                    <a
+                        href="https://docs.github.com/de/site-policy/privacy-policies/github-general-privacy-statement"
+                        rel="noopener"
+                        >Datenschutzerklärung von GitHub</a
+                    >.
+                </p>
+                <p>
+                    Alle Skripte, Bibliotheken und Symbole werden von dieser Webseite selbst
+                    geladen. Es werden keine externen Dienste (CDNs, Schriftarten-Dienste o. Ä.)
+                    eingebunden.
+                </p>
+
+                <h2>Alleine lernen (Lernkarten)</h2>
+                <p>
+                    Importierte Decks, dein Lernfortschritt, Einstellungen und ein optionales
+                    Prüfungsdatum werden ausschließlich im Speicher deines Browsers
+                    (<em>localStorage</em>) auf deinem Gerät abgelegt und nicht übertragen. Decks
+                    aus der Bibliothek werden von dieser Webseite geladen. Du kannst die Daten in
+                    der App löschen oder über die Browser-Einstellungen („Websitedaten löschen“).
+                    Ein Backup ist eine Datei, die nur du herunterlädst.
+                </p>
+
+                <h2>Quiz und Umfragen (mehrere Personen)</h2>
+                <p>
+                    Für Quiz und Umfragen verbinden sich die Geräte mit einem Server bei
+                    <strong>Fly.io</strong> (Fly.io, Inc., USA); der Server steht in
+                    <strong>Frankfurt am Main</strong>. Verarbeitet werden:
+                </p>
+                <ul>
+                    <li>
+                        der Anzeigename (frei wählbar; die Lehrkraft kann unpassende Namen vor
+                        Spielbeginn ändern)
+                    </li>
+                    <li>der gewählte Avatar und eine zufällig erzeugte Sitzungs-ID</li>
+                    <li>Antworten, Punktestand und Antwortzeit (Quiz) bzw. Stimmen (Umfrage)</li>
+                    <li>
+                        technisch notwendig die IP-Adresse, um die Verbindung herzustellen und den
+                        Dienst vor Missbrauch zu schützen
+                    </li>
+                </ul>
+                <p>
+                    Diese Daten liegen nur im Arbeitsspeicher des Servers, nicht in einer Datenbank.
+                    Sie werden gelöscht, sobald die Lehrkraft die Sitzung beendet, spätestens 5
+                    Minuten nachdem sie die Verbindung verloren hat und in jedem Fall 2 Stunden nach
+                    dem Start. Die App schreibt keine Namen, Antworten oder IP-Adressen in
+                    Protokolle; Fly.io kann technische Verbindungsdaten kurzzeitig verarbeiten.
+                    Details:
+                    <a href="https://fly.io/legal/privacy-policy" rel="noopener"
+                        >Datenschutzerklärung von Fly.io</a
+                    >.
+                </p>
+
+                <h2>Umfragen und Abstimmungen</h2>
+                <p>
+                    Umfragen sind geheim: Der Server bewahrt jeden Stimmzettel ohne Bezug zur Person
+                    auf und übergibt die Stimmzettel erst am Ende – gemischt – zur Auswertung.
+                    Sichtbar ist nur, <em>wer</em> schon abgestimmt hat (damit niemand doppelt
+                    zählt), nicht <em>wie</em>. Abstimmungen über Personen, etwa eine
+                    Klassensprecherwahl, sind eine Form der Umfrage. Dabei stehen die Anzeigenamen
+                    der Anwesenden zur Wahl.
+                </p>
+
+                <h2>Speicher auf deinem Gerät</h2>
+                <p>
+                    Damit du nach einem Neuladen, Verbindungsabbruch oder Neustart wieder in
+                    denselben Raum kommst, merkt sich dein Browser Raum-Code, Sitzungs-ID und
+                    Anzeigenamen. Nach spätestens 24 Stunden werden sie nicht mehr verwendet und
+                    beim nächsten Besuch gelöscht. Außerdem merkt er sich deine Avatar- und
+                    Musik-Einstellungen. Dieser Speicher ist für den von dir genutzten Dienst
+                    unbedingt erforderlich (§ 25 Abs. 2 Nr. 2 TDDDG) und verlässt dein Gerät nur als
+                    Teil der Verbindung zum Quiz- bzw. Umfrage-Server.
+                </p>
+
+                <h2>Rechtsgrundlage</h2>
+                <p>
+                    Die Verarbeitung erfolgt, um dir den gewünschten Dienst bereitzustellen und ihn
+                    sicher zu betreiben (Art. 6 Abs. 1 lit. f DSGVO – berechtigtes Interesse an
+                    einem funktionierenden und sicheren Angebot).
+                </p>
+
+                <h2>Deine Rechte</h2>
+                <p>
+                    Du hast das Recht auf Auskunft, Berichtigung, Löschung und Einschränkung der
+                    Verarbeitung sowie auf Widerspruch (Art. 15–18, 21 DSGVO) und kannst dich bei
+                    einer Datenschutz-Aufsichtsbehörde beschweren (Art. 77 DSGVO). Weil der Server
+                    Daten nur während einer laufenden Sitzung kennt, liegen danach keine Daten mehr
+                    vor, auf die sich diese Rechte beziehen könnten.
                 </p>
             </div>
         </div>

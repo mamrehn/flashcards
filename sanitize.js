@@ -26,47 +26,32 @@ function sanitizeHTML(input) {
     return temp.innerHTML;
 }
 
-/**
- * Sanitize user input for storage and display
- * Trims whitespace and limits length
- * @param {string} input - The input string to sanitize
- * @param {number} maxLength - Maximum allowed length (default: 1000)
- * @returns {string} Sanitized string
- */
-function sanitizeInput(input, maxLength = 1000) {
-    if (typeof input !== 'string') {
-        return '';
-    }
-
-    // Trim whitespace
-    let sanitized = input.trim();
-
-    // Limit length
-    if (sanitized.length > maxLength) {
-        sanitized = sanitized.slice(0, Math.max(0, maxLength));
-    }
-
-    // Remove any null bytes
-    sanitized = sanitized.replaceAll('\0', '');
-
-    return sanitized;
-}
+// Emoji and their glue characters (ZWJ, variation selectors, skin tones, flags,
+// keycaps, tag sequences). Names are plain text; emoji belong in the avatar.
+const PLAYER_NAME_EMOJI_RE =
+    /\p{Extended_Pictographic}|\p{Regional_Indicator}|\p{Emoji_Modifier}|\u{200D}|\u{FE0E}|\u{FE0F}|\u{20E3}|[\u{E0020}-\u{E007F}]/gu;
 
 /**
- * Sanitize player name for multiplayer quiz.
- * Trims, length-caps, then strips anything outside letters, digits, German
- * umlauts, whitespace, and `- _ .` — which inherently removes HTML/JS payloads.
+ * Sanitize a player name for quiz and poll. Keeps letters and digits of any
+ * script (so "Ayşe", "Łukasz", "Nguyễn" survive) plus spaces and `' ’ - _ .`;
+ * drops emoji, symbols, control and bidi characters, and caps stacked
+ * combining marks. Mirrors sanitizeName in server/server.js.
  * @param {string} name - The player name to sanitize
- * @returns {string} Sanitized player name
+ * @returns {string} Sanitized player name ('' when nothing usable is left)
  */
 function sanitizePlayerName(name) {
     if (typeof name !== 'string') {
         return '';
     }
-
-    let sanitized = sanitizeInput(name, 50);
-    sanitized = sanitized.replaceAll(/[^a-zA-Z0-9äöüÄÖÜß\s\-_.]/g, '');
-    return sanitized;
+    const cleaned = name
+        .slice(0, 500)
+        .normalize('NFC')
+        .replaceAll(PLAYER_NAME_EMOJI_RE, '')
+        .replaceAll(/[^\p{L}\p{M}\p{N}\s'’\-_.]/gu, '')
+        .replaceAll(/(\p{M}{2})\p{M}+/gu, '$1')
+        .replaceAll(/\s+/g, ' ')
+        .trim();
+    return [...cleaned].slice(0, 50).join('').trim();
 }
 
 /**
@@ -92,3 +77,8 @@ function sanitizeParsedJSON(obj) {
 globalThis.sanitizeHTML = sanitizeHTML;
 globalThis.sanitizePlayerName = sanitizePlayerName;
 globalThis.sanitizeParsedJSON = sanitizeParsedJSON;
+
+// Node (tests) — the browser ignores this.
+if (typeof module !== 'undefined' && module.exports) {
+    module.exports = { sanitizePlayerName, sanitizeParsedJSON };
+}

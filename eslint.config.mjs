@@ -6,10 +6,11 @@ import globals from 'globals';
 import prettierPlugin from 'eslint-config-prettier';
 
 // Globals provided to browser bundles via <script> tags rather than imports:
-//   - JSZip / QRCode load from CDN
+//   - JSZip / QRCode are self-hosted in vendor/
 //   - sanitize.js exposes sanitizeHTML/sanitizeParsedJSON/sanitizePlayerName
 //   - logger.js exposes a no-op-in-prod debug logger
-//     to cards.js, quiz.js, library.js, index.js
+//   - ui-dialog.js exposes uiDialog/uiConfirm/uiPrompt
+//   - ws-client.js exposes wsClient (quiz.js, poll.js)
 const browserScriptTagGlobals = {
     JSZip: 'readonly',
     QRCode: 'readonly',
@@ -17,12 +18,30 @@ const browserScriptTagGlobals = {
     sanitizeParsedJSON: 'readonly',
     sanitizePlayerName: 'readonly',
     logger: 'readonly',
+    uiDialog: 'readonly',
+    uiConfirm: 'readonly',
+    uiPrompt: 'readonly',
+    wsClient: 'readonly',
 };
 
 export default [
+    {
+        // Third-party code (byte-identical to the upstream releases) and
+        // installed dependencies are not ours to lint.
+        ignores: [
+            'vendor/**',
+            '**/node_modules/**',
+            'TMP/**',
+            'test-results/**',
+            'playwright-report/**',
+        ],
+    },
     js.configs.recommended,
     sonarjs.configs.recommended,
-    unicorn.configs.recommended,
+    // unicorn 50 ships its flat config under 'flat/recommended'; the plain
+    // 'recommended' entry is the legacy eslintrc format (with `env`), which
+    // made every `npm run lint` crash.
+    unicorn.configs['flat/recommended'],
     jsdoc.configs['flat/recommended'],
     prettierPlugin,
     {
@@ -43,6 +62,8 @@ export default [
             eqeqeq: 'error',
             complexity: ['warn', { max: 15 }],
             'unicorn/prevent-abbreviations': 'off',
+            // Crashes on ESLint 9 in unicorn 50 ("reading 'decoration'").
+            'unicorn/expiring-todo-comments': 'off',
             'unicorn/prefer-module': 'off',
             'unicorn/no-null': 'off',
             'unicorn/filename-case': 'off',
@@ -63,9 +84,21 @@ export default [
         },
     },
     {
-        // Server and build scripts: console IS the logging mechanism.
+        // Server and build scripts: console IS the logging mechanism, and the
+        // server is a CLI process that exits after a graceful shutdown.
         files: ['server/**/*.js', 'scripts/**/*.js'],
         rules: {
+            'no-console': 'off',
+            'unicorn/no-process-exit': 'off',
+        },
+    },
+    {
+        // Tests read `(await client.next('x')).field` and nest callbacks in
+        // harness code; both are idiomatic there.
+        files: ['tests/**/*.js'],
+        rules: {
+            'unicorn/no-await-expression-member': 'off',
+            'sonarjs/no-nested-functions': 'off',
             'no-console': 'off',
         },
     },

@@ -123,11 +123,17 @@ The quiz mode uses a tiny WebSocket relay hosted on Fly.io. All quiz logic — s
 ## Development
 
 ```bash
-npm install          # installs ESLint, Prettier, husky, lint-staged
-npm run lint         # eslint .
-npm run lint:fix     # eslint . --fix
-npm run format       # prettier --write .
+npm install                  # installs ESLint, Prettier, husky, lint-staged, Playwright
+npm install --prefix server  # relay dependencies (needed by the tests)
+npm run lint                 # eslint .
+npm run lint:fix             # eslint . --fix
+npm run format               # prettier --write .
+npm test                     # unit + relay protocol tests (node --test)
+npx playwright install chromium   # once: browser for the end-to-end tests
+npm run test:e2e             # end-to-end tests: quiz, poll and study flows in Chromium
 ```
+
+Every push and pull request runs lint, unit and end-to-end tests ([.github/workflows/test.yml](.github/workflows/test.yml)); on `main` both deploy workflows run the same tests first and only deploy when they pass. A pre-commit hook lints and formats staged files.
 
 Commits on `main` that touch the client trigger [.github/workflows/minify.yml](.github/workflows/minify.yml), which minifies JS/CSS, inlines everything into each HTML file, and force-pushes the result to the `gh-pages` branch. Commits under [server/](server/) trigger [.github/workflows/deploy-server.yml](.github/workflows/deploy-server.yml) to redeploy the Fly.io relay.
 

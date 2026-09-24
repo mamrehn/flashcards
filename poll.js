@@ -19,14 +19,19 @@
  */
 
 /* ============================================================================
- * WebSocket URL — same convention as quiz.js (build-time placeholder,
- * runtime override, production fallback).
+ * Connection plumbing shared with quiz.js (see ws-client.js).
  * ============================================================================ */
-const RAW_URL = '__WS_URL__';
-const FALLBACK_WS_URL = RAW_URL === '__WS_URL__' ? 'wss://qlash-server.fly.dev' : RAW_URL;
-const HAS_RUNTIME_WS_URL =
-    globalThis.window !== undefined && globalThis.WS_URL && globalThis.WS_URL !== '__WS_URL__';
-const WS_URL = HAS_RUNTIME_WS_URL ? globalThis.WS_URL : FALLBACK_WS_URL;
+const {
+    WS_URL,
+    CLOSE_SESSION_REPLACED,
+    FATAL_JOIN_CODES,
+    connectWithRetry,
+    reconnectBackoffMs,
+    startHeartbeat,
+    stopHeartbeat,
+    markAlive,
+    pingNow,
+} = globalThis.wsClient;
 
 /* ============================================================================
  * Constants
@@ -40,7 +45,10 @@ const POLL_META_PREFIX = '__POLL_META__:';
 const MAX_REAL_OPTIONS = 240;
 const MAX_PICKS_PER_VOTER = 20;
 const MIN_DURATION_SEC = 5;
-const MAX_DURATION_SEC = 80;
+// Ranking a whole class takes time; the server accepts up to 600 s. Untimed
+// polls (checkbox in the composer) send duration 0 and end by host click or
+// once everyone has voted.
+const MAX_DURATION_SEC = 600;
 const SESSION_STORAGE_KEY = 'poll_active_session';
 const PICKS_STORAGE_KEY = 'poll_last_picks';
 // 24 h matches quiz.js. The server-side room expiry (2 h) is the real ceiling;
@@ -48,24 +56,10 @@ const PICKS_STORAGE_KEY = 'poll_last_picks';
 // that's been gone longer than this is no longer recoverable anyway.
 const SESSION_TTL_MS = 24 * 60 * 60 * 1000;
 const MAX_RECONNECT_ATTEMPTS = 30;
-// Application-level heartbeat. The server pings every 30 s at the WebSocket
-// protocol level and the browser auto-pongs, but (a) some intermediate proxies
-// (carrier NAT, corporate firewalls) only see app-layer frames as "activity"
-// and drop the TCP socket after ~60 s of silence, and (b) if the server's
-// network silently goes dark without closing the TCP connection, the browser
-// may keep the socket in OPEN state for many seconds before noticing.
-//
-// We send a `{type:'heartbeat'}` every 25 s; the server replies with
-// `{type:'heartbeat_ack'}`. A watchdog on the client side checks how long ago
-// we last heard *anything* from the server (heartbeat ack, game message, etc.)
-// — if > HEARTBEAT_TIMEOUT_MS, we force-close the socket and let the unified
-// reconnect logic take over. The watchdog only trusts that measurement when its
-// own tick cadence was healthy: a locked phone freezes our timers, and reading
-// that silence as a dead socket kicked students out on their way back.
-const HEARTBEAT_INTERVAL_MS = 25_000;
-const HEARTBEAT_TIMEOUT_MS = 60_000;
-const HEARTBEAT_WATCHDOG_INTERVAL_MS = 10_000;
-const HEARTBEAT_PAYLOAD = JSON.stringify({ type: 'heartbeat' });
+// After a server restart the room only exists again once the host restored
+// it; a player with a known seat keeps retrying the join meanwhile.
+const ROOM_WAIT_RETRY_MS = 3000;
+const ROOM_WAIT_MAX_RETRIES = 20;
 
 /* ============================================================================
  * Tiny helpers
@@ -100,117 +94,6 @@ function showMessage(message, type = 'info') {
 }
 
 /**
- * Accessible modal dialog — a themed, focus-trapped replacement for the native
- * blocking `confirm()`. Resolves to `true` (confirmed) / `false` (cancelled).
- * Esc and backdrop click cancel; Enter on the focused confirm button confirms;
- * focus is trapped while open and restored on close.
- * @param {object} opts
- * @param {string} opts.message
- * @param {string} [opts.confirmText]
- * @param {string} [opts.cancelText]
- * @param {boolean} [opts.danger] - Style the confirm button as destructive.
- * @returns {Promise<boolean>}
- */
-function uiDialog(opts) {
-    const { message, confirmText = 'OK', cancelText = 'Abbrechen', danger = false } = opts;
-
-    return new Promise((resolve) => {
-        const previouslyFocused = document.activeElement;
-
-        const backdrop = document.createElement('div');
-        backdrop.className = 'ui-modal-backdrop';
-
-        const modal = document.createElement('div');
-        modal.className = 'ui-modal';
-        modal.setAttribute('role', 'alertdialog');
-        modal.setAttribute('aria-modal', 'true');
-
-        const msgEl = document.createElement('p');
-        msgEl.className = 'ui-modal-message';
-        msgEl.id = `ui-modal-msg-${Date.now()}`;
-        msgEl.textContent = message;
-        modal.setAttribute('aria-labelledby', msgEl.id);
-        modal.append(msgEl);
-
-        const actions = document.createElement('div');
-        actions.className = 'ui-modal-actions';
-
-        const cancelBtn = document.createElement('button');
-        cancelBtn.type = 'button';
-        cancelBtn.className = 'ui-modal-btn ui-modal-cancel';
-        cancelBtn.textContent = cancelText;
-
-        const confirmBtn = document.createElement('button');
-        confirmBtn.type = 'button';
-        confirmBtn.className = `ui-modal-btn ui-modal-confirm${danger ? ' ui-modal-danger' : ''}`;
-        confirmBtn.textContent = confirmText;
-
-        actions.append(cancelBtn, confirmBtn);
-        modal.append(actions);
-        backdrop.append(modal);
-        document.body.append(backdrop);
-
-        const prevBodyOverflow = document.body.style.overflow;
-        document.body.style.overflow = 'hidden';
-
-        let settled = false;
-        /**
-         * @param {boolean} result
-         */
-        function close(result) {
-            if (settled) return;
-            settled = true;
-            document.removeEventListener('keydown', onKeydown, true);
-            document.body.style.overflow = prevBodyOverflow;
-            backdrop.remove();
-            if (previouslyFocused && typeof previouslyFocused.focus === 'function') {
-                previouslyFocused.focus();
-            }
-            resolve(result);
-        }
-
-        /**
-         * @param {KeyboardEvent} e
-         */
-        function onKeydown(e) {
-            if (e.key === 'Escape') {
-                e.preventDefault();
-                close(false);
-            } else if (e.key === 'Tab') {
-                const first = cancelBtn;
-                const last = confirmBtn;
-                if (e.shiftKey && document.activeElement === first) {
-                    e.preventDefault();
-                    last.focus();
-                } else if (!e.shiftKey && document.activeElement === last) {
-                    e.preventDefault();
-                    first.focus();
-                }
-            }
-        }
-
-        cancelBtn.addEventListener('click', () => close(false));
-        confirmBtn.addEventListener('click', () => close(true));
-        backdrop.addEventListener('mousedown', (e) => {
-            if (e.target === backdrop) close(false);
-        });
-        document.addEventListener('keydown', onKeydown, true);
-
-        confirmBtn.focus();
-    });
-}
-
-/**
- * Themed confirm dialog. @see uiDialog
- * @param {string} message
- * @param {object} [options]
- * @returns {Promise<boolean>}
- */
-function uiConfirm(message, options = {}) {
-    return uiDialog({ ...options, message });
-}
-
-/**
  * Show a top-level view (role-selection / host-view / player-view) and hide
  * the others. View IDs match the markup in poll.html.
  * @param {string} id
@@ -219,6 +102,9 @@ function showTopView(id) {
     for (const v of document.querySelectorAll('.view')) v.classList.remove('active');
     const el = document.querySelector(`#${CSS.escape(id)}`);
     if (el) el.classList.add('active');
+    // The privacy link only belongs on the start screen — a tap mid-session
+    // would navigate away from a running poll.
+    document.querySelector('#privacy-footer')?.classList.toggle('hidden', id !== 'role-selection');
 }
 
 /**
@@ -232,211 +118,6 @@ function showOnly(allIds, showId) {
         if (!el) continue;
         el.classList.toggle('hidden', id !== showId);
     }
-}
-
-/**
- * WebSocket connect with retry — mirrors quiz.js's connectWithRetry to handle
- * Fly.io cold starts.
- * @param {string} url
- * @param {number} [maxRetries]
- * @returns {Promise<WebSocket>}
- */
-function connectWithRetry(url, maxRetries = 3) {
-    return new Promise((resolve, reject) => {
-        let attempt = 0;
-        function tryConnect() {
-            attempt++;
-            const ws = new WebSocket(url);
-            let settled = false;
-            // Listener refs so we can detach the unused one on settle.
-            let onOpen;
-            let onError;
-            const detach = () => {
-                ws.removeEventListener('open', onOpen);
-                ws.removeEventListener('error', onError);
-            };
-            const timeout = setTimeout(() => {
-                if (settled) return;
-                settled = true;
-                detach();
-                ws.close();
-                if (attempt < maxRetries) {
-                    setTimeout(tryConnect, 2000 * attempt);
-                } else {
-                    reject(new Error('WebSocket connection failed after retries'));
-                }
-            }, 10_000);
-            onOpen = () => {
-                if (settled) return;
-                settled = true;
-                clearTimeout(timeout);
-                detach();
-                resolve(ws);
-            };
-            onError = () => {
-                if (settled) return;
-                settled = true;
-                clearTimeout(timeout);
-                detach();
-                if (attempt < maxRetries) {
-                    setTimeout(tryConnect, 2000 * attempt);
-                } else {
-                    reject(new Error('WebSocket connection failed after retries'));
-                }
-            };
-            ws.addEventListener('open', onOpen);
-            ws.addEventListener('error', onError);
-        }
-        tryConnect();
-    });
-}
-
-/**
- * ~1 s → ~2 s → ~4 s → ~10 s steady — same backoff as quiz.js. ±25% jitter is
- * applied so a cascade event (e.g. a brief router restart that drops every
- * client at once) doesn't produce a thundering herd hitting the server on the
- * same backoff schedule.
- * @param {number} attempt
- * @returns {number}
- */
-function reconnectBackoffMs(attempt) {
-    let base;
-    if (attempt <= 1) base = 1000;
-    else if (attempt === 2) base = 2000;
-    else if (attempt === 3) base = 4000;
-    else base = 10_000;
-    const jitter = 0.75 + Math.random() * 0.5;
-    return Math.round(base * jitter);
-}
-
-/**
- * Start the bidirectional heartbeat for a WebSocket. Returns a state object
- * holding the rescheduling timer, the watchdog interval, and the last-seen /
- * last-sent timestamps. Pass the state to `stopHeartbeat` when the socket
- * closes.
- *
- * `ws.send` is wrapped so that *any* outbound frame (submit_answer,
- * start_question, heartbeat itself, ...) reschedules the next heartbeat for
- * exactly `HEARTBEAT_INTERVAL_MS` from now. This guarantees the gap between
- * any two outbound frames is at most `HEARTBEAT_INTERVAL_MS` — important for
- * NATs that drop idle TCP after as little as 30 s. A simple periodic
- * `setInterval` skip-if-recent would have a worst-case gap of ~2× the
- * interval (~50 s) when a real send lands just after a tick fires.
- *
- * `state.lastMsgTime` is updated externally (by the message-handler attached
- * in attachXWsHandlers) on every received frame, so an active stream of
- * server-pushed messages keeps the watchdog quiet without a redundant
- * heartbeat round-trip.
- *
- * The watchdog measures its own tick gap and stands down whenever it finds it
- * was throttled or frozen — see the comment at the interval body. Without that
- * it reads a backgrounded tab's clamped timers as a dead socket.
- * @param {WebSocket} ws
- * @returns {{heartbeatTimer:number, watchdog:number, lastMsgTime:number, lastSendTime:number, lastTickTime:number}}
- */
-function startHeartbeat(ws) {
-    const now = Date.now();
-    const state = {
-        lastMsgTime: now,
-        lastSendTime: now,
-        heartbeatTimer: null,
-        // Wall-clock time of the previous watchdog tick. Comparing it against
-        // the configured interval tells us whether *we* were frozen.
-        lastTickTime: now,
-    };
-    // Bind the state to the socket so message handlers update the state that
-    // belongs to their own connection. During a reconnect two sockets are
-    // briefly live at once, and a late frame on the outgoing socket must not
-    // vouch for the liveness of the incoming one (or vice versa).
-    ws.__heartbeatState = state;
-
-    function scheduleNextHeartbeat() {
-        if (state.heartbeatTimer !== null) clearTimeout(state.heartbeatTimer);
-        state.heartbeatTimer = setTimeout(() => {
-            if (!ws || ws.readyState !== WebSocket.OPEN) return;
-            try {
-                // Goes through the wrapped send, which itself reschedules.
-                ws.send(HEARTBEAT_PAYLOAD);
-            } catch (error) {
-                logger.error('Heartbeat send failed:', error);
-            }
-        }, HEARTBEAT_INTERVAL_MS);
-    }
-
-    // Wrap ws.send so every outbound frame bumps lastSendTime *and* resets
-    // the heartbeat timer. Stash the native bound send on the socket itself
-    // so a second startHeartbeat call on the same socket doesn't capture
-    // the previous wrapper as "original" and stack wrappers (which would
-    // self-reschedule recursively on each outbound frame).
-    if (!ws.__heartbeatNativeSend) {
-        ws.__heartbeatNativeSend = ws.send.bind(ws);
-    }
-    const originalSend = ws.__heartbeatNativeSend;
-    ws.send = (...args) => {
-        state.lastSendTime = Date.now();
-        scheduleNextHeartbeat();
-        return originalSend(...args);
-    };
-
-    // Kick off the first heartbeat 25 s from now (initial state).
-    scheduleNextHeartbeat();
-
-    state.watchdog = setInterval(() => {
-        const tickNow = Date.now();
-        const tickGap = tickNow - state.lastTickTime;
-        state.lastTickTime = tickNow;
-        if (!ws || ws.readyState !== WebSocket.OPEN) return;
-
-        // Silence only proves the socket is dead if *we* were awake to listen.
-        // A locked phone or a backgrounded tab has its timers clamped (commonly
-        // 1/min) or frozen outright, so both our heartbeat sends and this
-        // watchdog stop running — `lastMsgTime` then goes stale for reasons
-        // that have nothing to do with the connection. Force-closing on that
-        // dropped students the moment they came back to the tab, which is the
-        // single most common "it kicked me out" report. A tick gap far larger
-        // than the configured interval is the tell; re-arm the window and probe
-        // instead. If the socket really is dead, the probe goes unanswered and
-        // the next unthrottled tick closes it ~10 s later.
-        const wasThrottled =
-            tickGap > HEARTBEAT_WATCHDOG_INTERVAL_MS * 2 || document.visibilityState !== 'visible';
-        if (wasThrottled) {
-            state.lastMsgTime = tickNow;
-            if (document.visibilityState === 'visible') {
-                try {
-                    ws.send(HEARTBEAT_PAYLOAD);
-                } catch {
-                    /* close handler will reconnect if the path is dead */
-                }
-            }
-            return;
-        }
-
-        const silentMs = tickNow - state.lastMsgTime;
-        if (silentMs > HEARTBEAT_TIMEOUT_MS) {
-            logger.warn(
-                `No server activity for ${Math.round(silentMs / 1000)}s — forcing reconnect.`
-            );
-            try {
-                ws.close();
-            } catch {
-                /* close already in progress */
-            }
-        }
-    }, HEARTBEAT_WATCHDOG_INTERVAL_MS);
-
-    return state;
-}
-
-/**
- * @param {{heartbeatTimer:number|null, watchdog:number}|null} state
- * @returns {null}
- */
-function stopHeartbeat(state) {
-    if (state) {
-        if (state.heartbeatTimer !== null) clearTimeout(state.heartbeatTimer);
-        clearInterval(state.watchdog);
-    }
-    return null;
 }
 
 /**
@@ -576,10 +257,17 @@ let hostActivePoll = null; // {question, options, picksPerVoter, revealCount, so
 // Guard so endVote() can be triggered from multiple sources (timer, auto-end,
 // host click) without re-sending results.
 let hostPollEnding = false;
-const hostAnswers = new Map(); // sessionId -> {ranks: number[], name}
+// Session ids that have voted in the active poll. Ballots are secret: the
+// server keeps them unlinked and hands them over only on `collect_ballots`.
+const hostVoters = new Set();
+// endVote() asked for the ballots and is waiting for the server's `ballots`.
+let hostAwaitingBallots = false;
+// Rooms can be locked before a vote. Newcomers then knock and wait for the
+// host; known sessions (reload, network drop, restarted laptop) rejoin as usual.
+let hostRoomLocked = false;
+// requestId -> {name} for knocks waiting on the host's decision.
+const hostJoinRequests = new Map();
 let hostTimerInterval = null;
-// Pending question to send once a fresh hostWs is open after a transient drop.
-let hostPendingQuestion = null;
 // Pending results frame to send once a fresh hostWs is open after a transient
 // drop. Without this, an endVote() that ran while the host WS was closed
 // would compute the podium locally but never notify the players — they'd be
@@ -615,6 +303,7 @@ let playerSuppressReconnect = false;
 let playerReconnecting = false;
 let playerHeartbeat = null;
 let playerCurrentMeta = null;
+let playerCurrentAnonymous = false;
 let playerDisplayOptions = []; // options[1..N] (sliced)
 let playerOptionIndexBase = 1; // index of the first displayable option in raw options
 let playerCurrentQuestion = ''; // raw question text
@@ -622,6 +311,12 @@ let playerSelectedRanks = []; // indices into raw options
 let playerHasSubmitted = false;
 let playerTimerInterval = null;
 let playerCurrentQuestionKey = ''; // stable identifier for "this question"
+// True while the join form's first connect is in flight. A second tap (common
+// while the server wakes up) used to open a second socket = a second player
+// with the same name, i.e. a ghost voter and a duplicate candidate.
+let playerJoining = false;
+// Join retries while a restarted server waits for the host to restore the room.
+let playerRoomWaitRetries = 0;
 
 // Composer state for fixed source
 const composerFixedOptions = ['', ''];
@@ -752,6 +447,10 @@ function collectDom() {
         roomIdEl: document.querySelector('#room-id'),
         playerCountEl: document.querySelector('#player-count'),
         playersListEl: document.querySelector('#players-list'),
+        duplicateNamesHint: document.querySelector('#duplicate-names-hint'),
+        roomLockBtn: document.querySelector('#room-lock-btn'),
+        knockPanel: document.querySelector('#knock-panel'),
+        knockList: document.querySelector('#knock-list'),
         showComposerBtn: document.querySelector('#show-composer-btn'),
 
         // Composer
@@ -769,12 +468,14 @@ function collectDom() {
         composerReveal: document.querySelector('#composer-reveal'),
         composerRevealAll: document.querySelector('#composer-reveal-all'),
         composerDuration: document.querySelector('#composer-duration'),
+        composerUntimed: document.querySelector('#composer-untimed'),
         startVoteBtn: document.querySelector('#start-vote-btn'),
         backToLobbyBtn: document.querySelector('#back-to-lobby-btn'),
 
         // Voting (host)
         hostQuestionDisplay: document.querySelector('#host-question-display'),
         hostTimerBar: document.querySelector('#host-timer-bar'),
+        hostTimerContainer: document.querySelector('#host-timer-container'),
         hostAnswersCount: document.querySelector('#host-answers-count'),
         hostTotalPlayers: document.querySelector('#host-total-players'),
         hostLiveOptions: document.querySelector('#host-live-options'),
@@ -795,6 +496,7 @@ function collectDom() {
         playerNameDisplay: document.querySelector('#player-name-display'),
         playerQuestionText: document.querySelector('#player-question-text'),
         playerTimerBar: document.querySelector('#player-timer-bar'),
+        playerTimerContainer: document.querySelector('#player-timer-container'),
         playerVoteHint: document.querySelector('#player-vote-hint'),
         rankList: document.querySelector('#rank-list'),
         rankListEmpty: document.querySelector('#rank-list-empty'),
@@ -881,15 +583,16 @@ async function initHost() {
     hostWsReconnectAttempts = 0;
     hostSuppressReconnect = false;
 
+    let ws;
     try {
-        hostWs = await connectWithRetry(WS_URL);
+        ws = await connectWithRetry(WS_URL);
     } catch {
         showMessage('Server nicht erreichbar. Bitte versuche es später erneut.', 'error');
         return;
     }
 
-    attachHostWsHandlers(hostWs);
-    hostWs.send(JSON.stringify({ type: 'create_room' }));
+    attachHostWsHandlers(ws);
+    ws.send(JSON.stringify({ type: 'create_room' }));
 }
 
 /**
@@ -910,15 +613,17 @@ function initHostReconnect(info) {
 }
 
 /**
+ * Make `ws` the host socket and wire heartbeat, liveness and reconnect.
  * @param {WebSocket} ws
  */
 function attachHostWsHandlers(ws) {
+    hostWs = ws;
     ws.addEventListener('message', (ev) => {
-        // Any incoming frame (heartbeat_ack or real game message) counts as
-        // server liveness — keeps the watchdog quiet. Credit the state of the
-        // socket that actually received it, not whichever socket happens to be
-        // current: during a reconnect both are briefly live.
-        if (ws.__heartbeatState) ws.__heartbeatState.lastMsgTime = Date.now();
+        // Credit liveness to the socket that actually received the frame —
+        // during a reconnect both sockets are briefly live — and ignore
+        // anything still arriving on a socket we already replaced.
+        markAlive(ws);
+        if (ws !== hostWs) return;
         let msg;
         try {
             msg = JSON.parse(ev.data);
@@ -931,7 +636,7 @@ function attachHostWsHandlers(ws) {
     hostHeartbeat = stopHeartbeat(hostHeartbeat);
     hostHeartbeat = startHeartbeat(ws);
 
-    ws.addEventListener('close', () => {
+    ws.addEventListener('close', (ev) => {
         // Ignore stale close events from a previous WS instance we've
         // already replaced — otherwise an old socket's close (which can
         // fire seconds after we attached a new one) would tear down the
@@ -940,6 +645,13 @@ function attachHostWsHandlers(ws) {
         if (ws !== hostWs) return;
         logger.log('Host WS closed');
         hostHeartbeat = stopHeartbeat(hostHeartbeat);
+        if (ev.code === CLOSE_SESSION_REPLACED) {
+            // Another tab/device now hosts this poll; reconnecting would
+            // steal it back and forth forever.
+            hostSuppressReconnect = true;
+            showMessage('Diese Umfrage wird jetzt in einem anderen Fenster geleitet.', 'info');
+            return;
+        }
         reconnectHostWs();
     });
 
@@ -985,30 +697,35 @@ async function reconnectHostWs() {
         setTimeout(reconnectHostWs, delay);
         return;
     }
-    hostWs = connectedWs;
     // Clear the in-flight guard before attaching handlers and sending. If
     // `ws.send` throws or a synchronous close event fires mid-setup, the
     // close handler's reconnectHostWs() call would otherwise early-return
     // on the still-true guard and we'd stall.
     hostReconnecting = false;
-    attachHostWsHandlers(hostWs);
-    hostWs.send(
+    attachHostWsHandlers(connectedWs);
+    connectedWs.send(
         JSON.stringify({ type: 'reconnect_host', roomId: hostRoomId, sessionId: hostSessionId })
     );
-    // Resend any pending question that wasn't acknowledged across the gap.
-    if (hostPendingQuestion) {
-        hostWs.send(JSON.stringify(hostPendingQuestion));
-        hostPendingQuestion = null;
-    }
-    // Same for results — an endVote() that fired during the outage left the
-    // poll resolved on the host side but never reached players.
+    // Pending ballots/results and queued appends go out once the server has
+    // confirmed us as host again (see 'host_reconnected').
+    // Counter resets to 0 in the 'host_reconnected' message handler.
+}
+
+/**
+ * Flush work that piled up while the host socket was down. Runs after the
+ * server confirmed us as host (a restored room would reject it earlier).
+ */
+function flushHostBacklog() {
+    if (!hostWs || hostWs.readyState !== WebSocket.OPEN) return;
+    // An endVote() during the outage still needs the ballots.
+    if (hostAwaitingBallots) hostWs.send(JSON.stringify({ type: 'collect_ballots' }));
+    // Results computed while offline never reached players.
     if (hostPendingResults) {
         hostWs.send(JSON.stringify(hostPendingResults));
         hostPendingResults = null;
     }
     // Late-joiner options queued while the socket was down.
     flushAppendQueue();
-    // Counter resets to 0 in the 'host_reconnected' message handler.
 }
 
 /**
@@ -1192,15 +909,14 @@ function clearAppendQueue() {
 }
 
 /**
+ * A player voted. Ballots are secret, so this only records *that* they voted
+ * (for the "X von Y" counter and the auto-end check).
  * @param {object} msg
  */
 function handleHostAnswer(msg) {
-    if (!hostActivePoll) return;
-    if (!Array.isArray(msg.answerData)) return;
-    hostAnswers.set(msg.sessionId, {
-        ranks: [...msg.answerData],
-        name: msg.name || (hostPlayers.get(msg.sessionId) || {}).name || 'Spieler',
-    });
+    if (!hostActivePoll || hostPollEnding) return;
+    if (typeof msg.sessionId !== 'string') return;
+    hostVoters.add(msg.sessionId);
     refreshHostVotingProgress();
     // If a recent disconnect set a grace timer, let it decide when to end —
     // closing the vote the moment the remaining voters finish would lock a
@@ -1222,31 +938,88 @@ function maybeAutoEndVote() {
         if (p.isConnected) connectedIds.push(sid);
     }
     if (connectedIds.length === 0) return;
-    const allVoted = connectedIds.every((sid) => hostAnswers.has(sid));
+    const allVoted = connectedIds.every((sid) => hostVoters.has(sid));
     if (!allVoted) return;
     endVote();
 }
 
 const HOST_PLAYER_UPDATE_TYPES = new Set(['player_joined', 'player_reconnected', 'player_left']);
 
-// Server-side `start_question` validation failures, matched by prefix because
-// one of them interpolates the option ceiling. Deliberately excludes the
-// `append_option` rejections ("Ungültige Option.", "Keine aktive Frage.",
-// "Maximale Anzahl Optionen (…) erreicht.") and the rate-limit warning — those
-// say nothing about whether the running vote is still valid.
-const QUESTION_REJECTION_PREFIXES = [
-    'Frage ist zu lang',
-    'Zu viele Optionen',
-    'Eine Option ist zu lang',
-];
+// Server-side `start_question` validation failures. Deliberately excludes the
+// `append_option` rejections (APPEND_REJECTED) and the rate-limit warning —
+// those say nothing about whether the running vote is still valid.
+const QUESTION_REJECTION_CODES = new Set(['QUESTION_INVALID', 'OPTIONS_LIMIT', 'OPTION_INVALID']);
 
 /**
- * @param {string|undefined} message
- * @returns {boolean} True if the server rejected our start_question outright.
+ * Drop the running vote without results (server rejected it, or a server
+ * restart lost its ballots) and return to the composer.
+ * @param {string} [message]
  */
-function isQuestionRejection(message) {
-    if (typeof message !== 'string') return false;
-    return QUESTION_REJECTION_PREFIXES.some((p) => message.startsWith(p));
+function abortActiveVote(message) {
+    if (hostTimerInterval) {
+        clearInterval(hostTimerInterval);
+        hostTimerInterval = null;
+    }
+    clearAppendQueue();
+    hostActivePoll = null;
+    hostPollEnding = false;
+    hostAwaitingBallots = false;
+    hostVoters.clear();
+    if (message) showMessage(message, 'error');
+    showOnly(['host-lobby', 'host-composer', 'host-voting', 'host-reveal'], 'host-composer');
+}
+
+/**
+ * Reconcile local state with the server's after a (re)connect: players,
+ * who already voted, lock state, and pending knocks.
+ * @param {object} msg - the host_reconnected payload
+ */
+function reconcileHostState(msg) {
+    // Any joins, leaves, or submissions that happened during the brief WS gap
+    // were never delivered to the host (the server's send-to-host call
+    // short-circuits on a closed socket), so the local maps may have stale
+    // isConnected flags or missing votes. Without this, the
+    // auto-end-when-all-voted check could stall.
+    if (Array.isArray(msg.players)) {
+        const serverIds = new Set();
+        for (const p of msg.players) {
+            if (!p || typeof p.sessionId !== 'string') continue;
+            serverIds.add(p.sessionId);
+            const existing = hostPlayers.get(p.sessionId);
+            hostPlayers.set(p.sessionId, {
+                name: p.name || (existing && existing.name) || 'Spieler',
+                isConnected: !!p.isConnected,
+            });
+            if (hostActivePoll && !hostPollEnding && p.hasAnswered) hostVoters.add(p.sessionId);
+            // A player who joined during the host's outage was never appended
+            // to the active poll's options. appendPlayerToActivePoll's
+            // optionPlayerIds check makes this idempotent for known sessions.
+            if (
+                p.isConnected &&
+                hostActivePoll &&
+                hostActivePoll.source === 'players' &&
+                !hostPollEnding
+            ) {
+                appendPlayerToActivePoll(p.name, p.sessionId);
+            }
+        }
+        // Drop any local entries the server no longer knows about. Collect
+        // first, then delete, so we don't mutate the Map during iteration.
+        const ghostIds = [];
+        for (const sid of hostPlayers.keys()) {
+            if (!serverIds.has(sid)) ghostIds.push(sid);
+        }
+        for (const sid of ghostIds) hostPlayers.delete(sid);
+    }
+    if (typeof msg.locked === 'boolean') hostRoomLocked = msg.locked;
+    hostJoinRequests.clear();
+    if (Array.isArray(msg.pendingJoins)) {
+        for (const req of msg.pendingJoins) {
+            if (req && typeof req.requestId === 'string') {
+                hostJoinRequests.set(req.requestId, { name: req.name || 'Spieler' });
+            }
+        }
+    }
 }
 
 /**
@@ -1263,66 +1036,28 @@ function handleHostMessage(msg) {
             hostRoomId = msg.roomId;
             hostSessionId = msg.sessionId;
             hostWsReconnectAttempts = 0;
+            hostRoomLocked = false;
+            hostJoinRequests.clear();
             saveActiveSession('host', hostRoomId, hostSessionId);
             renderHostLobby();
+            renderHostDoor();
             break;
         }
         case 'host_reconnected': {
             // Reset the budget — a flaky connection that reconnects many
             // times across a long session would otherwise run dry.
             hostWsReconnectAttempts = 0;
-            // Reconcile local maps with the server's authoritative state. Any
-            // joins, leaves, or submissions that happened during the brief
-            // WS gap were never delivered to the host (the server's
-            // send-to-host call short-circuits on a closed socket), so the
-            // local maps may have stale isConnected flags or missing answers.
-            // Without this, the auto-end-when-all-voted check could stall.
-            if (Array.isArray(msg.players)) {
-                const serverIds = new Set();
-                for (const p of msg.players) {
-                    if (!p || typeof p.sessionId !== 'string') continue;
-                    serverIds.add(p.sessionId);
-                    const existing = hostPlayers.get(p.sessionId);
-                    hostPlayers.set(p.sessionId, {
-                        name: p.name || (existing && existing.name) || 'Spieler',
-                        isConnected: !!p.isConnected,
-                    });
-                    // Restore answers submitted during the host's outage.
-                    if (
-                        hostActivePoll &&
-                        p.hasAnswered &&
-                        Array.isArray(p.currentAnswer) &&
-                        !hostAnswers.has(p.sessionId)
-                    ) {
-                        hostAnswers.set(p.sessionId, {
-                            ranks: [...p.currentAnswer],
-                            name: p.name || 'Spieler',
-                        });
-                    }
-                    // A player who joined during the host's outage was
-                    // never appended to the active poll's options.
-                    // appendPlayerToActivePoll's optionPlayerIds check
-                    // makes this idempotent for sessions we already knew.
-                    if (
-                        p.isConnected &&
-                        hostActivePoll &&
-                        hostActivePoll.source === 'players' &&
-                        !hostPollEnding
-                    ) {
-                        appendPlayerToActivePoll(p.name, p.sessionId);
-                    }
-                }
-                // Drop any local entries the server no longer knows about
-                // (e.g. a player left while we were briefly disconnected and
-                // the room expired their session). Collect first, then delete,
-                // so we don't mutate the Map during its own iteration.
-                const ghostIds = [];
-                for (const sid of hostPlayers.keys()) {
-                    if (!serverIds.has(sid)) ghostIds.push(sid);
-                }
-                for (const sid of ghostIds) hostPlayers.delete(sid);
+            // A restored room (server restart) lost the running vote's
+            // ballots — secret ballots only ever lived on the server.
+            if (msg.isRestored && (hostAwaitingBallots || (hostActivePoll && !hostPollEnding))) {
+                abortActiveVote(
+                    'Die Abstimmung wurde durch einen Serverneustart unterbrochen. Bitte starte sie erneut.'
+                );
             }
+            reconcileHostState(msg);
             renderHostLobby();
+            renderHostDoor();
+            flushHostBacklog();
             if (hostActivePoll) {
                 refreshHostVotingProgress();
                 maybeAutoEndVote();
@@ -1330,16 +1065,56 @@ function handleHostMessage(msg) {
             break;
         }
         case 'room_not_found_try_restore': {
-            // Poll sessions are short-lived; we don't attempt full restoration.
-            showMessage('Der Raum ist abgelaufen. Bitte starte eine neue Umfrage.', 'error');
-            clearActiveSession();
-            hostRoomId = null;
-            hostSessionId = null;
-            showTopView('role-selection');
+            // The server lost the room (restart / deploy). Re-create it with
+            // the same code so players' saved sessions rejoin on their own.
+            if (!hostWs || hostWs.readyState !== WebSocket.OPEN) break;
+            hostWs.send(
+                JSON.stringify({
+                    type: 'restore_room',
+                    roomId: hostRoomId,
+                    sessionId: hostSessionId,
+                    players: [...hostPlayers.entries()].map(([id, p]) => ({ id, name: p.name })),
+                    locked: hostRoomLocked,
+                })
+            );
             break;
         }
         case 'player_answered': {
             handleHostAnswer(msg);
+            break;
+        }
+        case 'ballots': {
+            onBallotsReceived(msg.ballots);
+            break;
+        }
+        case 'player_renamed': {
+            const p = hostPlayers.get(msg.sessionId);
+            if (p && typeof msg.name === 'string') {
+                p.name = msg.name;
+                refreshPlayersUI();
+            }
+            break;
+        }
+        case 'room_lock': {
+            hostRoomLocked = msg.locked === true;
+            renderHostDoor();
+            break;
+        }
+        case 'join_request': {
+            if (typeof msg.requestId === 'string') {
+                hostJoinRequests.set(msg.requestId, { name: msg.name || 'Spieler' });
+                renderHostDoor();
+            }
+            break;
+        }
+        case 'join_request_cancelled':
+        case 'join_request_resolved': {
+            hostJoinRequests.delete(msg.requestId);
+            renderHostDoor();
+            break;
+        }
+        case 'server_restarting': {
+            showMessage('Server startet neu – Verbindung wird wiederhergestellt …', 'info');
             break;
         }
         case 'quiz_terminated': {
@@ -1348,27 +1123,17 @@ function handleHostMessage(msg) {
             break;
         }
         case 'error': {
+            if (msg.code === 'RATE_LIMITED') break;
             showMessage(msg.message || 'Unbekannter Fehler', 'error');
             // If the server rejected the start_question we just sent, the
             // host UI has already transitioned into "host-voting" with a
             // running timer — but no players will ever see the question.
-            // Roll back to the composer so the host can fix the input.
-            //
-            // Only for *that* class of error. Rolling back on any error at all
-            // meant an unrelated frame — a rate-limit warning, a rejected
-            // late-joiner append — destroyed a vote that was running fine for
+            // Roll back to the composer so the host can fix the input. Only
+            // for *that* class of error: rolling back on any error at all
+            // meant an unrelated frame destroyed a vote running fine for
             // everyone else.
-            if (hostActivePoll && !hostPollEnding && isQuestionRejection(msg.message)) {
-                if (hostTimerInterval) {
-                    clearInterval(hostTimerInterval);
-                    hostTimerInterval = null;
-                }
-                hostActivePoll = null;
-                hostAnswers.clear();
-                showOnly(
-                    ['host-lobby', 'host-composer', 'host-voting', 'host-reveal'],
-                    'host-composer'
-                );
+            if (hostActivePoll && !hostPollEnding && QUESTION_REJECTION_CODES.has(msg.code)) {
+                abortActiveVote();
             }
             break;
         }
@@ -1404,18 +1169,181 @@ function renderHostLobby() {
 }
 
 /**
- *
+ * Case-/space-insensitive key for spotting the same name twice.
+ * @param {string} name
+ * @returns {string}
+ */
+function nameKey(name) {
+    return String(name || '')
+        .toLocaleLowerCase('de')
+        .replaceAll(/\s+/g, ' ')
+        .trim();
+}
+
+/**
+ * Player chips. A name that appears more than once is flagged — in an
+ * election that is usually one person on two devices (or a rejoin without
+ * the saved session). Tapping a chip lets the host rename that player.
  */
 function refreshPlayersUI() {
     const connected = [...hostPlayers.values()].filter((p) => p.isConnected);
     dom.playerCountEl.textContent = String(connected.length);
 
+    const nameCounts = new Map();
+    for (const p of hostPlayers.values()) {
+        const key = nameKey(p.name);
+        nameCounts.set(key, (nameCounts.get(key) || 0) + 1);
+    }
+
     dom.playersListEl.innerHTML = '';
-    for (const [, p] of hostPlayers) {
-        const chip = document.createElement('span');
+    for (const [sid, p] of hostPlayers) {
+        const chip = document.createElement('button');
+        chip.type = 'button';
         chip.className = 'player-chip' + (p.isConnected ? '' : ' disconnected');
+        const isDuplicate = nameCounts.get(nameKey(p.name)) > 1;
+        if (isDuplicate) chip.classList.add('duplicate');
         chip.textContent = p.name;
+        if (!p.isConnected) chip.setAttribute('aria-label', `${p.name} (getrennt)`);
+        chip.title = isDuplicate
+            ? 'Dieser Name ist mehrfach im Raum. Tippen zum Umbenennen.'
+            : 'Tippen zum Umbenennen';
+        chip.addEventListener('click', () => renamePlayer(sid));
         dom.playersListEl.append(chip);
+    }
+    const dupCount = [...nameCounts.values()].filter((n) => n > 1).length;
+    if (dom.duplicateNamesHint) {
+        dom.duplicateNamesHint.classList.toggle('hidden', dupCount === 0);
+    }
+    // The knock panel offers dropped-out seats, which just changed.
+    renderHostDoor();
+}
+
+/**
+ * Host edits a player's name (censoring). The player sees the new name and
+ * cannot change it back. Not possible while a vote is running, because the
+ * names are the ballot options then.
+ * @param {string} sessionId
+ */
+async function renamePlayer(sessionId) {
+    const p = hostPlayers.get(sessionId);
+    if (!p) return;
+    if (hostActivePoll && !hostPollEnding) {
+        showMessage('Während einer Abstimmung können Namen nicht geändert werden.', 'info');
+        return;
+    }
+    const input = await uiPrompt(`Neuer Name für „${p.name}“:`, p.name, {
+        confirmText: 'Umbenennen',
+        maxLength: 50,
+    });
+    if (input === null) return;
+    const name = sanitizePlayerName(input);
+    if (!name) {
+        showMessage('Der Name muss Buchstaben oder Ziffern enthalten (keine Emojis).', 'error');
+        return;
+    }
+    if (name === p.name) return;
+    if (!hostWs || hostWs.readyState !== WebSocket.OPEN) {
+        showMessage('Keine Verbindung zum Server.', 'error');
+        return;
+    }
+    hostWs.send(JSON.stringify({ type: 'rename_player', sessionId, name }));
+}
+
+/* ============================================================================
+ * Host: room lock ("door") and knock requests
+ *
+ * A locked room still lets every known session back in (page reload, network
+ * drop, restarted laptop — the session lives in localStorage). Only devices
+ * without a session knock; the host admits them as new, puts them back on a
+ * dropped-out player's seat (keeping that seat's name and vote, so nobody
+ * gets a second ballot), or turns them away.
+ * ============================================================================ */
+
+function toggleRoomLock() {
+    if (!hostWs || hostWs.readyState !== WebSocket.OPEN) {
+        showMessage('Keine Verbindung zum Server.', 'error');
+        return;
+    }
+    hostWs.send(JSON.stringify({ type: 'set_room_lock', locked: !hostRoomLocked }));
+}
+
+/**
+ * @param {string} requestId
+ * @param {'admit'|'deny'|'assign'} decision
+ * @param {string} [sessionId] - seat to assign
+ */
+function resolveJoinRequest(requestId, decision, sessionId) {
+    if (!hostWs || hostWs.readyState !== WebSocket.OPEN) {
+        showMessage('Keine Verbindung zum Server.', 'error');
+        return;
+    }
+    hostWs.send(JSON.stringify({ type: 'resolve_join', requestId, decision, sessionId }));
+}
+
+/** Lock button state + the list of devices knocking at the door. */
+function renderHostDoor() {
+    if (dom.roomLockBtn) {
+        dom.roomLockBtn.textContent = hostRoomLocked ? '🔒 Raum gesperrt' : '🔓 Raum offen';
+        dom.roomLockBtn.setAttribute('aria-pressed', String(hostRoomLocked));
+        dom.roomLockBtn.classList.toggle('locked', hostRoomLocked);
+        dom.roomLockBtn.title = hostRoomLocked
+            ? 'Neue Geräte müssen anklopfen. Tippen zum Öffnen (lässt Wartende herein).'
+            : 'Tippen zum Sperren: Neue Geräte müssen dann anklopfen.';
+    }
+    const panel = dom.knockPanel;
+    const list = dom.knockList;
+    if (!panel || !list) return;
+    panel.classList.toggle('hidden', hostJoinRequests.size === 0);
+    list.innerHTML = '';
+    const freeSeats = [...hostPlayers.entries()].filter(([, p]) => !p.isConnected);
+    for (const [requestId, req] of hostJoinRequests) {
+        const li = document.createElement('li');
+        li.className = 'knock-item';
+        const name = document.createElement('span');
+        name.className = 'knock-name';
+        name.textContent = req.name;
+        li.append(name);
+
+        const actions = document.createElement('div');
+        actions.className = 'knock-actions';
+        if (freeSeats.length > 0) {
+            const select = document.createElement('select');
+            select.className = 'knock-seat';
+            select.setAttribute('aria-label', `Platz für ${req.name} wählen`);
+            const placeholder = document.createElement('option');
+            placeholder.value = '';
+            placeholder.textContent = 'Als getrennte Person …';
+            select.append(placeholder);
+            // Suggest the seat with the same name first.
+            const sorted = freeSeats.toSorted(
+                ([, a], [, b]) =>
+                    Number(nameKey(b.name) === nameKey(req.name)) -
+                    Number(nameKey(a.name) === nameKey(req.name))
+            );
+            for (const [sid, p] of sorted) {
+                const opt = document.createElement('option');
+                opt.value = sid;
+                opt.textContent = p.name;
+                select.append(opt);
+            }
+            select.addEventListener('change', () => {
+                if (select.value) resolveJoinRequest(requestId, 'assign', select.value);
+            });
+            actions.append(select);
+        }
+        const admit = document.createElement('button');
+        admit.type = 'button';
+        admit.className = 'btn knock-admit';
+        admit.textContent = 'Neu zulassen';
+        admit.addEventListener('click', () => resolveJoinRequest(requestId, 'admit'));
+        const deny = document.createElement('button');
+        deny.type = 'button';
+        deny.className = 'btn knock-deny';
+        deny.textContent = 'Ablehnen';
+        deny.addEventListener('click', () => resolveJoinRequest(requestId, 'deny'));
+        actions.append(admit, deny);
+        li.append(actions);
+        list.append(li);
     }
 }
 
@@ -1689,9 +1617,13 @@ function readComposerNumericInputs(optionCount) {
         revealCount = Math.min(revealCount, optionCount);
     }
 
-    let duration = Number.parseInt(dom.composerDuration.value, 10);
-    if (!Number.isFinite(duration)) duration = 45;
-    duration = Math.max(MIN_DURATION_SEC, Math.min(MAX_DURATION_SEC, duration));
+    // 0 = untimed: the vote ends by host click or once everyone voted.
+    let duration = 0;
+    if (!dom.composerUntimed || !dom.composerUntimed.checked) {
+        duration = Number.parseInt(dom.composerDuration.value, 10);
+        if (!Number.isFinite(duration)) duration = 45;
+        duration = Math.max(MIN_DURATION_SEC, Math.min(MAX_DURATION_SEC, duration));
+    }
 
     return { picks, revealCount, duration };
 }
@@ -1746,11 +1678,14 @@ function startVote() {
         index: 0,
         total: 1,
         duration,
+        // Secret ballot: the server never tells the host who voted for what.
+        anonymous: true,
     };
 
+    // Not queued for later: a vote that silently starts after a reconnect
+    // would run without the host tracking it.
     if (!hostWs || hostWs.readyState !== WebSocket.OPEN) {
-        showMessage('Keine Verbindung. Versuche erneut zu verbinden…', 'error');
-        hostPendingQuestion = payload;
+        showMessage('Keine Verbindung. Bitte nach dem Wiederverbinden erneut starten.', 'error');
         return;
     }
 
@@ -1776,7 +1711,8 @@ function startVote() {
         duration,
     };
     hostPollEnding = false;
-    hostAnswers.clear();
+    hostAwaitingBallots = false;
+    hostVoters.clear();
     // Queued appends target the previous round's option list — drop them.
     clearAppendQueue();
     // A grace timer from a prior round must not bleed into this one.
@@ -1818,7 +1754,7 @@ function renderHostVotingView() {
 function refreshHostVotingProgress() {
     if (!hostActivePoll) return;
     const connected = [...hostPlayers.values()].filter((p) => p.isConnected).length;
-    const submitted = hostAnswers.size;
+    const submitted = hostVoters.size;
     dom.hostAnswersCount.textContent = String(submitted);
     dom.hostTotalPlayers.textContent = String(connected);
 }
@@ -1829,6 +1765,9 @@ function refreshHostVotingProgress() {
 function startHostTimer(seconds) {
     if (hostTimerInterval) clearInterval(hostTimerInterval);
     dom.hostTimerBar.style.width = '100%';
+    // Untimed poll: no countdown, the bar just stays full.
+    if (dom.hostTimerContainer) dom.hostTimerContainer.classList.toggle('hidden', !seconds);
+    if (!seconds) return;
     const totalMs = seconds * 1000;
     const start = Date.now();
     hostTimerInterval = setInterval(() => {
@@ -1850,12 +1789,14 @@ function startHostTimer(seconds) {
 }
 
 /**
- * Stop the vote, compute Borda results, send `send_results` so players see
- * the same podium, then move the host into the reveal view.
+ * Stop the vote: ask the server for the (secret, shuffled) ballots. Results
+ * are computed once they arrive (onBallotsReceived). If the socket is down,
+ * the request goes out after reconnect.
  */
 function endVote() {
     if (!hostActivePoll || hostPollEnding) return;
     hostPollEnding = true;
+    hostAwaitingBallots = true;
     clearAppendQueue();
     if (hostTimerInterval) {
         clearInterval(hostTimerInterval);
@@ -1865,8 +1806,24 @@ function endVote() {
         clearTimeout(hostDisconnectGraceTimeout);
         hostDisconnectGraceTimeout = null;
     }
+    dom.endVoteBtn.disabled = true;
+    if (hostWs && hostWs.readyState === WebSocket.OPEN) {
+        hostWs.send(JSON.stringify({ type: 'collect_ballots' }));
+    } else {
+        showMessage('Keine Verbindung — Ergebnisse folgen nach dem Wiederverbinden.', 'info');
+    }
+}
 
-    const podium = computeBordaPodium(hostActivePoll);
+/**
+ * Ballots arrived: compute the Borda podium, send it to players, reveal it.
+ * @param {unknown} ballots
+ */
+function onBallotsReceived(ballots) {
+    if (!hostActivePoll || !hostAwaitingBallots) return;
+    hostAwaitingBallots = false;
+    dom.endVoteBtn.disabled = false;
+    const validBallots = Array.isArray(ballots) ? ballots.filter((b) => Array.isArray(b)) : [];
+    const podium = computeBordaPodium(hostActivePoll, validBallots);
 
     // Pack the podium into the `leaderboard` field — it's the only whitelisted
     // slot in send_results that can carry [{name, score}] pairs through the
@@ -1881,43 +1838,39 @@ function endVote() {
         leaderboard,
     };
     if (hostWs && hostWs.readyState === WebSocket.OPEN) {
-        try {
-            hostWs.send(JSON.stringify(resultsPayload));
-        } catch {
-            hostPendingResults = resultsPayload;
-            showMessage('Keine Verbindung — Ergebnisse werden nach Reconnect gesendet.', 'info');
-        }
+        hostWs.send(JSON.stringify(resultsPayload));
     } else {
         hostPendingResults = resultsPayload;
         showMessage('Keine Verbindung — Ergebnisse werden nach Reconnect gesendet.', 'info');
     }
 
-    renderHostReveal(podium);
+    renderHostReveal(podium, validBallots.length);
     showOnly(['host-lobby', 'host-composer', 'host-voting', 'host-reveal'], 'host-reveal');
 }
 
 /**
- * Borda count over the active poll's submitted ballots. Each ballot is a
- * ranked list of raw option indices; we map back to real options (index-1)
- * and award `picksPerVoter - rank` points to each pick from rank 0 to
+ * Borda count over the submitted ballots. Each ballot is a ranked list of
+ * raw option indices; we map back to real options (index-1) and award
+ * `picksPerVoter - rank` points to each pick from rank 0 to
  * min(ballotLength, picksPerVoter) - 1. Duplicates within a single ballot
  * (rare; player UI prevents them) are de-duped — only the first occurrence
  * of a given pick scores.
  * @param {object} poll
+ * @param {number[][]} ballots
  * @returns {Array<{label:string, points:number, mentions:number, rank:number}>}
  */
-function computeBordaPodium(poll) {
+function computeBordaPodium(poll, ballots) {
     const realOpts = poll.realOptions;
     const N = poll.picksPerVoter;
     const scores = Array.from({ length: realOpts.length }).fill(0);
     const mentions = Array.from({ length: realOpts.length }).fill(0);
 
-    for (const ans of hostAnswers.values()) {
+    for (const ballot of ballots) {
         const seen = new Set();
-        const ranks = ans.ranks.slice(0, N);
+        const ranks = ballot.slice(0, N);
         for (const [rank, rawIdx] of ranks.entries()) {
             const realIdx = rawIdx - 1;
-            if (realIdx < 0 || realIdx >= realOpts.length) continue;
+            if (!Number.isInteger(realIdx) || realIdx < 0 || realIdx >= realOpts.length) continue;
             if (seen.has(realIdx)) continue;
             seen.add(realIdx);
             // Borda weight: rank-1 = N points, rank-N = 1 point.
@@ -1967,8 +1920,9 @@ function assignCompetitionRanks(sorted) {
 
 /**
  * @param {Array<{label:string, points:number, mentions:number, rank:number}>} podium
+ * @param {number} totalBallots
  */
-function renderHostReveal(podium) {
+function renderHostReveal(podium, totalBallots) {
     if (!hostActivePoll) return;
     dom.hostRevealQuestion.textContent = hostActivePoll.question;
     dom.hostPodiumList.innerHTML = '';
@@ -1986,14 +1940,14 @@ function renderHostReveal(podium) {
         );
     }
 
-    const totalBallots = hostAnswers.size;
     const connected = [...hostPlayers.values()].filter((p) => p.isConnected).length;
     const revealTxt = hostActivePoll.revealCount === 'all' ? 'alle' : hostActivePoll.revealCount;
     const metaTxt =
         `${totalBallots} von ${connected} Stimmen · ` +
         `Auswahlen pro Person: ${hostActivePoll.picksPerVoter} · ` +
         `Ergebnisse: ${revealTxt} · ` +
-        `Quelle: ${hostActivePoll.source === 'players' ? 'Spielernamen' : 'eigene Optionen'}`;
+        `Quelle: ${hostActivePoll.source === 'players' ? 'Spielernamen' : 'eigene Optionen'} · ` +
+        'geheime Abstimmung';
     dom.hostRevealMeta.textContent = metaTxt;
 }
 
@@ -2003,7 +1957,8 @@ function renderHostReveal(podium) {
 function nextQuestion() {
     hostActivePoll = null;
     hostPollEnding = false;
-    hostAnswers.clear();
+    hostAwaitingBallots = false;
+    hostVoters.clear();
     // Clear the just-used question text so the next suggestion can shine
     // through cleanly. picksPerVoter / revealCount / duration stay so the
     // host can iterate quickly with the same parameters.
@@ -2049,10 +2004,13 @@ function hardResetHost() {
     hostSessionId = null;
     hostActivePoll = null;
     hostPollEnding = false;
-    hostPendingQuestion = null;
+    hostAwaitingBallots = false;
     hostPendingResults = null;
     hostPlayers.clear();
-    hostAnswers.clear();
+    hostVoters.clear();
+    hostRoomLocked = false;
+    hostJoinRequests.clear();
+    clearAppendQueue();
     suggestionOrder = [];
     suggestionCursor = 0;
     currentSuggestionIdx = null;
@@ -2087,14 +2045,27 @@ function openPlayerJoin() {
  * Player submits the join form.
  */
 async function submitJoin() {
+    if (playerJoining) return;
+    if (
+        playerWs &&
+        (playerWs.readyState === WebSocket.OPEN || playerWs.readyState === WebSocket.CONNECTING)
+    ) {
+        return;
+    }
     const code = (dom.roomCodeInput.value || '').replaceAll(/\s/g, '').toUpperCase();
-    const name = sanitizePlayerName(dom.playerNameInput.value || '');
+    const typedName = (dom.playerNameInput.value || '').trim();
+    const name = sanitizePlayerName(typedName);
     if (code.length < 3) {
         showMessage('Bitte gib einen gültigen Raum-Code ein.', 'error');
         return;
     }
     if (!name) {
-        showMessage('Bitte gib einen Namen ein.', 'error');
+        showMessage(
+            typedName
+                ? 'Bitte gib einen Namen aus Buchstaben oder Ziffern ein – Emojis sind nicht erlaubt.'
+                : 'Bitte gib einen Namen ein.',
+            'error'
+        );
         return;
     }
     playerRoomCode = code;
@@ -2102,14 +2073,20 @@ async function submitJoin() {
     playerWsReconnectAttempts = 0;
     playerSuppressReconnect = false;
 
+    playerJoining = true;
+    dom.joinBtn.disabled = true;
+    let ws;
     try {
-        playerWs = await connectWithRetry(WS_URL);
+        ws = await connectWithRetry(WS_URL);
     } catch {
         showMessage('Server nicht erreichbar.', 'error');
         return;
+    } finally {
+        playerJoining = false;
+        dom.joinBtn.disabled = false;
     }
-    attachPlayerWsHandlers(playerWs);
-    playerWs.send(
+    attachPlayerWsHandlers(ws);
+    ws.send(
         JSON.stringify({
             type: 'join',
             roomCode: playerRoomCode,
@@ -2145,9 +2122,12 @@ function initPlayerReconnect(info) {
  * @param {WebSocket} ws
  */
 function attachPlayerWsHandlers(ws) {
+    playerWs = ws;
     ws.addEventListener('message', (ev) => {
-        // See attachHostWsHandlers — credit this socket's own heartbeat state.
-        if (ws.__heartbeatState) ws.__heartbeatState.lastMsgTime = Date.now();
+        // See attachHostWsHandlers — credit this socket's own heartbeat state
+        // and ignore frames from a socket that has been replaced.
+        markAlive(ws);
+        if (ws !== playerWs) return;
         let msg;
         try {
             msg = JSON.parse(ev.data);
@@ -2160,12 +2140,21 @@ function attachPlayerWsHandlers(ws) {
     playerHeartbeat = stopHeartbeat(playerHeartbeat);
     playerHeartbeat = startHeartbeat(ws);
 
-    ws.addEventListener('close', () => {
+    ws.addEventListener('close', (ev) => {
         // Ignore stale close events from a previous WS instance we've
         // already replaced — see the matching comment on the host side.
         if (ws !== playerWs) return;
         logger.log('Player WS closed');
         playerHeartbeat = stopHeartbeat(playerHeartbeat);
+        if (ev.code === CLOSE_SESSION_REPLACED) {
+            // This seat is now open in another tab or device. Don't fight
+            // over it (and keep the saved session for that tab).
+            playerSuppressReconnect = true;
+            dom.playerWaitingStatus.textContent =
+                'Du bist jetzt in einem anderen Fenster verbunden.';
+            showMessage('Du bist jetzt in einem anderen Fenster verbunden.', 'info');
+            return;
+        }
         reconnectPlayerWs();
     });
 
@@ -2181,7 +2170,7 @@ function attachPlayerWsHandlers(ws) {
  * schedules another attempt instead of giving up.
  */
 async function reconnectPlayerWs() {
-    if (playerReconnecting) return;
+    if (playerReconnecting || playerJoining) return;
     if (playerSuppressReconnect) return;
     // `playerSessionId` only exists once the server has answered our join.
     // Requiring it here stranded anyone whose socket died inside that handshake
@@ -2211,8 +2200,7 @@ async function reconnectPlayerWs() {
         setTimeout(reconnectPlayerWs, delay);
         return;
     }
-    playerWs = connectedWs;
-    attachPlayerWsHandlers(playerWs);
+    attachPlayerWsHandlers(connectedWs);
     playerReconnecting = false;
     const joinPayload = {
         type: 'join',
@@ -2236,6 +2224,7 @@ function handlePlayerMessage(msg) {
             // reconnects many times across a long poll would otherwise burn
             // through MAX_RECONNECT_ATTEMPTS and stop trying.
             playerWsReconnectAttempts = 0;
+            playerRoomWaitRetries = 0;
             if (typeof msg.playerName === 'string') playerName = msg.playerName;
             saveActiveSession('player', playerRoomCode, playerSessionId, { name: playerName });
 
@@ -2271,16 +2260,32 @@ function handlePlayerMessage(msg) {
             hardResetPlayer();
             break;
         }
+        case 'join_pending': {
+            // Locked room: wait at the door until the host decides.
+            showOnly(
+                ['join-form', 'player-waiting', 'player-vote', 'player-submitted', 'player-reveal'],
+                'player-waiting'
+            );
+            dom.playerWaitingStatus.textContent =
+                'Der Raum ist gesperrt – du hast angeklopft. Warte, bis die Lehrkraft dich hereinlässt …';
+            dom.playerNameDisplay.textContent = `Angemeldet als ${playerName}`;
+            document.body.classList.add('player-in-game');
+            break;
+        }
+        case 'name_changed': {
+            if (typeof msg.name !== 'string' || !msg.name) break;
+            playerName = msg.name;
+            saveActiveSession('player', playerRoomCode, playerSessionId, { name: playerName });
+            dom.playerNameDisplay.textContent = `Eingeloggt als ${playerName}`;
+            showMessage(`Die Lehrkraft hat deinen Namen geändert: ${playerName}`, 'info');
+            break;
+        }
+        case 'server_restarting': {
+            dom.playerWaitingStatus.textContent = 'Server startet neu – gleich geht es weiter …';
+            break;
+        }
         case 'error': {
-            showMessage(msg.message || 'Unbekannter Fehler', 'error');
-            // Join failure → kick back to role selection.
-            if (
-                msg.message === 'Raum nicht gefunden.' ||
-                msg.message === 'Raum ist voll (max. 240 Spieler).' ||
-                msg.message === 'Raum nicht mehr aktiv.'
-            ) {
-                hardResetPlayer();
-            }
+            handlePlayerError(msg);
             break;
         }
         // Lobby music / categories / etc. — ignored.
@@ -2288,6 +2293,45 @@ function handlePlayerMessage(msg) {
             break;
         }
     }
+}
+
+/**
+ * Only join failures end the session; everything else is a toast.
+ * @param {{code?: string, message?: string}} msg
+ */
+function handlePlayerError(msg) {
+    // A known seat whose room is gone: most likely the server just restarted
+    // and the host has not restored the room yet. Keep asking for a while
+    // instead of throwing the player out.
+    const roomMayComeBack =
+        msg.code === 'ROOM_NOT_FOUND' &&
+        !!playerSessionId &&
+        playerRoomWaitRetries < ROOM_WAIT_MAX_RETRIES;
+    if (roomMayComeBack) {
+        playerRoomWaitRetries++;
+        dom.playerWaitingStatus.textContent =
+            'Warte auf die Lehrkraft – Raum wird wiederhergestellt …';
+        const socket = playerWs;
+        setTimeout(() => {
+            if (socket !== playerWs || socket.readyState !== WebSocket.OPEN) return;
+            socket.send(
+                JSON.stringify({
+                    type: 'join',
+                    roomCode: playerRoomCode,
+                    playerName,
+                    sessionId: playerSessionId,
+                })
+            );
+        }, ROOM_WAIT_RETRY_MS);
+        return;
+    }
+    if (msg.code === 'ROOM_NOT_FOUND' || FATAL_JOIN_CODES.has(msg.code)) {
+        showMessage(msg.message || 'Beitritt nicht möglich.', 'error');
+        hardResetPlayer();
+        return;
+    }
+    if (msg.code === 'RATE_LIMITED' || msg.code === 'ALREADY_JOINED') return;
+    showMessage(msg.message || 'Unbekannter Fehler', 'error');
 }
 
 /**
@@ -2307,6 +2351,7 @@ function onQuestionReceived(msg) {
         return;
     }
     playerCurrentMeta = meta;
+    playerCurrentAnonymous = msg.anonymous === true;
     playerOptionIndexBase = 1;
     playerDisplayOptions = options.slice(1);
     playerCurrentQuestion = msg.question || '';
@@ -2322,8 +2367,10 @@ function onQuestionReceived(msg) {
     playerHasSubmitted = false;
     playerSelectedRanks = [];
     renderVoteView();
-    const remaining =
-        typeof msg.remaining === 'number' ? Math.max(0, msg.remaining) : Number(msg.duration) || 45;
+    // duration 0 = untimed poll (server sends remaining: null).
+    let remaining = 0;
+    if (typeof msg.remaining === 'number') remaining = Math.max(0.1, msg.remaining);
+    else if (msg.duration) remaining = Number(msg.duration) || 0;
     startPlayerTimer(remaining);
 }
 
@@ -2358,10 +2405,13 @@ function renderVoteView() {
     dom.playerQuestionText.textContent = playerCurrentQuestion;
     const picks = playerCurrentMeta.picksPerVoter;
     const cap = Math.min(picks, playerDisplayOptions.length);
+    const secrecy = playerCurrentAnonymous
+        ? ' Geheime Abstimmung: niemand sieht, wie du stimmst.'
+        : '';
     dom.playerVoteHint.textContent =
-        cap === 1
+        (cap === 1
             ? 'Wähle deinen Favoriten.'
-            : `Wähle bis zu ${cap} in Reihenfolge deiner Präferenz (1 = höchste).`;
+            : `Wähle bis zu ${cap} in Reihenfolge deiner Präferenz (1 = höchste).`) + secrecy;
     renderRankPicker();
 }
 
@@ -2523,7 +2573,11 @@ function renderPicksEcho(target, picks) {
     if (!picks || picks.length === 0) {
         const p = document.createElement('p');
         p.className = 'player-hint';
-        p.textContent = 'Du hast keine Stimme abgegeben.';
+        // After a reload the picks are gone from this tab (they are never
+        // stored anywhere else), but the server still counted the vote.
+        p.textContent = playerHasSubmitted
+            ? 'Deine Stimme wurde abgegeben.'
+            : 'Du hast keine Stimme abgegeben.';
         target.append(p);
         return;
     }
@@ -2548,6 +2602,9 @@ function startPlayerTimer(seconds) {
     if (playerTimerInterval) clearInterval(playerTimerInterval);
     if (!dom.playerTimerBar) return;
     dom.playerTimerBar.style.width = '100%';
+    // Untimed poll: no countdown and no auto-submit.
+    if (dom.playerTimerContainer) dom.playerTimerContainer.classList.toggle('hidden', !seconds);
+    if (!seconds) return;
     const totalMs = Math.max(1, seconds * 1000);
     const start = Date.now();
     playerTimerInterval = setInterval(() => {
@@ -2598,6 +2655,8 @@ function hardResetPlayer() {
     playerDisplayOptions = [];
     playerSelectedRanks = [];
     playerHasSubmitted = false;
+    playerJoining = false;
+    playerRoomWaitRetries = 0;
     // Restore page-level navigation (back arrow) now that the player has
     // explicitly left the room.
     document.body.classList.remove('player-in-game');
@@ -2665,6 +2724,12 @@ document.addEventListener('DOMContentLoaded', () => {
     dom.composerRevealAll.addEventListener('change', () => {
         dom.composerReveal.disabled = dom.composerRevealAll.checked;
     });
+    if (dom.composerUntimed) {
+        dom.composerUntimed.addEventListener('change', () => {
+            dom.composerDuration.disabled = dom.composerUntimed.checked;
+        });
+    }
+    if (dom.roomLockBtn) dom.roomLockBtn.addEventListener('click', toggleRoomLock);
     dom.startVoteBtn.addEventListener('click', startVote);
     dom.backToLobbyBtn.addEventListener('click', () => {
         showOnly(['host-lobby', 'host-composer', 'host-voting', 'host-reveal'], 'host-lobby');
@@ -2747,15 +2812,8 @@ document.addEventListener('DOMContentLoaded', () => {
     //     auto-reconnect chain may not have kicked in. Trigger it ourselves.
     document.addEventListener('visibilitychange', () => {
         if (document.visibilityState !== 'visible') return;
-        for (const ws of [hostWs, playerWs]) {
-            if (ws && ws.readyState === WebSocket.OPEN) {
-                try {
-                    ws.send(HEARTBEAT_PAYLOAD);
-                } catch {
-                    /* swallow — close handler will reconnect if the path is dead */
-                }
-            }
-        }
+        pingNow(hostWs);
+        pingNow(playerWs);
         if (
             playerRoomCode &&
             playerName &&

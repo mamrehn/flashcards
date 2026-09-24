@@ -162,7 +162,7 @@ let studyMode = 'spaced-repetition';
  * over the few days before an exam, so the steps expand from minutes to days
  * instead of the classic SM-2 day/week/month scale.
  */
-const SR_STEP_MINUTES = [10, 30, 120, 480, 1440, 4320, 10080];
+const SR_STEP_MINUTES = [10, 30, 120, 480, 1440, 4320, 10_080];
 
 /** Human-readable duration per ladder step (parallel to SR_STEP_MINUTES) */
 const SR_STEP_LABELS = ['10 Min', '30 Min', '2 Std', '8 Std', '1 Tag', '3 Tage', '7 Tage'];
@@ -294,6 +294,10 @@ let matchingProgressEl = null;
 
 /** @type {Array<object>} Undo stack for going back during quiz */
 let undoStack = [];
+
+// What the completion screen last wrote into the progress journals (session
+// log entry, Lernstand snapshot, achievements before), for undo-from-results.
+let lastSessionRecord = null;
 
 // ============================================================================
 // Initialization
@@ -519,6 +523,21 @@ function handleGlobalKeyboard(e) {
     ) {
         return;
     }
+    // Leave browser/OS shortcuts alone (Ctrl+1 = first tab, Alt+Backspace, …);
+    // they used to toggle option 1 and have their default prevented.
+    if (e.ctrlKey || e.metaKey || e.altKey || e.isComposing) return;
+    // Space/Enter on a focused control activates *that* control natively
+    // (undo button, matching item, explanation marker …) instead of also
+    // revealing the answer or skipping to the next card.
+    if (
+        (e.key === ' ' || e.key === 'Enter') &&
+        e.target instanceof Element &&
+        e.target.closest(
+            'button, a[href], summary, [role="button"], [role="checkbox"], [role="radio"], [role="option"]'
+        )
+    ) {
+        return;
+    }
 
     // Toggle keyboard hints with ?
     if (e.key === '?') {
@@ -596,12 +615,12 @@ function handleCardFrontKeys(e) {
                 e.preventDefault();
                 const forward = e.key === 'ArrowRight' || e.key === 'ArrowDown';
                 const cur = identifyState ? identifyState.selectedIndex : -1;
-                const next =
-                    cur < 0
-                        ? forward
-                            ? 0
-                            : choices.length - 1
-                        : (cur + (forward ? 1 : -1) + choices.length) % choices.length;
+                let next;
+                if (cur >= 0) {
+                    next = (cur + (forward ? 1 : -1) + choices.length) % choices.length;
+                } else {
+                    next = forward ? 0 : choices.length - 1;
+                }
                 selectIdentifyChoice(next);
                 return;
             }
@@ -1227,18 +1246,217 @@ function processJsonData(data, fileName) {
     fileInput.value = '';
 }
 
+// ============================================================================
+// Backup / stored-journal validation
+// A backup is a file someone can hand around, and everything in it ends up in
+// localStorage and later in the page. Only well-formed values survive.
+// ============================================================================
+
+const ISO_DAY_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+/**
+ * @param {unknown} v
+ * @param {number} fallback
+ * @returns {number}
+ */
+function finiteOr(v, fallback) {
+    return typeof v === 'number' && Number.isFinite(v) ? v : fallback;
+}
+
+/**
+ * @param {unknown} v
+ * @returns {number} a percentage clamped to 0..100
+ */
+function percentOr0(v) {
+    return Math.max(0, Math.min(100, finiteOr(v, 0)));
+}
+
+/**
+ * @param {unknown} v
+ * @returns {number} a non-negative integer count
+ */
+function countOr0(v) {
+    return Math.max(0, Math.round(finiteOr(v, 0)));
+}
+
+/**
+ * @param {unknown} v
+ * @returns {boolean}
+ */
+function isPlainObject(v) {
+    return v !== null && typeof v === 'object' && !Array.isArray(v);
+}
+
+/**
+ * Well-formed Lernstand snapshots only (see recordLernstandSnapshot).
+ * @param {unknown} list
+ * @returns {Array<object>}
+ */
+function sanitizeLernstandHistory(list) {
+    if (!Array.isArray(list)) return [];
+    const out = [];
+    for (const e of list.slice(-120)) {
+        if (!isPlainObject(e) || typeof e.date !== 'string' || !ISO_DAY_RE.test(e.date)) continue;
+        const perDeck = {};
+        if (isPlainObject(e.perDeck)) {
+            for (const [deck, v] of Object.entries(e.perDeck)) {
+                if (typeof v === 'number' && Number.isFinite(v)) perDeck[deck] = percentOr0(v);
+            }
+        }
+        out.push({
+            date: e.date,
+            overallPercent: percentOr0(e.overallPercent),
+            attempted: countOr0(e.attempted),
+            total: countOr0(e.total),
+            masteredCount: countOr0(e.masteredCount),
+            calibration: typeof e.calibration === 'number' ? percentOr0(e.calibration) : null,
+            perDeck,
+        });
+    }
+    return out;
+}
+
+/**
+ * Well-formed session log entries only (see recordSession).
+ * @param {unknown} list
+ * @returns {Array<object>}
+ */
+function sanitizeSessionHistory(list) {
+    if (!Array.isArray(list)) return [];
+    const out = [];
+    for (const s of list.slice(-50)) {
+        if (!isPlainObject(s) || typeof s.endedAt !== 'string') continue;
+        const ended = new Date(s.endedAt);
+        if (Number.isNaN(ended.getTime())) continue;
+        out.push({
+            endedAt: ended.toISOString(),
+            deckNames: Array.isArray(s.deckNames)
+                ? s.deckNames.filter((d) => typeof d === 'string')
+                : [],
+            cardsAnswered: countOr0(s.cardsAnswered),
+            correct: Math.max(0, finiteOr(s.correct, 0)),
+            avgScore: percentOr0(s.avgScore),
+            avgConfidence:
+                typeof s.avgConfidence === 'number' && Number.isFinite(s.avgConfidence)
+                    ? Math.max(1, Math.min(3, s.avgConfidence))
+                    : null,
+        });
+    }
+    return out;
+}
+
+/**
+ * @param {unknown} a
+ * @returns {{deckMastered: object, bestSessionScore: number}}
+ */
+function sanitizeAchievements(a) {
+    const out = { deckMastered: {}, bestSessionScore: 0 };
+    if (!isPlainObject(a)) return out;
+    if (isPlainObject(a.deckMastered)) {
+        for (const [deck, when] of Object.entries(a.deckMastered)) {
+            if (typeof when === 'string') out.deckMastered[deck] = when;
+        }
+    }
+    out.bestSessionScore = percentOr0(a.bestSessionScore);
+    return out;
+}
+
+/**
+ * Spaced-repetition entries with sane types. Dates stay serializable here;
+ * reviveSRData turns them into Date objects.
+ * @param {unknown} data
+ * @returns {object}
+ */
+function sanitizeSRData(data) {
+    const out = {};
+    if (!isPlainObject(data)) return out;
+    for (const [key, e] of Object.entries(data)) {
+        if (!key.includes('|||') || !isPlainObject(e)) continue;
+        const entry = {
+            repetitions: countOr0(e.repetitions),
+            history: Array.isArray(e.history)
+                ? e.history.filter((v) => typeof v === 'number' && v >= 0 && v <= 1)
+                : [],
+            confHistory: Array.isArray(e.confHistory)
+                ? e.confHistory.map((c) => (Number.isInteger(c) && c >= 1 && c <= 3 ? c : null))
+                : [],
+        };
+        if (Number.isInteger(e.step) && e.step >= 0 && e.step < SR_STEP_MINUTES.length) {
+            entry.step = e.step;
+        } else if (typeof e.interval === 'number' && Number.isFinite(e.interval)) {
+            // Legacy SM-2 entry: reviveSRData maps the interval onto the ladder.
+            entry.interval = e.interval;
+        }
+        const next = new Date(e.nextReview);
+        // An unreadable date means "due now" rather than "never due".
+        entry.nextReview = Number.isNaN(next.getTime()) ? new Date(0) : next;
+        const last = e.lastReview ? new Date(e.lastReview) : null;
+        if (last && !Number.isNaN(last.getTime())) entry.lastReview = last;
+        out[key] = entry;
+    }
+    return out;
+}
+
+/**
+ * Validate a parsed backup file. Decks go through the same card validation as
+ * any import; journals and SR data are rebuilt from well-typed fields only.
+ * @param {object} backup
+ * @returns {{flashcardDecks: object, droppedDecks: number, spacedRepetitionData: object|null,
+ *   lernstandHistory: Array|null, sessionHistory: Array|null, achievements: object|null,
+ *   examDate: string|null}}
+ */
+function sanitizeBackup(backup) {
+    const flashcardDecks = {};
+    let droppedDecks = 0;
+    for (const [name, deck] of Object.entries(backup.flashcardDecks || {})) {
+        if (!isPlainObject(deck) || !Array.isArray(deck.cards)) {
+            droppedDecks++;
+            continue;
+        }
+        const deckCards = validateCards(deck.cards);
+        if (deckCards.length === 0) {
+            droppedDecks++;
+            continue;
+        }
+        flashcardDecks[name] = isPlainObject(deck.meta)
+            ? { cards: deckCards, meta: deck.meta }
+            : { cards: deckCards };
+    }
+    return {
+        flashcardDecks,
+        droppedDecks,
+        spacedRepetitionData: backup.spacedRepetitionData
+            ? sanitizeSRData(backup.spacedRepetitionData)
+            : null,
+        lernstandHistory: backup.lernstandHistory
+            ? sanitizeLernstandHistory(backup.lernstandHistory)
+            : null,
+        sessionHistory: backup.sessionHistory
+            ? sanitizeSessionHistory(backup.sessionHistory)
+            : null,
+        achievements: backup.achievements ? sanitizeAchievements(backup.achievements) : null,
+        examDate:
+            typeof backup.examDate === 'string' && ISO_DAY_RE.test(backup.examDate)
+                ? backup.examDate
+                : null,
+    };
+}
+
 /**
  * Handle backup file import (auto-detected from handleFileUpload)
  * @param {object} backup - Parsed backup JSON object
  */
 async function handleBackupImport(backup) {
-    const deckCount = Object.keys(backup.flashcardDecks).length;
-    const srCount = backup.spacedRepetitionData
-        ? Object.keys(backup.spacedRepetitionData).length
-        : 0;
+    const clean = sanitizeBackup(backup);
+    const deckCount = Object.keys(clean.flashcardDecks).length;
+    const srCount = clean.spacedRepetitionData ? Object.keys(clean.spacedRepetitionData).length : 0;
+    const droppedNote =
+        clean.droppedDecks > 0
+            ? `\n\n${clean.droppedDecks} ungültige Decks werden übersprungen.`
+            : '';
 
     const ok = await uiConfirm(
-        `Backup erkannt!\n\n${deckCount} Decks und ${srCount} SR-Einträge werden wiederhergestellt.\n\nAchtung: Vorhandene Daten werden überschrieben!`,
+        `Backup erkannt!\n\n${deckCount} Decks und ${srCount} SR-Einträge werden wiederhergestellt.${droppedNote}\n\nAchtung: Vorhandene Daten werden überschrieben!`,
         { confirmText: 'Wiederherstellen', danger: true }
     );
     if (!ok) {
@@ -1247,33 +1465,30 @@ async function handleBackupImport(backup) {
     }
 
     try {
-        savedDecks = backup.flashcardDecks;
-        localStorage.setItem('flashcardDecks', JSON.stringify(savedDecks));
+        // Write first, adopt in memory only once storage accepted it — a full
+        // storage used to leave the app showing decks that were never saved.
+        localStorage.setItem('flashcardDecks', JSON.stringify(clean.flashcardDecks));
+        savedDecks = clean.flashcardDecks;
 
-        if (backup.spacedRepetitionData) {
-            spacedRepetitionData = backup.spacedRepetitionData;
+        if (clean.spacedRepetitionData) {
+            localStorage.setItem(
+                'spacedRepetitionData',
+                JSON.stringify(clean.spacedRepetitionData)
+            );
+            spacedRepetitionData = clean.spacedRepetitionData;
             reviveSRData();
-            localStorage.setItem('spacedRepetitionData', JSON.stringify(spacedRepetitionData));
         }
 
         // Restore the progress journey (optional — older backups won't have it)
-        if (backup.lernstandHistory) {
-            lernstandHistory = backup.lernstandHistory;
+        if (clean.lernstandHistory) {
+            lernstandHistory = clean.lernstandHistory;
             localStorage.setItem('lernstandHistory', JSON.stringify(lernstandHistory));
         }
-        if (backup.sessionHistory) {
-            sessionHistory = backup.sessionHistory;
-        }
-        if (backup.achievements) {
-            achievements = backup.achievements;
-            if (!achievements.deckMastered) achievements.deckMastered = {};
-            if (typeof achievements.bestSessionScore !== 'number') {
-                achievements.bestSessionScore = 0;
-            }
-        }
+        if (clean.sessionHistory) sessionHistory = clean.sessionHistory;
+        if (clean.achievements) achievements = clean.achievements;
         saveProgressData();
-        if (backup.examDate) {
-            examDate = backup.examDate;
+        if (clean.examDate) {
+            examDate = clean.examDate;
             localStorage.setItem('examDate', examDate);
         }
     } catch (error) {
@@ -1326,7 +1541,8 @@ function validateCards(cards) {
                 Object.values(card.labels).some(
                     (v) => typeof v === 'string' && v.trim().length > 0
                 );
-            const mediaOk = card.media == null || isSafeMediaSrc(card.media);
+            const mediaOk =
+                card.media === null || card.media === undefined || isSafeMediaSrc(card.media);
             return mediaOk && hasLabel && !!card.question;
         }
         // Check standard card format (question + answer)
@@ -1492,15 +1708,23 @@ const IDENTIFY_DEFAULTS = {
 };
 
 /**
- * Guard a media source before it becomes an <img src>. Only inline image data
- * URIs and http(s) URLs are allowed — never `javascript:` or other schemes.
+ * Guard a media source before it becomes an <img src>. Allowed are exactly the
+ * sources the page's CSP (`img-src 'self' data:`) will actually load:
+ *   - inline image data URIs (`data:image/...;base64,`)
+ *   - same-origin relative image paths, e.g. `decks/media/berlin.webp`
+ * Remote http(s) URLs are rejected — the CSP would block them (blank image),
+ * and loading them would send every student's IP to a third party. Never
+ * `javascript:` or any other scheme, and no `..` escapes out of the app.
  * @param {unknown} src
  * @returns {boolean}
  */
 function isSafeMediaSrc(src) {
+    if (typeof src !== 'string') return false;
+    if (/^data:image\/[\d+.a-z-]+;base64,/i.test(src)) return true;
     return (
-        typeof src === 'string' &&
-        (/^data:image\/[a-z0-9.+-]+;base64,/i.test(src) || /^https?:\/\//i.test(src))
+        /^[\w%./-]+\.(?:avif|gif|jpe?g|png|svg|webp)$/i.test(src) &&
+        !src.startsWith('/') &&
+        !src.split('/').includes('..')
     );
 }
 
@@ -1676,7 +1900,7 @@ function shuffleInPlace(arr) {
  */
 function sampleDistractors(card, pool, n, usable = () => true) {
     const cats = new Set(card.categories || []);
-    const candidates = pool.filter(usable);
+    const candidates = pool.filter((c) => usable(c));
     const near = shuffleInPlace(
         candidates.filter((c) => (c.categories || []).some((x) => cats.has(x)))
     );
@@ -1697,7 +1921,9 @@ function sampleDistractors(card, pool, n, usable = () => true) {
  * @returns {'recall'|'recallPart'|'pickLabel'|'pickMedia'}
  */
 function pickIdentifyMode(card, cfg, pool) {
-    const enabled = new Set(cfg.modes && cfg.modes.length ? cfg.modes : IDENTIFY_DEFAULTS.modes);
+    const enabled = new Set(
+        cfg.modes && cfg.modes.length > 0 ? cfg.modes : IDENTIFY_DEFAULTS.modes
+    );
     const need = Math.max(1, cfg.distractors || 0);
     const mediaSiblings = pool.filter((c) => isSafeMediaSrc(c.media)).length;
     const feasible = {
@@ -1812,18 +2038,29 @@ function makeTypeChip(type, count, topicKey, catName) {
     chip.dataset.category = catName;
     let chipLabel;
     let chipTitle;
-    if (type === 'mc') {
-        chipLabel = 'MC';
-        chipTitle = 'Multiple-Choice-Karten in dieser Kategorie ein-/ausblenden';
-    } else if (type === 'matching') {
-        chipLabel = 'ZO';
-        chipTitle = 'Zuordnungsaufgaben in dieser Kategorie ein-/ausblenden';
-    } else if (type === 'identify') {
-        chipLabel = 'Erk';
-        chipTitle = 'Erkennen-Karten (Bild ↔ Name) in dieser Kategorie ein-/ausblenden';
-    } else {
-        chipLabel = 'Text';
-        chipTitle = 'Freitext-Karten in dieser Kategorie ein-/ausblenden';
+    switch (type) {
+        case 'mc': {
+            chipLabel = 'MC';
+            chipTitle = 'Multiple-Choice-Karten in dieser Kategorie ein-/ausblenden';
+
+            break;
+        }
+        case 'matching': {
+            chipLabel = 'ZO';
+            chipTitle = 'Zuordnungsaufgaben in dieser Kategorie ein-/ausblenden';
+
+            break;
+        }
+        case 'identify': {
+            chipLabel = 'Erk';
+            chipTitle = 'Erkennen-Karten (Bild ↔ Name) in dieser Kategorie ein-/ausblenden';
+
+            break;
+        }
+        default: {
+            chipLabel = 'Text';
+            chipTitle = 'Freitext-Karten in dieser Kategorie ein-/ausblenden';
+        }
     }
     chip.textContent = `${chipLabel} ${count}`;
     chip.title = chipTitle;
@@ -2343,6 +2580,7 @@ function initializeQuiz(loadedCards) {
     undoStack = [];
     undoBtn.disabled = true;
     sessionCalibration = [];
+    lastSessionRecord = null;
 
     // Remember the starting Lernstand so the completion screen can show the gain
     sessionStartLernstand = computeDeckKnowledge(activeDecks.filter((d) => savedDecks[d])).percent;
@@ -2551,7 +2789,7 @@ function orderComponentPairs(compPairs) {
     while (remaining.length > 0) {
         let idx = -1;
         if (rows.length > 0) {
-            const [prevL, prevR] = rows[rows.length - 1];
+            const [prevL, prevR] = rows.at(-1);
             const sameLeft = [];
             const sameRight = [];
             for (const [i, [l, r]] of remaining.entries()) {
@@ -3178,37 +3416,48 @@ function renderIdentifyCard(card) {
     identifyChoicesEl.classList.add('hidden');
 
     let choices = null;
-    if (mode === 'recall') {
-        // Show the face, ask for the name typed free-form. Prompt must NOT reveal
-        // the name (that is the answer) — so override the question text.
-        questionText.textContent = cfg.prompt || IDENTIFY_DEFAULTS.prompt;
-        setIdentifyImage(card.media, cfg.prompt || '');
-        userAnswerInput.classList.remove('hidden');
-        userAnswerInput.value = '';
-        userAnswerInput.readOnly = false;
-    } else if (mode === 'recallPart') {
-        // Cued recall: show the face plus the trailing part(s) as a fill-in-the-
-        // blank (e.g. "＿＿ Müller"), and ask the student to type the missing
-        // first part. Easier than full recall, harder than picking from a list.
-        const split = identifyRecallSplit(card, cfg);
-        const cue = split ? split.cueParts.join(' ') : '';
-        questionText.textContent = cue
-            ? `${cfg.prompt || IDENTIFY_DEFAULTS.prompt} · ＿＿ ${cue}`
-            : cfg.prompt || IDENTIFY_DEFAULTS.prompt;
-        setIdentifyImage(card.media, cfg.prompt || '');
-        userAnswerInput.classList.remove('hidden');
-        userAnswerInput.value = '';
-        userAnswerInput.readOnly = false;
-    } else if (mode === 'pickLabel') {
-        questionText.textContent = cfg.prompt || IDENTIFY_DEFAULTS.prompt;
-        setIdentifyImage(card.media, cfg.prompt || '');
-        choices = buildLabelChoices(card, pool, cfg);
-        renderIdentifyChoices(choices, 'label');
-    } else {
-        // pickMedia: show the name, pick the matching face.
-        questionText.textContent = `Welches Bild zeigt ${canonicalLabel(card, cfg)}?`;
-        choices = buildMediaChoices(card, pool, cfg);
-        renderIdentifyChoices(choices, 'media');
+    switch (mode) {
+        case 'recall': {
+            // Show the face, ask for the name typed free-form. Prompt must NOT reveal
+            // the name (that is the answer) — so override the question text.
+            questionText.textContent = cfg.prompt || IDENTIFY_DEFAULTS.prompt;
+            setIdentifyImage(card.media, cfg.prompt || '');
+            userAnswerInput.classList.remove('hidden');
+            userAnswerInput.value = '';
+            userAnswerInput.readOnly = false;
+
+            break;
+        }
+        case 'recallPart': {
+            // Cued recall: show the face plus the trailing part(s) as a fill-in-the-
+            // blank (e.g. "＿＿ Müller"), and ask the student to type the missing
+            // first part. Easier than full recall, harder than picking from a list.
+            const split = identifyRecallSplit(card, cfg);
+            const cue = split ? split.cueParts.join(' ') : '';
+            questionText.textContent = cue
+                ? `${cfg.prompt || IDENTIFY_DEFAULTS.prompt} · ＿＿ ${cue}`
+                : cfg.prompt || IDENTIFY_DEFAULTS.prompt;
+            setIdentifyImage(card.media, cfg.prompt || '');
+            userAnswerInput.classList.remove('hidden');
+            userAnswerInput.value = '';
+            userAnswerInput.readOnly = false;
+
+            break;
+        }
+        case 'pickLabel': {
+            questionText.textContent = cfg.prompt || IDENTIFY_DEFAULTS.prompt;
+            setIdentifyImage(card.media, cfg.prompt || '');
+            choices = buildLabelChoices(card, pool, cfg);
+            renderIdentifyChoices(choices, 'label');
+
+            break;
+        }
+        default: {
+            // pickMedia: show the name, pick the matching face.
+            questionText.textContent = `Welches Bild zeigt ${canonicalLabel(card, cfg)}?`;
+            choices = buildMediaChoices(card, pool, cfg);
+            renderIdentifyChoices(choices, 'media');
+        }
     }
 
     identifyState = { mode, card, cfg, choices, selectedIndex: -1 };
@@ -4063,12 +4312,15 @@ function formatScore(value) {
  * @returns {string}
  */
 function normalizeAnswer(text) {
-    return String(text ?? '')
+    const collapsed = String(text ?? '')
         .trim()
         .toLowerCase()
-        .replaceAll(/\s+/g, ' ')
-        .replace(/[.,;:!?]+$/u, '')
-        .trim();
+        .replaceAll(/\s+/g, ' ');
+    // Strip trailing punctuation with a plain scan: `/[.,;:!?]+$/` backtracks
+    // quadratically on input like "....x".
+    let end = collapsed.length;
+    while (end > 0 && '.,;:!?'.includes(collapsed[end - 1])) end--;
+    return collapsed.slice(0, end).trim();
 }
 
 /**
@@ -4306,10 +4558,14 @@ function showFeedback() {
         calibrationLine.classList.add('hidden');
     }
 
-    // Record the journey (session log + daily snapshot) and the gamification line
-    recordSession();
-    recordLernstandSnapshot();
+    // Record the journey (session log + daily snapshot) and the gamification
+    // line — remembering what was written, so an undo from this screen can
+    // take it back instead of logging the session twice on re-completion.
+    const prevAchievements = structuredClone(achievements);
+    const sessionEntry = recordSession();
+    const snapshotEntry = recordLernstandSnapshot();
     renderFeedbackGamification(knowledge);
+    lastSessionRecord = { sessionEntry, snapshotEntry, prevAchievements };
 
     // Show/hide buttons based on whether we're in SR bucket mode
     const isFromSRBuckets = activeDecks.length === 1 && activeDecks[0] === 'SR Buckets';
@@ -4727,7 +4983,7 @@ function loadSpacedRepetitionData() {
     try {
         const data = localStorage.getItem('spacedRepetitionData');
         if (data) {
-            spacedRepetitionData = JSON.parse(data);
+            spacedRepetitionData = sanitizeSRData(JSON.parse(data));
             reviveSRData();
         }
     } catch (error) {
@@ -4767,161 +5023,6 @@ function showMessage(message) {
             messageEl.remove();
         }, 300);
     }, 3000);
-}
-
-/**
- * Accessible modal dialog — a themed, focus-trapped replacement for the native
- * blocking `confirm()` / `prompt()`. Returns a Promise resolving to:
- *   - confirm: `true` (confirmed) / `false` (cancelled)
- *   - prompt:  the entered string (confirmed) / `null` (cancelled)
- * Esc and backdrop click cancel; Enter confirms (from a prompt's input or the
- * focused confirm button); focus is trapped while open and restored on close.
- * @param {object} opts
- * @param {string} opts.message
- * @param {'confirm'|'prompt'} [opts.kind]
- * @param {string} [opts.defaultValue]
- * @param {string} [opts.confirmText]
- * @param {string} [opts.cancelText]
- * @param {boolean} [opts.danger] - Style the confirm button as destructive.
- * @returns {Promise<boolean|string|null>}
- */
-function uiDialog(opts) {
-    const {
-        message,
-        kind = 'confirm',
-        defaultValue = '',
-        confirmText = 'OK',
-        cancelText = 'Abbrechen',
-        danger = false,
-    } = opts;
-
-    return new Promise((resolve) => {
-        const previouslyFocused = document.activeElement;
-
-        const backdrop = document.createElement('div');
-        backdrop.className = 'ui-modal-backdrop';
-
-        const modal = document.createElement('div');
-        modal.className = 'ui-modal';
-        modal.setAttribute('role', kind === 'prompt' ? 'dialog' : 'alertdialog');
-        modal.setAttribute('aria-modal', 'true');
-
-        const msgEl = document.createElement('p');
-        msgEl.className = 'ui-modal-message';
-        msgEl.id = `ui-modal-msg-${Date.now()}`;
-        msgEl.textContent = message;
-        modal.setAttribute('aria-labelledby', msgEl.id);
-        modal.append(msgEl);
-
-        let input = null;
-        if (kind === 'prompt') {
-            input = document.createElement('input');
-            input.type = 'text';
-            input.className = 'ui-modal-input';
-            input.value = defaultValue;
-            input.setAttribute('aria-label', message);
-            modal.append(input);
-        }
-
-        const actions = document.createElement('div');
-        actions.className = 'ui-modal-actions';
-
-        const cancelBtn = document.createElement('button');
-        cancelBtn.type = 'button';
-        cancelBtn.className = 'ui-modal-btn ui-modal-cancel';
-        cancelBtn.textContent = cancelText;
-
-        const confirmBtn = document.createElement('button');
-        confirmBtn.type = 'button';
-        confirmBtn.className = `ui-modal-btn ui-modal-confirm${danger ? ' ui-modal-danger' : ''}`;
-        confirmBtn.textContent = confirmText;
-
-        actions.append(cancelBtn, confirmBtn);
-        modal.append(actions);
-        backdrop.append(modal);
-        document.body.append(backdrop);
-
-        const prevBodyOverflow = document.body.style.overflow;
-        document.body.style.overflow = 'hidden';
-
-        const cancelResult = kind === 'prompt' ? null : false;
-        let settled = false;
-        /**
-         * @param {boolean|string|null} result
-         */
-        function close(result) {
-            if (settled) return;
-            settled = true;
-            document.removeEventListener('keydown', onKeydown, true);
-            document.body.style.overflow = prevBodyOverflow;
-            backdrop.remove();
-            if (previouslyFocused && typeof previouslyFocused.focus === 'function') {
-                previouslyFocused.focus();
-            }
-            resolve(result);
-        }
-
-        /**
-         * @param {KeyboardEvent} e
-         */
-        function onKeydown(e) {
-            if (e.key === 'Escape') {
-                e.preventDefault();
-                close(cancelResult);
-            } else if (e.key === 'Enter' && input && document.activeElement === input) {
-                // Buttons handle their own Enter/Space natively; only the prompt
-                // input needs Enter wired to confirm.
-                e.preventDefault();
-                close(input.value);
-            } else if (e.key === 'Tab') {
-                const order = input ? [input, cancelBtn, confirmBtn] : [cancelBtn, confirmBtn];
-                const first = order[0];
-                const last = order[order.length - 1];
-                if (e.shiftKey && document.activeElement === first) {
-                    e.preventDefault();
-                    last.focus();
-                } else if (!e.shiftKey && document.activeElement === last) {
-                    e.preventDefault();
-                    first.focus();
-                }
-            }
-        }
-
-        cancelBtn.addEventListener('click', () => close(cancelResult));
-        confirmBtn.addEventListener('click', () => close(input ? input.value : true));
-        backdrop.addEventListener('mousedown', (e) => {
-            if (e.target === backdrop) close(cancelResult);
-        });
-        document.addEventListener('keydown', onKeydown, true);
-
-        if (input) {
-            input.focus();
-            input.select();
-        } else {
-            confirmBtn.focus();
-        }
-    });
-}
-
-/**
- * Themed confirm dialog. @see uiDialog
- * @param {string} message
- * @param {object} [options]
- * @returns {Promise<boolean>}
- */
-function uiConfirm(message, options = {}) {
-    return uiDialog({ ...options, message, kind: 'confirm' });
-}
-
-/**
- * Themed prompt dialog. @see uiDialog
- * @param {string} message
- * @param {string} [defaultValue]
- * @param {object} [options]
- * @returns {Promise<string|null>}
- */
-function uiPrompt(message, defaultValue = '', options = {}) {
-    return uiDialog({ ...options, message, defaultValue, kind: 'prompt' });
 }
 
 // ============================================================================
@@ -5003,10 +5104,12 @@ function undoLastAnswer() {
 
     const snapshot = undoStack.pop();
 
-    // If on feedback screen, restore card view
+    // If on feedback screen, restore card view — and take back what the
+    // completion screen recorded, or finishing again would log it twice.
     if (!feedbackElement.classList.contains('hidden')) {
         feedbackElement.classList.add('hidden');
         cardContainer.classList.remove('hidden');
+        rollbackSessionRecord();
     }
 
     // Restore global counters
@@ -5459,6 +5562,7 @@ function startBookViewFromDecks() {
 /**
  * Open book view for a specific SR bucket interval
  * @param {number} interval - The bucket interval in days
+ * @param step
  */
 function openBookViewForBucket(step) {
     const cardsInBucket = [];
@@ -5860,6 +5964,7 @@ function handleDeleteSRCard(button) {
  * Move a card to a different interval bucket
  * @param cardKey
  * @param currentInterval
+ * @param currentStep
  */
 async function moveSRCard(cardKey, currentStep) {
     const legend = SR_STEP_LABELS.map((label, i) => `${i + 1} = ${label}`).join(' · ');
@@ -5998,7 +6103,7 @@ function getCardFromKey(key) {
  * @param date
  */
 function formatDate(date) {
-    const diffMinutes = Math.round((date - Date.now()) / 60000);
+    const diffMinutes = Math.round((date - Date.now()) / 60_000);
 
     if (diffMinutes <= 0) return 'Überfällig';
     if (diffMinutes < 60) return `in ${diffMinutes} Min`;
@@ -6029,12 +6134,13 @@ function readJsonStorage(key, fallback) {
 
 /** Load the progress journals (trend snapshots, session log, achievements, exam date). */
 function loadProgressData() {
-    lernstandHistory = readJsonStorage('lernstandHistory', []);
-    sessionHistory = readJsonStorage('sessionHistory', []);
-    achievements = readJsonStorage('achievements', { deckMastered: {}, bestSessionScore: 0 });
-    if (!achievements.deckMastered) achievements.deckMastered = {};
-    if (typeof achievements.bestSessionScore !== 'number') achievements.bestSessionScore = 0;
-    examDate = localStorage.getItem('examDate') || null;
+    // Sanitized on load too: storage may still hold values from an older,
+    // unvalidated backup import.
+    lernstandHistory = sanitizeLernstandHistory(readJsonStorage('lernstandHistory', []));
+    sessionHistory = sanitizeSessionHistory(readJsonStorage('sessionHistory', []));
+    achievements = sanitizeAchievements(readJsonStorage('achievements', null));
+    const storedExam = localStorage.getItem('examDate');
+    examDate = storedExam && ISO_DAY_RE.test(storedExam) ? storedExam : null;
 }
 
 /** Persist the session log + achievements (snapshots are saved as they are recorded). */
@@ -6135,9 +6241,9 @@ function countDueCards(deckNames) {
  */
 function recordLernstandSnapshot() {
     const allDecks = Object.keys(savedDecks);
-    if (allDecks.length === 0) return;
+    if (allDecks.length === 0) return null;
     const knowledge = computeDeckKnowledge(allDecks);
-    if (knowledge.attempted === 0) return;
+    if (knowledge.attempted === 0) return null;
 
     const { mastered } = countMastered(allDecks);
     const cal = computeCalibration();
@@ -6146,7 +6252,7 @@ function recordLernstandSnapshot() {
         const k = computeDeckKnowledge([d]);
         if (k.attempted > 0) perDeck[d] = k.percent;
     }
-    lernstandHistory.push({
+    const entry = {
         date: new Date().toISOString().slice(0, 10),
         overallPercent: knowledge.percent,
         attempted: knowledge.attempted,
@@ -6154,31 +6260,53 @@ function recordLernstandSnapshot() {
         masteredCount: mastered,
         calibration: cal.percent,
         perDeck,
-    });
+    };
+    lernstandHistory.push(entry);
     if (lernstandHistory.length > 120) lernstandHistory = lernstandHistory.slice(-120);
     persistToStorage('lernstandHistory', JSON.stringify(lernstandHistory));
+    return entry;
 }
 
 /** Append a record of the session that just finished. */
 function recordSession() {
     const cardsAnswered = answeredCards.filter((a) => a !== null).length;
-    if (cardsAnswered === 0) return;
+    if (cardsAnswered === 0) return null;
     const realDecks = activeDecks.filter((d) => savedDecks[d]);
     const totalAnswered = correctCount + incorrectCount;
     const avgConfidence =
         sessionCalibration.length > 0
             ? sessionCalibration.reduce((a, e) => a + e.confidence, 0) / sessionCalibration.length
             : null;
-    sessionHistory.push({
+    const entry = {
         endedAt: new Date().toISOString(),
         deckNames: realDecks.length > 0 ? realDecks : activeDecks,
         cardsAnswered,
         correct: Math.round(correctCount * 10) / 10,
         avgScore: totalAnswered > 0 ? Math.round((correctCount / totalAnswered) * 100) : 0,
         avgConfidence,
-    });
+    };
+    sessionHistory.push(entry);
     if (sessionHistory.length > 50) sessionHistory = sessionHistory.slice(-50);
     persistToStorage('sessionHistory', JSON.stringify(sessionHistory));
+    return entry;
+}
+
+/**
+ * Undo from the completion screen: remove what that screen recorded (session
+ * log entry, Lernstand snapshot, achievement changes). Finishing the session
+ * again records it afresh with the corrected answers.
+ */
+function rollbackSessionRecord() {
+    if (!lastSessionRecord) return;
+    const { sessionEntry, snapshotEntry, prevAchievements } = lastSessionRecord;
+    lastSessionRecord = null;
+    if (sessionEntry) sessionHistory = sessionHistory.filter((e) => e !== sessionEntry);
+    if (snapshotEntry) {
+        lernstandHistory = lernstandHistory.filter((e) => e !== snapshotEntry);
+        persistToStorage('lernstandHistory', JSON.stringify(lernstandHistory));
+    }
+    achievements = prevAchievements;
+    saveProgressData();
 }
 
 /**
@@ -6303,7 +6431,10 @@ function openProgressView(tab = 'overview') {
     switchHubTab(tab);
 }
 
-/** Switch between the hub's "Übersicht" and "Karten verwalten" tabs. */
+/**
+ * Switch between the hub's "Übersicht" and "Karten verwalten" tabs.
+ * @param tab
+ */
 function switchHubTab(tab) {
     const isManage = tab === 'manage';
     hubOverview.classList.toggle('hidden', isManage);
@@ -6458,13 +6589,19 @@ function renderProgressView() {
  * A traffic-light level class from a 0–100 percentage. `target` is the % that
  * counts as fully mastered ("high") — 95 for identify sets, 80 otherwise.
  * @param {number} percent
- * @param {number} [target=MASTERY_TARGET]
+ * @param {number} [target]
  */
 function levelClass(percent, target = MASTERY_TARGET) {
-    return percent >= target ? 'high' : percent >= 50 ? 'mid' : 'low';
+    if (percent >= target) return 'high';
+    return percent >= 50 ? 'mid' : 'low';
 }
 
-/** Readiness ring (SVG donut + centered percentage). */
+/**
+ * Readiness ring (SVG donut + centered percentage).
+ * @param percent
+ * @param caption
+ * @param target
+ */
 function progressRing(percent, caption, target = MASTERY_TARGET) {
     const r = 46;
     const circ = 2 * Math.PI * r;
@@ -6482,7 +6619,10 @@ function progressRing(percent, caption, target = MASTERY_TARGET) {
         </div>`;
 }
 
-/** Lernstand-over-time line chart from the daily snapshots. */
+/**
+ * Lernstand-over-time line chart from the daily snapshots.
+ * @param points
+ */
 function progressTrend(points) {
     if (points.length < 2) {
         return '<p class="progress-empty">Nach deiner zweiten Lernsitzung wächst hier deine Kurve.</p>';
@@ -6508,7 +6648,10 @@ function progressTrend(points) {
             const isLast = i === n - 1;
             const leftPct = ((x(i) / w) * 100).toFixed(2);
             const topPx = y(p.overallPercent).toFixed(1);
-            return `<span class="trend-dot${isLast ? ' trend-dot-last' : ''}" style="left:${leftPct}%;top:${topPx}px" title="${sanitizeHTML(p.date.slice(5))} · ${p.overallPercent} %"></span>`;
+            // sanitizeHTML leaves quotes alone, so it is not enough inside an
+            // attribute — build the title from escaped parts only.
+            const title = `${sanitizeHTML(String(p.date).slice(5)).replaceAll('"', '&quot;')} · ${Number(p.overallPercent) || 0} %`;
+            return `<span class="trend-dot${isLast ? ' trend-dot-last' : ''}" style="left:${leftPct}%;top:${topPx}px" title="${title}"></span>`;
         })
         .join('');
     return `
@@ -6519,10 +6662,13 @@ function progressTrend(points) {
             </svg>
             ${dots}
         </div>
-        <div class="progress-trend-labels"><span>${points[0].date.slice(5)}</span><span>zuletzt · ${last.overallPercent} %</span></div>`;
+        <div class="progress-trend-labels"><span>${sanitizeHTML(String(points[0].date).slice(5))}</span><span>zuletzt · ${Number(last.overallPercent) || 0} %</span></div>`;
 }
 
-/** Confidence-vs-accuracy reliability chart (per confidence level). */
+/**
+ * Confidence-vs-accuracy reliability chart (per confidence level).
+ * @param cal
+ */
 function progressReliability(cal) {
     if (cal.pairs === 0) {
         return '<p class="progress-empty">Aktiviere „Selbsteinschätzung“ und schätze vor dem Aufdecken ein – dann erscheint hier, wie gut du dich selbst kennst.</p>';
@@ -6539,13 +6685,17 @@ function progressReliability(cal) {
             </div>`;
         })
         .join('');
-    const verdict =
-        cal.percent >= 80 ? 'gut kalibriert' : cal.percent >= 60 ? 'ordentlich' : 'noch wacklig';
+    let verdict = 'noch wacklig';
+    if (cal.percent >= 80) verdict = 'gut kalibriert';
+    else if (cal.percent >= 60) verdict = 'ordentlich';
     return `<div class="reliability-chart">${rows}</div>
         <div class="reliability-summary">Treffsicherheit insgesamt: <strong>${cal.percent} %</strong> · ${verdict}</div>`;
 }
 
-/** Coverage vs. mastery stacked bar across all cards. */
+/**
+ * Coverage vs. mastery stacked bar across all cards.
+ * @param allDecks
+ */
 function progressCoverage(allDecks) {
     const { mastered, attempted, total } = countMastered(allDecks);
     if (total === 0) return '<p class="progress-empty">Noch keine Karten vorhanden.</p>';
@@ -6565,7 +6715,10 @@ function progressCoverage(allDecks) {
         </div>`;
 }
 
-/** Weakest decks first, with a one-tap drill-in for the lowest three. */
+/**
+ * Weakest decks first, with a one-tap drill-in for the lowest three.
+ * @param allDecks
+ */
 function progressWeakSpots(allDecks) {
     const arr = allDecks
         .map((d) => ({ d, k: computeDeckKnowledge([d]) }))
@@ -6680,7 +6833,7 @@ function progressSessions(deckNames) {
             return `<div class="session-row">
                 <span class="session-date">${when}</span>
                 <span class="session-decks">${sanitizeHTML((s.deckNames || []).join(', '))}</span>
-                <span class="session-meta">${s.cardsAnswered} Karten · ${s.avgScore} %${conf}</span>
+                <span class="session-meta">${Number(s.cardsAnswered) || 0} Karten · ${Number(s.avgScore) || 0} %${conf}</span>
             </div>`;
         })
         .join('');
@@ -6692,16 +6845,17 @@ function progressSessions(deckNames) {
  * library-wide setting, so the picker is only shown in the "Gesamt" view; the
  * countdown still appears per deck, reporting that deck's Lernstand.
  * @param {string[]} allDecks Decks the reported Lernstand is computed over.
- * @param {boolean} [includePicker=true] Render the date input (global view only).
+ * @param {boolean} [includePicker] Render the date input (global view only).
  */
 function progressExam(allDecks, includePicker = true) {
     const overall = computeDeckKnowledge(allDecks);
     let countdown = '';
     if (examDate) {
         const days = Math.ceil((new Date(`${examDate}T23:59:59`) - Date.now()) / 86_400_000);
+        const dayWord = days === 1 ? 'Tag' : 'Tage';
         countdown =
             days >= 0
-                ? `<div class="exam-countdown">Noch <strong>${days}</strong> ${days === 1 ? 'Tag' : 'Tage'} bis zur Prüfung · Lernstand <strong>${overall.percent} %</strong></div>`
+                ? `<div class="exam-countdown">Noch <strong>${days}</strong> ${dayWord} bis zur Prüfung · Lernstand <strong>${overall.percent} %</strong></div>`
                 : '<div class="exam-countdown">Der Prüfungstermin liegt in der Vergangenheit.</div>';
     }
     const picker = includePicker
@@ -6712,7 +6866,10 @@ function progressExam(allDecks, includePicker = true) {
     return `${countdown}${picker}`;
 }
 
-/** Average per-deck Lernstand series from the snapshots, for menu sparklines. */
+/**
+ * Average per-deck Lernstand series from the snapshots, for menu sparklines.
+ * @param deckNames
+ */
 function deckTrendSeries(deckNames) {
     const series = [];
     for (const snap of lernstandHistory) {
@@ -6722,7 +6879,10 @@ function deckTrendSeries(deckNames) {
     return series;
 }
 
-/** Tiny inline sparkline element from a series of percentages (null if too short). */
+/**
+ * Tiny inline sparkline element from a series of percentages (null if too short).
+ * @param values
+ */
 function buildSparkline(values) {
     if (values.length < 2) return null;
     const w = 48;
@@ -6785,6 +6945,11 @@ if (typeof module !== 'undefined' && module.exports) {
         foldIdentitySet,
         isSafeMediaSrc,
         isPoolOnlyIdentify,
+        sanitizeBackup,
+        sanitizeLernstandHistory,
+        sanitizeSessionHistory,
+        sanitizeAchievements,
+        sanitizeSRData,
         SR_STEP_MINUTES,
         SR_PASS_SCORE,
         SR_FAIL_SCORE,

@@ -25,3 +25,12 @@ yarn-error.log*
 .env
 .env.local
 .env.*.local
+
+# Private data (class rosters, photos, …): any JSON file starting with "_",
+# in any folder. The library build skips these too.
+_*.json
+
+# Playwright (npm run test:e2e) output
+test-results/
+playwright-report/
+blob-report/

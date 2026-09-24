@@ -5,7 +5,7 @@
         <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
         <meta
             http-equiv="Content-Security-Policy"
-            content="default-src 'self'; script-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self'; base-uri 'self'; form-action 'self';"
+            content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self'; base-uri 'self'; form-action 'self';"
         />
         <meta name="referrer" content="no-referrer" />
         <meta name="theme-color" content="#3498db" />
@@ -16,15 +16,12 @@
             href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='7' fill='%233498db'/><rect x='12' y='6' width='15' height='20' rx='2.6' fill='%23fff' opacity='.5'/><rect x='5.5' y='8' width='15' height='20' rx='2.6' fill='%23fff'/><rect x='8.6' y='13' width='9' height='1.9' rx='.95' fill='%233498db'/><rect x='8.6' y='17' width='6.6' height='1.9' rx='.95' fill='%233498db'/></svg>"
         />
 
-        <!-- Resource hints for performance -->
-        <link rel="dns-prefetch" href="https://cdnjs.cloudflare.com" />
-        <link rel="preconnect" href="https://cdnjs.cloudflare.com" crossorigin />
-
         <title>Lernkarten App</title>
         <link rel="stylesheet" href="theme.css" />
         <script src="theme.js"></script>
         <script src="logger.js"></script>
         <script src="sanitize.js"></script>
+        <script src="ui-dialog.js"></script>
         <link rel="stylesheet" href="cards.css" />
     </head>
     <body>
@@ -522,13 +519,7 @@
         <div id="confetti-container"></div>
 
         <!-- External Dependencies (loaded with defer for better performance) -->
-        <script
-            defer
-            src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"
-            integrity="sha512-XMVd28F1oH/O71fzwBnV7HucLxVwtxf26XV8P4wPk26EDxuGZ91N8bsOttmnomcCD3CS5ZMRL50H0GgOHvegtg=="
-            crossorigin="anonymous"
-            referrerpolicy="no-referrer"
-        ></script>
+        <script defer src="vendor/jszip-3.10.1.min.js"></script>
         <!-- Main Application Script -->
         <script defer src="cards.js"></script>
 

@@ -15,6 +15,9 @@ const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
 const JSZip = require('jszip');
+// Card validation comes from the app itself, so the library's counts always
+// match what an import actually keeps (cards.js is require()-safe in Node).
+const { validateCards, foldIdentitySet, cardType, isPoolOnlyIdentify } = require('../cards.js');
 
 const REPO_ROOT = path.resolve(__dirname, '..');
 const DECKS_DIR = path.join(REPO_ROOT, 'decks');
@@ -34,41 +37,12 @@ function slugify(str) {
             .replaceAll('ö', 'oe')
             .replaceAll('ü', 'ue')
             .replaceAll('ß', 'ss')
-            .replaceAll(/[^a-z0-9]+/g, '-')
+            .replaceAll(/[^\da-z]+/g, '-')
             // Trim leading/trailing dashes. Build-time input (deck filenames) is trusted.
             .replace(/^-+/, '')
             // eslint-disable-next-line sonarjs/slow-regex
             .replace(/-+$/, '')
     );
-}
-
-/**
- *
- * @param card
- */
-function isValidCard(card) {
-    if (!card || typeof card !== 'object') return false;
-    if (Array.isArray(card.pairs) && card.pairs.length > 0) return true;
-    if (typeof card.question !== 'string' || card.question.trim() === '') return false;
-    if (typeof card.answer === 'string' && card.answer.trim() !== '') return true;
-    if (
-        Array.isArray(card.options) &&
-        card.options.length > 0 &&
-        Array.isArray(card.correct) &&
-        card.correct.length > 0
-    ) {
-        return card.correct.every((i) => Number.isInteger(i) && i >= 0 && i < card.options.length);
-    }
-    return false;
-}
-
-/**
- *
- * @param card
- */
-function cardType(card) {
-    if (Array.isArray(card.pairs)) return 'matching';
-    return Array.isArray(card.options) ? 'multiple-choice' : 'text';
 }
 
 /**
@@ -138,9 +112,7 @@ async function processDeckFile(filePath) {
 
     let totalCards = 0;
     let validCards = 0;
-    let textCards = 0;
-    let mcCards = 0;
-    let matchingCards = 0;
+    const typeCounts = { text: 0, multipleChoice: 0, matching: 0, identify: 0 };
     const categoryCounts = new Map();
     const sourceFiles = [];
     let meta = null;
@@ -201,13 +173,30 @@ async function processDeckFile(filePath) {
             if (m) meta = m;
         }
 
-        for (const card of data.cards) {
-            totalCards++;
-            if (!isValidCard(card)) continue;
+        totalCards += data.cards.length;
+        for (const card of validateCards(foldIdentitySet(data))) {
+            // Photo-less identify cards only serve as distractors; they are
+            // stored but never asked, so they don't count as questions.
+            if (isPoolOnlyIdentify(card)) continue;
             validCards++;
-            if (cardType(card) === 'text') textCards++;
-            else if (cardType(card) === 'multiple-choice') mcCards++;
-            else matchingCards++;
+            const type = cardType(card);
+            switch (type) {
+                case 'mc': {
+                    typeCounts.multipleChoice++;
+                    break;
+                }
+                case 'matching': {
+                    typeCounts.matching++;
+                    break;
+                }
+                case 'identify': {
+                    typeCounts.identify++;
+                    break;
+                }
+                default: {
+                    typeCounts.text++;
+                }
+            }
             if (Array.isArray(card.categories)) {
                 for (const c of card.categories) {
                     if (typeof c !== 'string' || c.trim() === '') continue;
@@ -236,7 +225,7 @@ async function processDeckFile(filePath) {
         size: buf.length,
         questionCount: validCards,
         invalidCount: totalCards - validCards,
-        types: { text: textCards, multipleChoice: mcCards, matching: matchingCards },
+        types: typeCounts,
         categories,
         sourceFiles: sourceFiles.toSorted(),
     };
@@ -255,7 +244,12 @@ async function main() {
 
     const deckFiles = fs
         .readdirSync(DECKS_DIR)
-        .filter((f) => /\.(zip|json)$/i.test(f) && f.toLowerCase() !== 'library.json')
+        // `_`-prefixed files are private (gitignored, e.g. class rosters with
+        // photos) and must never end up in the public library.
+        .filter(
+            (f) =>
+                /\.(zip|json)$/i.test(f) && f.toLowerCase() !== 'library.json' && !f.startsWith('_')
+        )
         .map((f) => path.join(DECKS_DIR, f))
         .toSorted();
 

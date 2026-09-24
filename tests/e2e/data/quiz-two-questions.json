@@ -1,0 +1,18 @@
+{
+    "meta": {
+        "name": "E2E-Quiz",
+        "description": "Two multiple-choice questions for the end-to-end tests."
+    },
+    "cards": [
+        {
+            "question": "Welche sind Primzahlen?",
+            "options": ["2", "4", "7", "9"],
+            "correct": [0, 2]
+        },
+        {
+            "question": "Welche Planeten sind Gasriesen?",
+            "options": ["Mars", "Jupiter", "Saturn", "Erde"],
+            "correct": [1, 2]
+        }
+    ]
+}

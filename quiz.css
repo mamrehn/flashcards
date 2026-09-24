@@ -1314,6 +1314,28 @@ select:focus {
     font-size: 0.95rem;
 }
 
+/* Host lobby: replace a player's name with a random one (censoring). */
+.player-rename-btn {
+    margin-left: auto;
+    flex: 0 0 auto;
+    min-width: 2rem;
+    min-height: 2rem;
+    padding: 0 0.3rem;
+    border: none;
+    border-radius: 999px;
+    background: transparent;
+    font-size: 1rem;
+    line-height: 1;
+    cursor: pointer;
+    opacity: 0.6;
+}
+
+.player-rename-btn:hover,
+.player-rename-btn:focus-visible {
+    opacity: 1;
+    background: var(--quiz-hover, rgba(0, 0, 0, 0.06));
+}
+
 /* Avatar icon used everywhere a player name appears on the host:
    lobby list, scoreboard, final leaderboard. Sits to the left of the
    name; slightly oversized so the emoji reads as an icon, not a glyph. */

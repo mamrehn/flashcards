@@ -8,7 +8,14 @@ on:
     workflow_dispatch:
 
 jobs:
+    # Nothing reaches gh-pages unless lint, unit and end-to-end tests pass.
+    test:
+        uses: ./.github/workflows/test.yml
+        permissions:
+            contents: read
+
     checkout-minify-push:
+        needs: test
         runs-on: ubuntu-latest
         permissions:
             contents: write
@@ -41,11 +48,10 @@ jobs:
                     exit 1
                   fi
                   echo "WS_URL is set (length: ${#WS_URL})"
-                  # Both the quiz and the poll client carry the '__WS_URL__'
-                  # placeholder — inject into both or the poll silently relies
-                  # on its hard-coded fallback URL.
-                  sed -i "s|'__WS_URL__'|'$WS_URL'|g" quiz.js poll.js
-                  if grep -q "__WS_URL__" quiz.js poll.js; then
+                  # The placeholder lives once, in ws-client.js (shared by the
+                  # quiz and the poll client).
+                  sed -i "s|'__WS_URL__'|'$WS_URL'|g" ws-client.js
+                  if grep -q "__WS_URL__" ws-client.js; then
                     echo "WS_URL injection may have failed"
                     exit 1
                   fi
@@ -61,6 +67,8 @@ jobs:
                   terser sanitize.js --compress --mangle -o sanitize.js
                   terser logger.js --compress --mangle -o logger.js
                   terser theme.js --compress --mangle -o theme.js
+                  terser ws-client.js --compress --mangle -o ws-client.js
+                  terser ui-dialog.js --compress --mangle -o ui-dialog.js
 
             - name: Minify CSS files
               run: |
@@ -84,6 +92,7 @@ jobs:
                   sed -i 's|<script src="logger\.js"></script>|<script inline src="logger.js"></script>|g' cards.html
                   sed -i 's|<link rel="stylesheet" href="cards\.css" />|<link inline rel="stylesheet" href="cards.css" />|g' cards.html
                   sed -i 's|<script src="sanitize\.js"></script>|<script inline src="sanitize.js"></script>|g' cards.html
+                  sed -i 's|<script src="ui-dialog\.js"></script>|<script inline src="ui-dialog.js"></script>|g' cards.html
                   sed -i 's|<script src="cards\.js"></script>|<script inline src="cards.js"></script>|g' cards.html
 
                   # library.html
@@ -94,19 +103,23 @@ jobs:
                   sed -i 's|<script src="sanitize\.js"></script>|<script inline src="sanitize.js"></script>|g' library.html
                   sed -i 's|<script src="library\.js"></script>|<script inline src="library.js"></script>|g' library.html
 
-                  # quiz.html - need to handle external CDN scripts differently
+                  # quiz.html (vendor/ scripts stay separate files)
                   sed -i 's|<link rel="stylesheet" href="theme\.css" />|<link inline rel="stylesheet" href="theme.css" />|g' quiz.html
                   sed -i 's|<script src="theme\.js"></script>|<script inline src="theme.js"></script>|g' quiz.html
                   sed -i 's|<script src="logger\.js"></script>|<script inline src="logger.js"></script>|g' quiz.html
                   sed -i 's|<link rel="stylesheet" href="quiz\.css" />|<link inline rel="stylesheet" href="quiz.css" />|g' quiz.html
                   sed -i 's|<script src="sanitize\.js"></script>|<script inline src="sanitize.js"></script>|g' quiz.html
+                  sed -i 's|<script src="ui-dialog\.js"></script>|<script inline src="ui-dialog.js"></script>|g' quiz.html
+                  sed -i 's|<script src="ws-client\.js"></script>|<script inline src="ws-client.js"></script>|g' quiz.html
                   sed -i 's|<script src="quiz\.js"></script>|<script inline src="quiz.js"></script>|g' quiz.html
 
-                  # poll.html - mirrors quiz.html (also pulls in the external CDN QR script)
+                  # poll.html - mirrors quiz.html
                   sed -i 's|<link rel="stylesheet" href="theme\.css" />|<link inline rel="stylesheet" href="theme.css" />|g' poll.html
                   sed -i 's|<script src="theme\.js"></script>|<script inline src="theme.js"></script>|g' poll.html
                   sed -i 's|<script src="logger\.js"></script>|<script inline src="logger.js"></script>|g' poll.html
                   sed -i 's|<script src="sanitize\.js"></script>|<script inline src="sanitize.js"></script>|g' poll.html
+                  sed -i 's|<script src="ui-dialog\.js"></script>|<script inline src="ui-dialog.js"></script>|g' poll.html
+                  sed -i 's|<script src="ws-client\.js"></script>|<script inline src="ws-client.js"></script>|g' poll.html
                   sed -i 's|<link rel="stylesheet" href="poll\.css" />|<link inline rel="stylesheet" href="poll.css" />|g' poll.html
                   sed -i 's|<script src="poll\.js"></script>|<script inline src="poll.js"></script>|g' poll.html
 

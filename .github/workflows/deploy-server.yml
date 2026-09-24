@@ -10,7 +10,15 @@ on:
     workflow_dispatch:
 
 jobs:
+    # The relay is shared by every classroom: never deploy a server that fails
+    # the protocol, rate-limit or end-to-end tests.
+    test:
+        uses: ./.github/workflows/test.yml
+        permissions:
+            contents: read
+
     deploy:
+        needs: test
         runs-on: ubuntu-latest
 
         steps:

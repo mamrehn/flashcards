@@ -1,14 +1,15 @@
-/**
- * WebSocket Server Configuration
- *
- * This placeholder is replaced during build/deployment with the actual server URL.
- */
-// During build, '__WS_URL__' is replaced. In dev, it remains.
-const RAW_URL = '__WS_URL__';
-const FALLBACK_WS_URL = RAW_URL === '__WS_URL__' ? 'wss://qlash-server.fly.dev' : RAW_URL;
-const HAS_RUNTIME_WS_URL =
-    globalThis.window !== undefined && globalThis.WS_URL && globalThis.WS_URL !== '__WS_URL__';
-const WS_URL = HAS_RUNTIME_WS_URL ? globalThis.WS_URL : FALLBACK_WS_URL;
+// Connection plumbing shared with poll.js (see ws-client.js).
+const {
+    WS_URL,
+    CLOSE_SESSION_REPLACED,
+    FATAL_JOIN_CODES,
+    connectWithRetry,
+    reconnectBackoffMs,
+    startHeartbeat,
+    stopHeartbeat,
+    markAlive,
+    pingNow,
+} = globalThis.wsClient;
 
 // --- Utility functions ---
 /**
@@ -155,6 +156,135 @@ function commitAvatar() {
     }
 }
 
+// Host "censor" names in the style of Kahoot / Ubuntu codenames: an
+// alliterative adjective + animal ("Brave Badger", "Jolly Jaguar"). Only
+// friendly adjectives, and no animals a class could turn into a jab (hippo,
+// walrus, sloth …) — the name replaces one the teacher just removed. Every
+// adjective's initial has at least one animal.
+const RANDOM_NAME_ADJECTIVES = [
+    'Agile',
+    'Amazing',
+    'Brave',
+    'Bouncy',
+    'Calm',
+    'Clever',
+    'Cosmic',
+    'Daring',
+    'Dapper',
+    'Eager',
+    'Epic',
+    'Fearless',
+    'Friendly',
+    'Gentle',
+    'Groovy',
+    'Happy',
+    'Jazzy',
+    'Jolly',
+    'Keen',
+    'Kind',
+    'Lively',
+    'Lucky',
+    'Magic',
+    'Mighty',
+    'Nimble',
+    'Noble',
+    'Playful',
+    'Plucky',
+    'Quick',
+    'Radiant',
+    'Rapid',
+    'Snappy',
+    'Sunny',
+    'Swift',
+    'Terrific',
+    'Trusty',
+    'Wise',
+    'Witty',
+    'Zesty',
+    'Zippy',
+];
+const RANDOM_NAME_ANIMALS = [
+    'Alpaca',
+    'Armadillo',
+    'Badger',
+    'Beaver',
+    'Bison',
+    'Capybara',
+    'Cheetah',
+    'Coyote',
+    'Dingo',
+    'Dolphin',
+    'Eagle',
+    'Emu',
+    'Falcon',
+    'Flamingo',
+    'Fox',
+    'Gecko',
+    'Giraffe',
+    'Gorilla',
+    'Hedgehog',
+    'Heron',
+    'Jaguar',
+    'Jellyfish',
+    'Kangaroo',
+    'Kiwi',
+    'Koala',
+    'Lemur',
+    'Llama',
+    'Lynx',
+    'Meerkat',
+    'Moose',
+    'Narwhal',
+    'Newt',
+    'Panda',
+    'Penguin',
+    'Puffin',
+    'Quail',
+    'Quokka',
+    'Raccoon',
+    'Reindeer',
+    'Seal',
+    'Squirrel',
+    'Tiger',
+    'Toucan',
+    'Turtle',
+    'Wolf',
+    'Wombat',
+    'Zebra',
+];
+
+/**
+ * @template T
+ * @param {T[]} arr
+ * @returns {T}
+ */
+function pickRandom(arr) {
+    return arr[Math.floor(Math.random() * arr.length)];
+}
+
+/** @returns {string} e.g. "Brave Badger" */
+function makeRandomPlayerName() {
+    const adjective = pickRandom(RANDOM_NAME_ADJECTIVES);
+    const animal = pickRandom(RANDOM_NAME_ANIMALS.filter((a) => a[0] === adjective[0]));
+    return `${adjective} ${animal}`;
+}
+
+/**
+ * A random, friendly player name that is not in `taken`.
+ * @param {Set<string>} taken - names already used in the room
+ * @returns {string}
+ */
+function generateRandomPlayerName(taken) {
+    for (let i = 0; i < 50; i++) {
+        const name = makeRandomPlayerName();
+        if (!taken.has(name)) return name;
+    }
+    let n = 2;
+    const base = makeRandomPlayerName();
+    while (taken.has(`${base} ${n}`)) n++;
+    return `${base} ${n}`;
+}
+
 // Themes mirror audio/themes/<id>/ folders. Keep ids in sync with the server.
 const LOBBY_MUSIC_THEMES = [
     { id: 'arcade', label: 'Arcade', icon: '🕹️', tagline: 'Schnell & spielerisch' },
@@ -228,174 +358,6 @@ function shuffleArray(array) {
         const j = Math.floor(Math.random() * (i + 1));
         [array[i], array[j]] = [array[j], array[i]];
     }
-}
-
-/**
- * Creates a WebSocket connection with retry logic for Fly.io cold starts.
- * Retries up to maxRetries times with increasing delays if the connection fails immediately.
- * @param {string} url - The WebSocket URL.
- * @param {number} maxRetries - Max retry attempts for initial connection.
- * @returns {Promise<WebSocket>} A connected WebSocket.
- */
-function connectWithRetry(url, maxRetries = 3) {
-    return new Promise((resolve, reject) => {
-        let attempt = 0;
-        /**
-         *
-         */
-        function tryConnect() {
-            attempt++;
-            const ws = new WebSocket(url);
-            let settled = false;
-            // Listener refs so we can detach the unused one on settle. Without
-            // this both stay bound to a dead/abandoned socket and keep the ws
-            // object alive longer than necessary.
-            let onOpen;
-            let onError;
-            const detach = () => {
-                ws.removeEventListener('open', onOpen);
-                ws.removeEventListener('error', onError);
-            };
-            const timeout = setTimeout(() => {
-                if (settled) return;
-                settled = true;
-                detach();
-                ws.close();
-                if (attempt < maxRetries) {
-                    logger.log(`WebSocket connection attempt ${attempt} timed out, retrying...`);
-                    setTimeout(tryConnect, 2000 * attempt);
-                } else {
-                    reject(new Error('WebSocket connection failed after retries'));
-                }
-            }, 10_000);
-
-            onOpen = () => {
-                if (settled) return;
-                settled = true;
-                clearTimeout(timeout);
-                detach();
-                resolve(ws);
-            };
-            onError = () => {
-                if (settled) return;
-                settled = true;
-                clearTimeout(timeout);
-                detach();
-                if (attempt < maxRetries) {
-                    logger.log(`WebSocket connection attempt ${attempt} failed, retrying...`);
-                    setTimeout(tryConnect, 2000 * attempt);
-                } else {
-                    reject(new Error('WebSocket connection failed after retries'));
-                }
-            };
-            ws.addEventListener('open', onOpen);
-            ws.addEventListener('error', onError);
-        }
-        tryConnect();
-    });
-}
-
-// Application-level heartbeat. The server pings every 30 s at the WebSocket
-// protocol level and the browser auto-pongs, but (a) some intermediate proxies
-// (carrier NAT, corporate firewalls) only see app-layer frames as "activity"
-// and drop the TCP socket after ~60 s of silence, and (b) if the server's
-// network silently goes dark without closing the TCP connection, the browser
-// may keep the socket in OPEN state for many seconds before noticing.
-//
-// We send a `{type:'heartbeat'}` every 25 s; the server replies with
-// `{type:'heartbeat_ack'}`. A watchdog on the client side checks how long ago
-// we last heard *anything* from the server — if > HEARTBEAT_TIMEOUT_MS, we
-// force-close the socket and let the unified reconnect logic take over.
-const HEARTBEAT_INTERVAL_MS = 25_000;
-const HEARTBEAT_TIMEOUT_MS = 60_000;
-const HEARTBEAT_WATCHDOG_INTERVAL_MS = 10_000;
-const HEARTBEAT_PAYLOAD = JSON.stringify({ type: 'heartbeat' });
-
-/**
- * Start the bidirectional heartbeat for a WebSocket. Returns a state object
- * holding the rescheduling timer, the watchdog interval, and the last-seen /
- * last-sent timestamps. Pass the state to `stopHeartbeat` when the socket
- * closes.
- *
- * `ws.send` is wrapped so that *any* outbound frame (submit_answer,
- * start_question, heartbeat itself, ...) reschedules the next heartbeat for
- * exactly `HEARTBEAT_INTERVAL_MS` from now. This guarantees the gap between
- * any two outbound frames is at most `HEARTBEAT_INTERVAL_MS` — important for
- * NATs that drop idle TCP after as little as 30 s. A simple periodic
- * `setInterval` skip-if-recent would have a worst-case gap of ~2× the
- * interval (~50 s) when a real send lands just after a tick fires.
- *
- * `state.lastMsgTime` is updated externally on every received frame, so an
- * active stream of server-pushed messages keeps the watchdog quiet without
- * a redundant heartbeat round-trip.
- * @param {WebSocket} ws
- * @returns {{heartbeatTimer:number, watchdog:number, lastMsgTime:number, lastSendTime:number}}
- */
-function startHeartbeat(ws) {
-    const now = Date.now();
-    const state = { lastMsgTime: now, lastSendTime: now, heartbeatTimer: null };
-
-    function scheduleNextHeartbeat() {
-        if (state.heartbeatTimer !== null) clearTimeout(state.heartbeatTimer);
-        state.heartbeatTimer = setTimeout(() => {
-            if (!ws || ws.readyState !== WebSocket.OPEN) return;
-            try {
-                // Goes through the wrapped send, which itself reschedules.
-                ws.send(HEARTBEAT_PAYLOAD);
-            } catch (error) {
-                logger.error('Heartbeat send failed:', error);
-            }
-        }, HEARTBEAT_INTERVAL_MS);
-    }
-
-    // Wrap ws.send so every outbound frame bumps lastSendTime *and* resets
-    // the heartbeat timer. Stash the native bound send on the socket itself
-    // so a second startHeartbeat call doesn't capture the previous wrapper
-    // as "original" and stack wrappers (which would self-reschedule
-    // recursively on each outbound frame).
-    if (!ws.__heartbeatNativeSend) {
-        ws.__heartbeatNativeSend = ws.send.bind(ws);
-    }
-    const originalSend = ws.__heartbeatNativeSend;
-    ws.send = (...args) => {
-        state.lastSendTime = Date.now();
-        scheduleNextHeartbeat();
-        return originalSend(...args);
-    };
-
-    // Kick off the first heartbeat 25 s from now (initial state).
-    scheduleNextHeartbeat();
-
-    state.watchdog = setInterval(() => {
-        if (!ws || ws.readyState !== WebSocket.OPEN) return;
-        const silentMs = Date.now() - state.lastMsgTime;
-        if (silentMs > HEARTBEAT_TIMEOUT_MS) {
-            logger.warn(
-                `No server activity for ${Math.round(silentMs / 1000)}s — forcing reconnect.`
-            );
-            try {
-                ws.close();
-            } catch {
-                /* close already in progress */
-            }
-        }
-    }, HEARTBEAT_WATCHDOG_INTERVAL_MS);
-
-    return state;
-}
-
-/**
- * Cancel a heartbeat state's timer and return null for assignment back
- * to the caller's state slot.
- * @param {{heartbeatTimer:number|null, watchdog:number}|null} state
- * @returns {null}
- */
-function stopHeartbeat(state) {
-    if (state) {
-        if (state.heartbeatTimer !== null) clearTimeout(state.heartbeatTimer);
-        clearInterval(state.watchdog);
-    }
-    return null;
 }
 
 // --- App initialization ---
@@ -542,15 +504,8 @@ document.addEventListener('DOMContentLoaded', () => {
         if (document.visibilityState !== 'visible') return;
         // logger.log('Tab became visible, checking connections...');
 
-        for (const ws of [hostWs, playerWs]) {
-            if (ws && ws.readyState === WebSocket.OPEN) {
-                try {
-                    ws.send(HEARTBEAT_PAYLOAD);
-                } catch {
-                    /* swallow — close handler will reconnect if the path is dead */
-                }
-            }
-        }
+        pingNow(hostWs);
+        pingNow(playerWs);
         if (hostWs && hostWs.readyState !== WebSocket.OPEN && hostRoomId) {
             reconnectHostWs();
         }
@@ -619,6 +574,9 @@ let hostViewHeading = null;
 let hostBeforeUnloadHandler = null;
 let hostWsReconnectAttempts = 0;
 let hostPendingQuestion = null;
+// Results computed while the host socket was down; flushed after reconnect so
+// players don't sit on the question screen until the next round.
+let hostPendingResults = null;
 let hostSuppressReconnect = false;
 // True while a reconnect attempt is in flight (awaiting connectWithRetry).
 // Prevents close, visibilitychange, `online`, and a manual button click from
@@ -632,36 +590,17 @@ const HOST_MAX_RECONNECT_ATTEMPTS = 30;
 // rescued by a network-restored signal.
 let playerWsReconnectAttempts = 0;
 const MAX_RECONNECT_ATTEMPTS = 30;
-const RECONNECT_DELAY_MS = 10_000;
-
-/**
- * Reconnect backoff: ~1s → ~2s → ~4s → ~10s (then steady). A typical WS blip
- * (phone screen off, brief Wi-Fi hiccup) recovers on the first retry instead
- * of waiting the full 10 s, while sustained failures still throttle.
- *
- * ±25% jitter is applied so a cascade event (e.g. a brief router restart that
- * drops every client at once) doesn't produce a thundering herd hitting the
- * server on the same backoff schedule.
- * @param {number} attempt 1-indexed
- * @returns {number} ms before the next retry
- */
-function reconnectBackoffMs(attempt) {
-    let base;
-    if (attempt <= 1) base = 1000;
-    else if (attempt === 2) base = 2000;
-    else if (attempt === 3) base = 4000;
-    else base = RECONNECT_DELAY_MS;
-    // Uniform jitter in [0.75, 1.25].
-    const jitter = 0.75 + Math.random() * 0.5;
-    return Math.round(base * jitter);
-}
+// After a server restart the room only exists again once the host has
+// restored it; a reconnecting player keeps retrying the join meanwhile.
+const ROOM_WAIT_RETRY_MS = 3000;
+const ROOM_WAIT_MAX_RETRIES = 20;
 
 /**
  * Minimal host-side audio engine. One looping `<audio>` element re-pointed at
  * the chosen theme's track files. Empty/missing files fail silently — the
  * placeholder `.opus` files in audio/themes are intentionally empty until the
  * host records over them.
- *
+ * @param v
  * @returns {{setTheme:Function, play:Function, stop:Function, getTheme:Function}}
  */
 function clamp01(v) {
@@ -699,6 +638,7 @@ function lowerPhaseVeil() {
  * The eyebrow label is shown only when there's at least one chip.
  * @param {Array<string>|null} categories
  * @param {string} [eyebrow] — defaults to "Nächste Frage" when categories present
+ * @param doublePoints
  */
 function setVeilCategories(categories, eyebrow = 'Nächste Frage', doublePoints = false) {
     const eyebrowEl = document.querySelector('#phase-veil-eyebrow');
@@ -736,6 +676,14 @@ function flyInElement(el, className = 'phase-fly-up') {
 }
 
 /**
+ * Unveil one staged podium element (a pedestal or the rest-of-field list).
+ * @param {HTMLElement|null|undefined} el
+ */
+function revealPodiumElement(el) {
+    if (el) el.classList.remove('podium-pending');
+}
+
+/**
  * Toggles a "double points" badge on or off. Shared by the host's big screen
  * and each player's question card so everyone sees the raised stakes for a
  * finale or every-Nth round. Re-triggers the pop animation each time it shows.
@@ -747,25 +695,33 @@ function setDoublePointsBadge(el, isDouble) {
     el.classList.toggle('hidden', !isDouble);
     if (isDouble) {
         el.classList.remove('double-points-badge--pop');
-        void el.offsetWidth; // force reflow so the entrance animation restarts
+        el.getBoundingClientRect(); // force reflow so the entrance animation restarts
         el.classList.add('double-points-badge--pop');
     }
 }
 
+const preloadedAudioThemes = new Set();
+
 /**
- * Warm the HTTP cache with every audio file the engine might play, so the
- * first time a stinger is set as `audio.src` the browser already has the
- * bytes locally. Without this, the very first `new_question.opus` (or any
- * other stinger) would incur a download round-trip and miss its cue.
+ * Warm the HTTP cache with the audio files of the given themes, so the first
+ * time a stinger is set as `audio.src` the browser already has the bytes
+ * locally. Without this, the very first `new_question.opus` (or any other
+ * stinger) would incur a download round-trip and miss its cue. Each theme is
+ * fetched once; themes nobody can pick are never requested (no 404 noise).
+ * @param {string[]} themes
  */
-function preloadAudioCache() {
-    const themes = LOBBY_MUSIC_THEMES.map((t) => t.id);
+function preloadAudioCache(themes) {
     const tracks = [...HOST_AUDIO_LOOPS, ...HOST_AUDIO_STINGERS];
     const urls = [];
+    if (!preloadedAudioThemes.has('__final__')) {
+        preloadedAudioThemes.add('__final__');
+        urls.push(HOST_AUDIO_FINAL_PATH);
+    }
     for (const theme of themes) {
+        if (theme === 'none' || preloadedAudioThemes.has(theme)) continue;
+        preloadedAudioThemes.add(theme);
         for (const track of tracks) urls.push(audioFilePath(theme, track));
     }
-    urls.push(HOST_AUDIO_FINAL_PATH);
     for (const url of urls) {
         // Same-origin → no CORS. `force-cache` serves from cache if already
         // present, otherwise the request still populates it for later loads.
@@ -777,8 +733,11 @@ function preloadAudioCache() {
 
 function createMusicEngine() {
     // Prefetch on engine creation so by the time the host clicks
-    // "Quiz hosten" → "Fragen starten", every track is already cached.
-    preloadAudioCache();
+    // "Quiz hosten" → "Fragen starten", every votable theme is cached. Other
+    // themes load when the host picks them for the lobby (setTheme).
+    preloadAudioCache(
+        LOBBY_MUSIC_THEMES.map((t) => t.id).filter((id) => !LOBBY_MUSIC_VOTE_DISABLED.has(id))
+    );
 
     // Crossfade tunables. 250 ms per the user's preference; the same
     // machinery handles both track transitions (lobby → question) and
@@ -973,6 +932,7 @@ function createMusicEngine() {
         setTheme(newTheme) {
             if (newTheme === theme) return;
             theme = newTheme;
+            preloadAudioCache([newTheme]);
             // Clear activeTrack so the next playLoop call crossfades into
             // the new theme's source even if the track id is the same.
             // The element keeps playing the old-theme audio in the
@@ -1151,6 +1111,15 @@ async function initializeHostFeatures(reconnectInfo) {
             // Both null until first reconciled.
             selectedCategories: null,
             knownCategories: null,
+            // What the server believes the room is doing ('lobby' |
+            // 'question' | 'result' | 'final'); drives restore after a server
+            // restart and whether lobby-only actions (renaming) are offered.
+            serverPhase: 'lobby',
+            finalRevealed: false,
+            // Seconds already elapsed when a question was re-sent after a
+            // reconnect; added to the server's (restarted) elapsed time so
+            // speed bonuses stay fair.
+            questionTimeOffsetSec: 0,
         };
     }
     if (!hostMusicEngine) hostMusicEngine = createMusicEngine();
@@ -1439,8 +1408,7 @@ async function initializeHostFeatures(reconnectInfo) {
             const MAX_QUESTION_LENGTH = 4000;
             const MAX_OPTION_LENGTH = 500;
             const MAX_OPTIONS = 20;
-            for (let i = 0; i < activeQuestions.length; i++) {
-                const q = activeQuestions[i];
+            for (const [i, q] of activeQuestions.entries()) {
                 if (q.question.length > MAX_QUESTION_LENGTH) {
                     showMessage(
                         `Frage ${i + 1} ist zu lang (${q.question.length}/${MAX_QUESTION_LENGTH} Zeichen).`,
@@ -1531,6 +1499,9 @@ async function initializeHostFeatures(reconnectInfo) {
             if (hostWs && hostWs.readyState === WebSocket.OPEN) {
                 hostWs.send(JSON.stringify({ type: 'lock_music_vote' }));
             }
+            // A second click while the first question is being set up
+            // would restart it.
+            if (quizState.isQuestionActive) return;
             // The actual hide-qr / show-question swap happens inside
             // startQuestion's reveal callback (after the new_question
             // stinger ends), not here, so the veil can cover the swap.
@@ -1539,8 +1510,13 @@ async function initializeHostFeatures(reconnectInfo) {
             await startQuestion();
         });
 
-        // Event listener for moving to the next question
+        // Event listener for moving to the next question. The buttons stay
+        // on screen until the next question is revealed (≥1.8 s later), so a
+        // double click used to advance twice and silently skip a question:
+        // hide them at once and ignore clicks while a question is starting.
         showNextBtn.addEventListener('click', async () => {
+            if (quizState.isQuestionActive) return;
+            hideRoundButtons();
             quizState.currentQuestionIndex++;
             await startQuestion();
         });
@@ -1550,13 +1526,18 @@ async function initializeHostFeatures(reconnectInfo) {
         // question's results route everyone (host + players) into the final
         // celebration instead of another round.
         showLastBtn.addEventListener('click', async () => {
+            if (quizState.isQuestionActive) return;
+            hideRoundButtons();
             quizState.endRequested = true;
             quizState.currentQuestionIndex++;
             await startQuestion();
         });
 
         // Event listener for showing final results
-        showResultsBtn.addEventListener('click', showFinalResults);
+        showResultsBtn.addEventListener('click', () => {
+            hideRoundButtons();
+            showFinalResults();
+        });
 
         // Event listener for starting a new quiz
         newQuizBtn.addEventListener('click', async () => {
@@ -1603,6 +1584,7 @@ async function initializeHostFeatures(reconnectInfo) {
             hostSessionId = null;
             hostGlobalQuizState = null;
             hostPendingQuestion = null;
+            hostPendingResults = null;
             // Reset isHostInitialized so the next initializeHostFeatures()
             // call re-attaches listeners with closures over the fresh
             // hostGlobalQuizState. The old listeners stay bound to the old
@@ -1829,7 +1811,10 @@ async function initializeHostFeatures(reconnectInfo) {
         });
     }
 
-    /** Flips one category on/off, then re-renders + syncs the lobby preview. */
+    /**
+     * Flips one category on/off, then re-renders + syncs the lobby preview.
+     * @param key
+     */
     function toggleCategory(key) {
         const sel =
             quizState.selectedCategories instanceof Set ? quizState.selectedCategories : new Set();
@@ -2022,20 +2007,37 @@ async function initializeHostFeatures(reconnectInfo) {
                     qrContainer.classList.add('hidden');
                     hostSetup.classList.remove('hidden');
                 }
-                // Do NOT auto-restart the active question on reconnect: the
-                // host's local state (timer, options) is intact, and re-calling
-                // startQuestion would replay the new_question stinger and
-                // reset the timer for everyone. We just resume in place; the
-                // per-player answer state was reconciled above from the
-                // host_reconnected payload.
-                if (hostPendingQuestion) {
-                    // Resend question that failed to send before disconnect
-                    logger.log('Resending pending question after reconnect');
-                    if (hostWs && hostWs.readyState === WebSocket.OPEN) {
-                        hostWs.send(JSON.stringify(hostPendingQuestion));
-                        hostPendingQuestion = null;
-                    }
+                // Results computed while we were offline go out first, so
+                // players leave the previous question's screen.
+                if (hostPendingResults && hostWs && hostWs.readyState === WebSocket.OPEN) {
+                    hostWs.send(JSON.stringify(hostPendingResults));
+                    hostPendingResults = null;
                 }
+                // Do NOT restart the active question on reconnect: the host's
+                // local state (timer, options) is intact, and re-calling
+                // startQuestion would replay the new_question stinger and reset
+                // the timer for everyone. Only when the server never saw the
+                // question (it failed to send) or forgot it (restored room) is
+                // it re-sent — with the time that is actually left.
+                if (quizState.isQuestionActive && (msg.isRestored || hostPendingQuestion)) {
+                    logger.log('Re-sending the running question after reconnect');
+                    resendActiveQuestion(msg.isRestored === true);
+                }
+                hostPendingQuestion = null;
+                break;
+            }
+
+            case 'player_renamed': {
+                const renamed = quizState.players[msg.sessionId];
+                if (renamed && typeof msg.name === 'string') {
+                    renamed.name = sanitizePlayerName(msg.name) || renamed.name;
+                    refreshPlayerDisplay();
+                }
+                break;
+            }
+
+            case 'server_restarting': {
+                showMessage('Server startet neu – Verbindung wird wiederhergestellt …', 'info');
                 break;
             }
 
@@ -2173,6 +2175,7 @@ async function initializeHostFeatures(reconnectInfo) {
                 hostSessionId = null;
                 hostGlobalQuizState = null;
                 hostPendingQuestion = null;
+                hostPendingResults = null;
                 isHostInitialized = false;
                 document.querySelector('#role-selection').classList.remove('hidden');
                 showView('role-selection');
@@ -2187,49 +2190,72 @@ async function initializeHostFeatures(reconnectInfo) {
     }
 
     /**
-     * Initializes WebSocket connection for the host, creates a room, and sets up message handlers.
+     * Wire a freshly opened host socket: heartbeat, per-socket liveness,
+     * stale-socket guards and the reconnect-on-close path. Shared by the
+     * initial connect, the post-reload reconnect and the auto-reconnect.
+     * @param {WebSocket} ws
+     * @param {(msg: object) => boolean} [preHandler] - sees each message
+     *   first; returns true when it fully handled it.
      */
-    async function initHostConnection() {
-        hostWsReconnectAttempts = 0;
-        hostSuppressReconnect = false;
-
-        try {
-            hostWs = await connectWithRetry(WS_URL);
-        } catch {
-            showMessage('Server nicht erreichbar. Bitte versuche es später erneut.', 'error');
-            return;
-        }
-
-        logger.log('Host WebSocket connected');
+    function attachHostSocket(ws, preHandler) {
+        hostWs = ws;
         hostHeartbeat = stopHeartbeat(hostHeartbeat);
-        hostHeartbeat = startHeartbeat(hostWs);
-        hostWs.send(JSON.stringify({ type: 'create_room' }));
+        hostHeartbeat = startHeartbeat(ws);
 
-        hostWs.addEventListener('message', (event) => {
-            // Any incoming frame (heartbeat_ack or real game message) is
-            // proof of server liveness — keeps the watchdog quiet.
-            if (hostHeartbeat) hostHeartbeat.lastMsgTime = Date.now();
+        ws.addEventListener('message', (event) => {
+            // Credit liveness to the socket that received the frame, and ignore
+            // anything still trickling in on a socket we already replaced.
+            markAlive(ws);
+            if (ws !== hostWs) return;
             let msg;
             try {
                 msg = JSON.parse(event.data);
             } catch {
                 return;
             }
+            if (preHandler && preHandler(msg)) return;
             handleHostMessage(msg);
         });
 
-        const attachedHostWs = hostWs;
-        attachedHostWs.addEventListener('close', () => {
+        ws.addEventListener('close', (event) => {
             // Ignore stale closes from a ws we've already replaced.
-            if (attachedHostWs !== hostWs) return;
+            if (ws !== hostWs) return;
             logger.log('Host WebSocket closed');
             hostHeartbeat = stopHeartbeat(hostHeartbeat);
+            if (event.code === CLOSE_SESSION_REPLACED) {
+                // Another tab/device took over hosting this room; reconnecting
+                // would steal it back and forth forever.
+                hostSuppressReconnect = true;
+                if (hostMusicEngine) hostMusicEngine.stop();
+                showMessage('Dieses Quiz wird jetzt in einem anderen Fenster gehostet.', 'info');
+                return;
+            }
             reconnectHostWs();
         });
 
-        hostWs.addEventListener('error', (err) => {
+        ws.addEventListener('error', (err) => {
             console.error('Host WebSocket error:', err);
         });
+    }
+
+    /**
+     * Initializes WebSocket connection for the host and creates a room.
+     */
+    async function initHostConnection() {
+        hostWsReconnectAttempts = 0;
+        hostSuppressReconnect = false;
+
+        let ws;
+        try {
+            ws = await connectWithRetry(WS_URL);
+        } catch {
+            showMessage('Server nicht erreichbar. Bitte versuche es später erneut.', 'error');
+            return;
+        }
+
+        logger.log('Host WebSocket connected');
+        attachHostSocket(ws);
+        ws.send(JSON.stringify({ type: 'create_room' }));
     }
 
     /**
@@ -2244,8 +2270,9 @@ async function initializeHostFeatures(reconnectInfo) {
         hostSessionId = info.sessionId;
         quizState.roomId = info.roomId.slice(0, 2) + ' ' + info.roomId.slice(2, 4);
 
+        let ws;
         try {
-            hostWs = await connectWithRetry(WS_URL);
+            ws = await connectWithRetry(WS_URL);
         } catch {
             // Don't clear the session on a transient failure — keep the
             // reconnect button visible so the user can try again. Previously
@@ -2257,44 +2284,40 @@ async function initializeHostFeatures(reconnectInfo) {
             return;
         }
 
-        hostHeartbeat = stopHeartbeat(hostHeartbeat);
-        hostHeartbeat = startHeartbeat(hostWs);
-        hostWs.send(
-            JSON.stringify({ type: 'reconnect_host', roomId: hostRoomId, sessionId: hostSessionId })
-        );
-
-        hostWs.addEventListener('message', (event) => {
-            if (hostHeartbeat) hostHeartbeat.lastMsgTime = Date.now();
-            let msg;
-            try {
-                msg = JSON.parse(event.data);
-            } catch {
-                return;
-            }
-
+        // Only the reply to our reconnect decides whether the saved session is
+        // still usable. Errors later on this socket (e.g. a rate-limit
+        // warning) are ordinary in-game errors and must not end the session.
+        let handshakeDone = false;
+        const abandonSession = (message) => {
+            showMessage(message, 'error');
+            clearActiveSession();
+            hostRoomId = null;
+            hostSessionId = null;
+            hostHeartbeat = stopHeartbeat(hostHeartbeat);
+            hostWs = null;
+            ws.close();
+            document.querySelector('#role-selection').classList.remove('hidden');
+            showView('role-selection');
+        };
+        attachHostSocket(ws, (msg) => {
+            if (handshakeDone) return false;
             if (msg.type === 'room_not_found_try_restore') {
-                // Room expired on server — no quiz state to restore after page reload
-                showMessage('Der Raum ist abgelaufen. Bitte starte ein neues Quiz.', 'error');
-                clearActiveSession();
-                hostRoomId = null;
-                hostSessionId = null;
-                document.querySelector('#role-selection').classList.remove('hidden');
-                showView('role-selection');
-                return;
+                // Room gone on the server, and after a page reload there is no
+                // local quiz state to restore it from.
+                handshakeDone = true;
+                abandonSession('Der Raum ist abgelaufen. Bitte starte ein neues Quiz.');
+                return true;
             }
-
-            if (msg.type === 'error') {
-                showMessage(msg.message, 'error');
-                clearActiveSession();
-                hostRoomId = null;
-                hostSessionId = null;
-                document.querySelector('#role-selection').classList.remove('hidden');
-                showView('role-selection');
-                return;
+            if (
+                msg.type === 'error' &&
+                (msg.code === 'INVALID_SESSION' || msg.code === 'ROOM_NOT_FOUND')
+            ) {
+                handshakeDone = true;
+                abandonSession(msg.message);
+                return true;
             }
-
-            // For host_reconnected: show the QR/waiting view
             if (msg.type === 'host_reconnected') {
+                handshakeDone = true;
                 hostSetup.classList.add('hidden');
                 qrContainer.classList.remove('hidden');
                 roomIdElement.textContent = quizState.roomId;
@@ -2303,22 +2326,48 @@ async function initializeHostFeatures(reconnectInfo) {
                 if (hostViewHeading) hostViewHeading.classList.remove('hidden');
                 startHostLobbyMusic();
             }
-
-            // Delegate to the standard host message handler
-            handleHostMessage(msg);
+            return false;
         });
+        ws.send(
+            JSON.stringify({ type: 'reconnect_host', roomId: hostRoomId, sessionId: hostSessionId })
+        );
+    }
 
-        const attachedHostWs = hostWs;
-        attachedHostWs.addEventListener('close', () => {
-            if (attachedHostWs !== hostWs) return;
-            logger.log('Host WebSocket closed');
-            hostHeartbeat = stopHeartbeat(hostHeartbeat);
-            reconnectHostWs();
-        });
-
-        hostWs.addEventListener('error', (err) => {
-            console.error('Host WebSocket error:', err);
-        });
+    /**
+     * Everything the server needs to stand the room up again after it lost
+     * its memory (restart / deploy): players with scores and "already
+     * answered" flags, the phase, and the final standings once they exist.
+     * An interrupted question is resumed separately (resendActiveQuestion).
+     * @returns {object}
+     */
+    function buildRestorePayload() {
+        const state = hostGlobalQuizState;
+        const players = state
+            ? Object.values(state.players).map((p) => ({
+                  id: p.id,
+                  name: p.name,
+                  avatar: p.avatar || '',
+                  score: p.score,
+                  hasAnswered: state.isQuestionActive && p.hasAnswered === true,
+              }))
+            : [];
+        const serverPhase = state ? state.serverPhase : 'lobby';
+        const payload = {
+            type: 'restore_room',
+            roomId: hostRoomId,
+            sessionId: hostSessionId,
+            players,
+            // A running question comes back via `start_question` + resume.
+            phase: serverPhase === 'question' ? 'result' : serverPhase,
+            questionIndex: state ? state.currentQuestionIndex : 0,
+        };
+        if (state && serverPhase === 'final') {
+            const q = state.shuffledQuestions[state.currentQuestionIndex];
+            payload.leaderboard = getLeaderboardData().map(({ name, score }) => ({ name, score }));
+            payload.correct = q && Array.isArray(q.shuffledCorrect) ? q.shuffledCorrect : [];
+            payload.finalRevealed = !!state.finalRevealed;
+        }
+        return payload;
     }
 
     /**
@@ -2354,15 +2403,18 @@ async function initializeHostFeatures(reconnectInfo) {
             setTimeout(reconnectHostWs, delay);
             return;
         }
-        hostWs = ws;
         logger.log('Host WebSocket reconnected');
-        hostHeartbeat = stopHeartbeat(hostHeartbeat);
-        hostHeartbeat = startHeartbeat(ws);
         // Clear the in-flight guard before sending and before wiring up
         // listeners. If `ws.send` throws or a synchronous close event fires
         // mid-setup, the close handler's reconnectHostWs() call would
         // otherwise early-return on the still-true guard and we'd stall.
         hostReconnecting = false;
+        attachHostSocket(ws, (msg) => {
+            if (msg.type !== 'room_not_found_try_restore') return false;
+            logger.log('Room needs restoration. Sending state...');
+            ws.send(JSON.stringify(buildRestorePayload()));
+            return true;
+        });
         // Counter resets in the 'host_reconnected' / 'room_created' message
         // handler — only after the server actually acknowledges us, so a
         // socket that opens then immediately closes doesn't zero the counter.
@@ -2373,54 +2425,6 @@ async function initializeHostFeatures(reconnectInfo) {
                 sessionId: hostSessionId,
             })
         );
-
-        ws.addEventListener('message', (event) => {
-            if (hostHeartbeat) hostHeartbeat.lastMsgTime = Date.now();
-            let msg;
-            try {
-                msg = JSON.parse(event.data);
-            } catch {
-                return;
-            }
-
-            if (msg.type === 'room_not_found_try_restore') {
-                logger.log('Room needs restoration. Sending state...');
-                const playersToRestore = [];
-                if (hostGlobalQuizState && hostGlobalQuizState.players) {
-                    for (const p of Object.values(hostGlobalQuizState.players)) {
-                        playersToRestore.push({
-                            id: p.id,
-                            name: p.name,
-                            score: p.score,
-                        });
-                    }
-                }
-
-                ws.send(
-                    JSON.stringify({
-                        type: 'restore_room',
-                        roomId: hostRoomId,
-                        sessionId: hostSessionId,
-                        players: playersToRestore,
-                    })
-                );
-                return;
-            }
-
-            handleHostMessage(msg);
-        });
-
-        ws.addEventListener('close', () => {
-            // Stale-close guard: ignore if we've already replaced this ws.
-            if (ws !== hostWs) return;
-            logger.log('Host WebSocket closed');
-            hostHeartbeat = stopHeartbeat(hostHeartbeat);
-            reconnectHostWs();
-        });
-
-        ws.addEventListener('error', (err) => {
-            console.error('Host WebSocket error:', err);
-        });
     };
 
     /**
@@ -2440,9 +2444,9 @@ async function initializeHostFeatures(reconnectInfo) {
         quizState.answersReceived++;
         // Use server-measured elapsed time for fair scoring (immune to client clock manipulation)
         const timeTaken =
-            msg.elapsedMs === null || msg.elapsedMs === undefined
-                ? (Date.now() - hostQuestionStartTime) / 1000
-                : msg.elapsedMs / 1000;
+            typeof msg.elapsedMs === 'number'
+                ? msg.elapsedMs / 1000 + (quizState.questionTimeOffsetSec || 0)
+                : (Date.now() - hostQuestionStartTime) / 1000;
         p.answerTime = timeTaken;
         p.currentAnswer = msg.answerData;
         answersCount.textContent = quizState.answersReceived.toString();
@@ -2595,6 +2599,8 @@ async function initializeHostFeatures(reconnectInfo) {
         playerCountElement.textContent = connectedCount.toString();
         totalPlayers.textContent = connectedCount.toString();
 
+        // Names can only be replaced before the first question.
+        const canRename = quizState.serverPhase === 'lobby' && !quizState.isQuestionActive;
         playersList.innerHTML = '';
         for (const p of allPlayers) {
             const i = document.createElement('div');
@@ -2605,6 +2611,19 @@ async function initializeHostFeatures(reconnectInfo) {
                 : '';
             const offlineSuffix = p.isConnected === false ? ' (getrennt)' : '';
             i.innerHTML = `${avatarHtml}<span class="player-name">${sanitizeHTML(p.name)}${sanitizeHTML(offlineSuffix)}</span>`;
+            if (canRename) {
+                const renameBtn = document.createElement('button');
+                renameBtn.type = 'button';
+                renameBtn.className = 'player-rename-btn';
+                renameBtn.textContent = '🎲';
+                renameBtn.title = 'Namen durch einen Zufallsnamen ersetzen';
+                renameBtn.setAttribute(
+                    'aria-label',
+                    `Namen von ${p.name} durch einen Zufallsnamen ersetzen`
+                );
+                renameBtn.addEventListener('click', () => censorPlayerName(p.id));
+                i.append(renameBtn);
+            }
             playersList.append(i);
         }
 
@@ -2615,6 +2634,33 @@ async function initializeHostFeatures(reconnectInfo) {
         // unable to click. The click handler still guards against actually
         // starting with 0 connected.
         startQuestionsBtn.classList.toggle('hidden', allPlayers.length === 0);
+    }
+
+    /**
+     * Replace a player's name with a random one (host censoring, lobby only).
+     * The server pushes the new name to the player, who cannot change it back.
+     * @param {string} sessionId
+     */
+    async function censorPlayerName(sessionId) {
+        const player = quizState.players[sessionId];
+        if (!player) return;
+        const ok = await uiConfirm(
+            `„${player.name}“ durch einen Zufallsnamen ersetzen?\n\nDer Name kann danach nicht mehr zurückgeändert werden.`,
+            { confirmText: 'Ersetzen' }
+        );
+        if (!ok) return;
+        if (!hostWs || hostWs.readyState !== WebSocket.OPEN) {
+            showMessage('Keine Verbindung zum Server.', 'error');
+            return;
+        }
+        const taken = new Set(getNonHostPlayers().map((p) => p.name));
+        hostWs.send(
+            JSON.stringify({
+                type: 'rename_player',
+                sessionId,
+                name: generateRandomPlayerName(taken),
+            })
+        );
     }
 
     /**
@@ -2663,6 +2709,13 @@ async function initializeHostFeatures(reconnectInfo) {
         return joinUrl; // Return the URL for QR code generation
     }
 
+    /** Hides the between-rounds buttons (next / last / final results). */
+    function hideRoundButtons() {
+        showNextBtn.classList.add('hidden');
+        showLastBtn.classList.add('hidden');
+        showResultsBtn.classList.add('hidden');
+    }
+
     /**
      * Starts a new question round on the host side.
      */
@@ -2675,6 +2728,7 @@ async function initializeHostFeatures(reconnectInfo) {
         const currentQuestion = quizState.shuffledQuestions[quizState.currentQuestionIndex];
         quizState.answersReceived = 0;
         quizState.isQuestionActive = true;
+        quizState.questionTimeOffsetSec = 0;
         // A grace timer from the prior round must not bleed into this one.
         if (hostDisconnectGraceTimeout) {
             clearTimeout(hostDisconnectGraceTimeout);
@@ -2795,20 +2849,54 @@ async function initializeHostFeatures(reconnectInfo) {
     }
 
     /**
-     * Sends question data to all connected players via WebSocket server.
-     * @param {object} question - The question object to send (contains shuffled options and correct indices).
+     * The `start_question` frame for the current question.
+     * @param {object} question - The question object (with shuffled options).
+     * @returns {object}
      */
-    async function sendQuestionToPlayers(question) {
-        const questionPayload = {
+    function buildQuestionPayload(question) {
+        return {
             type: 'start_question',
             question: question.question,
             options: question.shuffledOptions,
             index: quizState.currentQuestionIndex,
             total: quizState.shuffledQuestions.length,
-            startTime: hostQuestionStartTime,
             duration: quizState.questionDurations[quizState.currentQuestionIndex],
             doublePoints: isDoublePointsRound(quizState.currentQuestionIndex),
         };
+    }
+
+    /**
+     * Re-send the running question after a reconnect, with only the time
+     * that is actually left on the host's clock. `resume` tells a restored
+     * server to keep the "already answered" flags it got from restore_room.
+     * @param {boolean} resume
+     */
+    function resendActiveQuestion(resume) {
+        const question = quizState.shuffledQuestions[quizState.currentQuestionIndex];
+        if (!question || !hostWs || hostWs.readyState !== WebSocket.OPEN) return;
+        const totalSec = quizState.questionDurations[quizState.currentQuestionIndex];
+        const elapsedSec = hostQuestionStartTime ? (Date.now() - hostQuestionStartTime) / 1000 : 0;
+        const remainingSec = totalSec - elapsedSec;
+        // The host timer is about to close the round anyway.
+        if (remainingSec < 1) return;
+        quizState.questionTimeOffsetSec = elapsedSec;
+        hostWs.send(
+            JSON.stringify({
+                ...buildQuestionPayload(question),
+                duration: Math.ceil(remainingSec),
+                resume,
+            })
+        );
+    }
+
+    /**
+     * Sends question data to all connected players via WebSocket server.
+     * @param {object} question - The question object to send (contains shuffled options and correct indices).
+     */
+    async function sendQuestionToPlayers(question) {
+        const questionPayload = buildQuestionPayload(question);
+        quizState.serverPhase = 'question';
+        refreshPlayerDisplay();
 
         if (!hostWs || hostWs.readyState !== WebSocket.OPEN) {
             showMessage(
@@ -3055,8 +3143,6 @@ async function initializeHostFeatures(reconnectInfo) {
      * Sends results of the current question to all players via WebSocket server.
      */
     async function sendResultsToPlayers() {
-        if (!hostWs || hostWs.readyState !== WebSocket.OPEN) return;
-
         const currentQ = quizState.shuffledQuestions[quizState.currentQuestionIndex];
         const isFinalQ =
             quizState.endRequested ||
@@ -3070,17 +3156,21 @@ async function initializeHostFeatures(reconnectInfo) {
             playerScores[p.id] = p.score;
         }
 
-        hostWs.send(
-            JSON.stringify({
-                type: 'send_results',
-                correct: currentQ.shuffledCorrect,
-                isFinal: isFinalQ,
-                // options: currentQ.shuffledOptions, // Removed: Players use local copy
-                leaderboard: leaderboardData,
-                playerScores: playerScores,
-            })
-        );
-        // logger.log('Results sent via WebSocket');
+        const resultsPayload = {
+            type: 'send_results',
+            correct: currentQ.shuffledCorrect,
+            isFinal: isFinalQ,
+            leaderboard: leaderboardData,
+            playerScores: playerScores,
+        };
+        quizState.serverPhase = isFinalQ ? 'final' : 'result';
+        if (!hostWs || hostWs.readyState !== WebSocket.OPEN) {
+            // Delivered on reconnect; otherwise players would sit on the
+            // question screen until the next round.
+            hostPendingResults = resultsPayload;
+            return;
+        }
+        hostWs.send(JSON.stringify(resultsPayload));
     }
 
     /**
@@ -3140,6 +3230,7 @@ async function initializeHostFeatures(reconnectInfo) {
 
         displayLeaderboard(true); // animated podium reveal + confetti + applause
         flyInElement(hostResults);
+        quizState.finalRevealed = true;
 
         // Unveil the ranking on the players' phones in sync with the podium.
         // The final standings were already sent (withheld client-side) with the
@@ -3238,7 +3329,6 @@ async function initializeHostFeatures(reconnectInfo) {
 
         // Staged reveal: 3rd → 2nd → 1st, climaxing on the winner with the
         // ovation + confetti, then the rest of the field slides in.
-        const reveal = (el) => el && el.classList.remove('podium-pending');
         const schedule = (fn, delay) => podiumRevealTimers.push(setTimeout(fn, delay));
         const BASE = 250;
         const STEP = 700;
@@ -3248,7 +3338,7 @@ async function initializeHostFeatures(reconnectInfo) {
             const delay = BASE + i * STEP;
             if (rankIdx === 0) winnerDelay = delay;
             schedule(() => {
-                reveal(placeEls[rankIdx]);
+                revealPodiumElement(placeEls[rankIdx]);
                 // Applause on every podium step — a fresh burst from the
                 // universal `audio/final.opus` (theme-agnostic ovation) timed to
                 // each reveal of 3rd → 2nd → 1st. Re-firing restarts the clip,
@@ -3259,7 +3349,7 @@ async function initializeHostFeatures(reconnectInfo) {
             }, delay);
         }
         schedule(() => triggerConfetti(winnerAvatar), winnerDelay + 500);
-        if (restList) schedule(() => reveal(restList), winnerDelay + 750);
+        if (restList) schedule(() => revealPodiumElement(restList), winnerDelay + 750);
     }
 }
 
@@ -3848,14 +3938,22 @@ function initializePlayerFeatures(reconnectInfo) {
 
         joinBtn.addEventListener('click', async () => {
             const roomCode = roomCodeInput.value.trim().replaceAll(/\s/g, ''); // Remove spaces
-            const playerName = playerNameInput.value.trim();
-            // Use a default name if player doesn't provide one
-            const finalPlayerName = playerName || 'Spieler ' + generateAlphanumericId(4);
+            const typedName = playerNameInput.value.trim();
+            const playerName = sanitizePlayerName(typedName);
 
             if (!roomCode) {
                 showMessage('Bitte gib einen Raum-Code ein.', 'error');
                 return;
             }
+            if (typedName && !playerName) {
+                showMessage(
+                    'Bitte gib einen Namen aus Buchstaben oder Ziffern ein – Emojis gehen nur als Avatar.',
+                    'error'
+                );
+                return;
+            }
+            // Use a default name if player doesn't provide one
+            const finalPlayerName = playerName || 'Spieler ' + generateAlphanumericId(4);
             initPlayerConnection(roomCode, finalPlayerName);
         });
 
@@ -3974,6 +4072,10 @@ function initializePlayerFeatures(reconnectInfo) {
         waitingMessage.textContent = `Verbinde mit Raum ${playerRoomId}...`;
         enterLobbyUI();
 
+        // Join retries while a restarted server waits for the host to restore
+        // the room (see the ROOM_NOT_FOUND branch below).
+        let roomWaitRetries = 0;
+
         /**
          * Forward a WebSocket 'message' event to the parsing/dispatch helpers.
          * Top-level (relative to initPlayerConnection) so the inline callback in
@@ -3981,7 +4083,11 @@ function initializePlayerFeatures(reconnectInfo) {
          * @param {MessageEvent} event
          */
         function onPlayerWsMessage(event) {
-            if (playerHeartbeat) playerHeartbeat.lastMsgTime = Date.now();
+            // Credit liveness to the receiving socket; ignore frames still
+            // arriving on a socket that has already been replaced.
+            const socket = event.currentTarget;
+            markAlive(socket);
+            if (socket !== playerWs) return;
             handlePlayerMessage(event.data);
         }
 
@@ -4010,6 +4116,7 @@ function initializePlayerFeatures(reconnectInfo) {
                 case 'joined': {
                     playerCurrentId = msg.sessionId;
                     playerScore = msg.score || 0;
+                    roomWaitRetries = 0;
                     // Server has accepted us — safe to reset the reconnect
                     // budget. Doing this here (rather than on TCP open) means
                     // a socket that opens but immediately closes won't zero
@@ -4120,7 +4227,17 @@ function initializePlayerFeatures(reconnectInfo) {
                 }
 
                 case 'result': {
+                    // A replay (final standings sent on reconnect) has no
+                    // question to be stale against: after a reload the local
+                    // index is back at -1, which used to discard it and leave
+                    // the player stuck on "Quiz läuft".
+                    if (msg.isReplay) {
+                        playerScore = msg.playerScore || playerScore;
+                        displayFinalResult(msg);
+                        break;
+                    }
                     if (
+                        playerCurrentQuestionIndex !== -1 &&
                         msg.questionIndex !== undefined &&
                         msg.questionIndex !== playerCurrentQuestionIndex
                     ) {
@@ -4154,14 +4271,69 @@ function initializePlayerFeatures(reconnectInfo) {
                     break;
                 }
 
+                case 'name_changed': {
+                    if (typeof msg.name !== 'string' || !msg.name) break;
+                    pName = msg.name;
+                    savePlayerSession(roomCode, playerCurrentId, pName);
+                    saveActiveSession('player', roomCode, playerCurrentId, pName);
+                    if (lobbyWelcomeTitle) lobbyWelcomeTitle.textContent = `Willkommen, ${pName}!`;
+                    showMessage(`Die Lehrkraft hat deinen Namen geändert: ${pName}`, 'info');
+                    break;
+                }
+
+                case 'server_restarting': {
+                    waitingMessage.textContent = 'Server startet neu – gleich geht es weiter …';
+                    break;
+                }
+
                 case 'error': {
-                    showMessage(msg.message, 'error');
-                    resetPlayerStateAndUI();
-                    document.querySelector('#role-selection').classList.remove('hidden');
-                    showView('role-selection');
+                    handlePlayerError(msg);
                     break;
                 }
             }
+        }
+
+        /**
+         * Only join failures end the session. Everything else (a rate-limit
+         * warning, a late answer) is a toast — it used to reset the player
+         * to the start screen.
+         * @param {{code?: string, message?: string}} msg
+         */
+        function handlePlayerError(msg) {
+            // A known seat whose room is gone: most likely the server just
+            // restarted and the host has not restored the room yet. Keep
+            // asking for a while instead of throwing the player out.
+            const roomMayComeBack =
+                msg.code === 'ROOM_NOT_FOUND' &&
+                !!playerCurrentId &&
+                roomWaitRetries < ROOM_WAIT_MAX_RETRIES;
+            if (roomMayComeBack) {
+                roomWaitRetries++;
+                waitingMessage.textContent = 'Warte auf den Host – Raum wird wiederhergestellt …';
+                const socket = playerWs;
+                setTimeout(() => {
+                    if (socket !== playerWs || socket.readyState !== WebSocket.OPEN) return;
+                    socket.send(
+                        JSON.stringify({
+                            type: 'join',
+                            roomCode,
+                            playerName: pName,
+                            sessionId: playerCurrentId,
+                            avatar: playerAvatar || '',
+                        })
+                    );
+                }, ROOM_WAIT_RETRY_MS);
+                return;
+            }
+            if (msg.code === 'ROOM_NOT_FOUND' || FATAL_JOIN_CODES.has(msg.code)) {
+                showMessage(msg.message || 'Beitritt nicht möglich.', 'error');
+                resetPlayerStateAndUI();
+                document.querySelector('#role-selection').classList.remove('hidden');
+                showView('role-selection');
+                return;
+            }
+            if (msg.code === 'RATE_LIMITED' || msg.code === 'ALREADY_JOINED') return;
+            showMessage(msg.message || 'Unbekannter Fehler', 'error');
         }
 
         /**
@@ -4229,11 +4401,20 @@ function initializePlayerFeatures(reconnectInfo) {
             );
 
             playerWs.addEventListener('message', onPlayerWsMessage);
-            playerWs.addEventListener('close', () => {
+            playerWs.addEventListener('close', (event) => {
                 // Stale-close guard: ignore if this ws has been replaced.
                 if (ws !== playerWs) return;
                 logger.log('Player WebSocket closed');
                 playerHeartbeat = stopHeartbeat(playerHeartbeat);
+                if (event.code === CLOSE_SESSION_REPLACED) {
+                    // This seat is now open in another tab or device. Don't
+                    // fight over it (and keep the saved session for that tab).
+                    playerSuppressReconnect = true;
+                    waitingMessage.textContent =
+                        'Du spielst jetzt in einem anderen Fenster weiter.';
+                    showMessage('Du spielst jetzt in einem anderen Fenster weiter.', 'info');
+                    return;
+                }
                 if (playerSuppressReconnect) return;
                 if (!playerRoomId || !playerCurrentId) return;
                 announceReconnect();

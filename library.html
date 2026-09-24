@@ -5,7 +5,7 @@
         <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
         <meta
             http-equiv="Content-Security-Policy"
-            content="default-src 'self'; script-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self'; base-uri 'self'; form-action 'self';"
+            content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self'; base-uri 'self'; form-action 'self';"
         />
         <meta name="referrer" content="no-referrer" />
         <meta name="theme-color" content="#2e7d32" />
@@ -15,9 +15,6 @@
             type="image/svg+xml"
             href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='7' fill='%232e7d32'/><rect x='7' y='7' width='4.2' height='17' rx='1' fill='%23fff'/><rect x='12.2' y='9.5' width='4.2' height='14.5' rx='1' fill='%23fff' opacity='.82'/><g transform='rotate(11 21.5 24)'><rect x='18' y='8.5' width='4.2' height='15.5' rx='1' fill='%23fff' opacity='.66'/></g><rect x='5.5' y='24.2' width='21' height='2.4' rx='1.1' fill='%23fff'/><rect x='8' y='11' width='2.2' height='1.4' rx='.6' fill='%232e7d32'/><rect x='13.2' y='13' width='2.2' height='1.4' rx='.6' fill='%232e7d32'/></svg>"
         />
-
-        <link rel="dns-prefetch" href="https://cdnjs.cloudflare.com" />
-        <link rel="preconnect" href="https://cdnjs.cloudflare.com" crossorigin />
 
         <title>Lernkarten-Bibliothek</title>
         <link rel="stylesheet" href="theme.css" />
@@ -84,27 +81,10 @@
             <div id="message-banner" class="message-banner hidden"></div>
         </div>
 
-        <script
-            defer
-            src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"
-            integrity="sha512-XMVd28F1oH/O71fzwBnV7HucLxVwtxf26XV8P4wPk26EDxuGZ91N8bsOttmnomcCD3CS5ZMRL50H0GgOHvegtg=="
-            crossorigin="anonymous"
-            referrerpolicy="no-referrer"
-        ></script>
-        <script
-            defer
-            src="https://cdnjs.cloudflare.com/ajax/libs/marked/16.3.0/lib/marked.umd.min.js"
-            integrity="sha512-V6rGY7jjOEUc7q5Ews8mMlretz1Vn2wLdMW/qgABLWunzsLfluM0FwHuGjGQ1lc8jO5vGpGIGFE+rTzB+63HdA=="
-            crossorigin="anonymous"
-            referrerpolicy="no-referrer"
-        ></script>
-        <script
-            defer
-            src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.2.7/purify.min.js"
-            integrity="sha512-78KH17QLT5e55GJqP76vutp1D2iAoy06WcYBXB6iBCsmO6wWzx0Qdg8EDpm8mKXv68BcvHOyeeP4wxAL0twJGQ=="
-            crossorigin="anonymous"
-            referrerpolicy="no-referrer"
-        ></script>
+        <!-- Self-hosted (vendor/README.md): offline-capable, no CDN requests. -->
+        <script defer src="vendor/jszip-3.10.1.min.js"></script>
+        <script defer src="vendor/marked-16.3.0.umd.min.js"></script>
+        <script defer src="vendor/purify-3.2.7.min.js"></script>
         <script defer src="library.js"></script>
 
         <script>
