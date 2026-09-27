@@ -3050,7 +3050,7 @@ function renderMatchingPairs() {
         matchingUnpairedLeftCol.append(el);
     }
 
-    // Populate unpaired right column (in multi mode tiles persist for re-use)
+    // Populate unpaired right column (a column with reusable items keeps its tiles)
     for (const rIdx of unpairedRightOrder) {
         const el = rightItemEls[rIdx];
         el.className = 'matching-item';
@@ -3098,12 +3098,12 @@ function renderMatchingPairs() {
         }
     }
 
-    // In multi-card mode the unpaired section always stays visible
-    const hasUnpaired = isMultiCard
-        ? true
-        : unpairedLeftOrder.length > 0 || unpairedRightOrder.length > 0;
+    // The columns stay while another pair can still be made — i.e. both have a
+    // tile. Once one is used up (all statements placed, or only distractors
+    // left), the leftovers would just be clutter; unlinking brings them back.
+    const canPairMore = unpairedLeftOrder.length > 0 && unpairedRightOrder.length > 0;
     if (matchingUnpairedSection) {
-        matchingUnpairedSection.classList.toggle('hidden', !hasUnpaired);
+        matchingUnpairedSection.classList.toggle('hidden', !canPairMore);
     }
 
     if (matchingProgressEl) {
@@ -3131,45 +3131,24 @@ function createPair(leftIndex, shuffledRightIndex) {
         return;
     }
 
-    if (!isMultiCard) {
-        // Standard mode: enforce 1:1 capacity
-        let rightPairings = 0;
-        for (const [, r] of matchingPairs) {
-            if (r === shuffledRightIndex) rightPairings++;
-        }
-        if (rightPairings >= Math.max(rightRequiredCount[shuffledRightIndex] ?? 1, 1)) {
-            rejectPairing();
-            return;
-        }
-
-        let leftPairings = 0;
-        for (const [l] of matchingPairs) {
-            if (l === leftIndex) leftPairings++;
-        }
-        if (leftPairings >= Math.max(leftRequiredCount[leftIndex] ?? 1, 1)) {
-            rejectPairing();
-            return;
-        }
+    // Each column decides on its own. Where every item is used at most once,
+    // a paired tile leaves the column (that reveals nothing). A column with
+    // reusable items keeps all its tiles, so it doesn't give away which ones
+    // take more than one partner. (A 1:1 card: both columns are single-use.)
+    if (!isMultiRight && matchingPairs.some(([, r]) => r === shuffledRightIndex)) {
+        rejectPairing();
+        return;
+    }
+    if (!isMultiLeft && matchingPairs.some(([l]) => l === leftIndex)) {
+        rejectPairing();
+        return;
     }
 
     matchingPairs.push([leftIndex, shuffledRightIndex]);
 
-    if (!isMultiCard) {
-        // Standard mode: remove items from columns once paired
-        let leftPairings = 0;
-        for (const [l] of matchingPairs) {
-            if (l === leftIndex) leftPairings++;
-        }
-        if (leftPairings >= Math.max(leftRequiredCount[leftIndex] ?? 1, 1)) {
-            unpairedLeftOrder = unpairedLeftOrder.filter((i) => i !== leftIndex);
-        }
-        let rightPairings = 0;
-        for (const [, r] of matchingPairs) {
-            if (r === shuffledRightIndex) rightPairings++;
-        }
-        if (rightPairings >= Math.max(rightRequiredCount[shuffledRightIndex] ?? 1, 1)) {
-            unpairedRightOrder = unpairedRightOrder.filter((k) => k !== shuffledRightIndex);
-        }
+    if (!isMultiLeft) unpairedLeftOrder = unpairedLeftOrder.filter((i) => i !== leftIndex);
+    if (!isMultiRight) {
+        unpairedRightOrder = unpairedRightOrder.filter((k) => k !== shuffledRightIndex);
     }
 
     selectedLeftIndex = null;
@@ -3203,13 +3182,13 @@ function unlinkPair(leftIndex, rightIndex) {
     matchingPairs = matchingPairs.filter(([l, r]) => !(l === leftIndex && r === rightIndex));
     if (matchingPairs.length === prevLength) return;
 
-    // Re-add removed items at their original column position (standard non-multi
-    // mode) — index order is the initial display order for both columns.
-    if (!isMultiCard && !unpairedLeftOrder.includes(leftIndex)) {
+    // Re-add a single-use column's tile at its original position — index order
+    // is the initial display order for both columns.
+    if (!isMultiLeft && !unpairedLeftOrder.includes(leftIndex)) {
         unpairedLeftOrder.push(leftIndex);
         unpairedLeftOrder.sort((a, b) => a - b);
     }
-    if (!isMultiCard && !unpairedRightOrder.includes(rightIndex)) {
+    if (!isMultiRight && !unpairedRightOrder.includes(rightIndex)) {
         unpairedRightOrder.push(rightIndex);
         unpairedRightOrder.sort((a, b) => a - b);
     }
@@ -3833,12 +3812,15 @@ function updateCardContent(card) {
         // Build matching UI skeleton
         matchingContainer.innerHTML = '';
 
-        // For multi-card mode: show a small hint so the student knows items can be reused
+        // For multi-card mode: say which column's tiles stay for re-use, so a
+        // term that doesn't disappear after pairing isn't mistaken for a bug.
         if (isMultiCard) {
             const hint = document.createElement('div');
             hint.className = 'matching-multi-hint';
-            hint.textContent =
-                'Hinweis: Einige Begriffe und/oder Zuordnungen können mehrfach vergeben werden.';
+            let reusable = 'Begriffe und Zuordnungen';
+            if (!isMultiRight) reusable = 'Begriffe';
+            else if (!isMultiLeft) reusable = 'Zuordnungen';
+            hint.textContent = `Hinweis: Einige ${reusable} können mehrfach vergeben werden.`;
             matchingContainer.append(hint);
         }
 

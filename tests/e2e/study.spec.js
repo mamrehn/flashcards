@@ -188,6 +188,60 @@ test('a library import shows up as imported and stays selected after a reload', 
     await expect(page.locator('.status-pill')).toHaveCount(0);
 });
 
+test('matching: a used statement leaves its column, a reusable term stays', async ({
+    device,
+}, testInfo) => {
+    const deck = testInfo.outputPath('one-matching.json');
+    fs.writeFileSync(
+        deck,
+        JSON.stringify({
+            cards: [
+                {
+                    question: 'Ordne die Adresstypen ihren Eigenschaften zu.',
+                    pairs: [
+                        { left: 'MAC', right: '48 Bit' },
+                        { left: 'MAC', right: 'OUI + Gerät' },
+                        { left: 'IPv4', right: '32 Bit' },
+                    ],
+                },
+            ],
+        })
+    );
+    const page = await device('cards', STATIC);
+    await page.goto('/cards.html');
+    await page.setInputFiles('#file-input', deck);
+
+    const tile = (col, text) =>
+        page.locator(`#matching-${col}-col .matching-item`, {
+            hasText: new RegExp(`^${text}$`),
+        });
+    await expect(page.locator('.matching-multi-hint')).toHaveText(
+        'Hinweis: Einige Begriffe können mehrfach vergeben werden.'
+    );
+
+    // Every statement belongs to exactly one term: once paired, it's gone.
+    await tile('left', 'IPv4').click();
+    await tile('right', '32 Bit').click();
+    await expect(tile('right', '32 Bit')).toHaveCount(0);
+    // Terms stay, so the column doesn't reveal which one takes more partners.
+    await expect(tile('left', 'IPv4')).toHaveCount(1);
+    await tile('left', 'MAC').click();
+    await tile('right', '48 Bit').click();
+    await expect(tile('right', '48 Bit')).toHaveCount(0);
+    await expect(tile('left', 'MAC')).toHaveCount(1);
+    await expect(page.locator('#matching-progress')).toHaveText('2 von 3 Zuordnungen');
+
+    // All statements placed: nothing left to pair, so the columns go.
+    await tile('left', 'MAC').click();
+    await tile('right', 'OUI \\+ Gerät').click();
+    await expect(page.locator('.matching-unpaired-section')).toBeHidden();
+
+    // Unlinking puts the statement back (and with it the columns).
+    await page.locator('.matching-unlink-btn[aria-label*="32 Bit"]').click();
+    await expect(tile('right', '32 Bit')).toHaveCount(1);
+    await expect(page.locator('.matching-unpaired-section')).toBeVisible();
+});
+
 test('multiple choice: tapping the option text toggles it exactly once', async ({
     device,
 }, testInfo) => {
