@@ -3454,10 +3454,14 @@ async function initializeHostFeatures(reconnectInfo) {
         if (!staged) return; // static render: all visible, no fx
 
         // Staged reveal: 3rd → 2nd → 1st, climaxing on the winner with the
-        // ovation + confetti, then the rest of the field slides in.
+        // ovation, then the confetti once the winner has popped in (one show,
+        // not two on top of each other), then — after the cannons have peaked —
+        // the rest of the field slides in.
         const schedule = (fn, delay) => podiumRevealTimers.push(setTimeout(fn, delay));
         const BASE = 250;
         const STEP = 700;
+        const WINNER_POP_MS = 620; // quiz.css: podium-winner-pop
+        const CANNON_PEAK_MS = 1000;
         const revealOrder = [2, 1, 0].filter((r) => placeEls[r]);
         let winnerDelay = BASE;
         for (const [i, rankIdx] of revealOrder.entries()) {
@@ -3470,12 +3474,12 @@ async function initializeHostFeatures(reconnectInfo) {
                 // each reveal of 3rd → 2nd → 1st. Re-firing restarts the clip,
                 // so each place gets its own clap, building to the winner.
                 if (hostMusicEngine) hostMusicEngine.playStinger('final');
-                // Confetti stays on the winner alone, for the climax.
-                if (rankIdx === 0) triggerConfetti(winnerAvatar, 'grand');
             }, delay);
         }
-        schedule(() => triggerConfetti(winnerAvatar, 'grand'), winnerDelay + 500);
-        if (restList) schedule(() => revealPodiumElement(restList), winnerDelay + 750);
+        // Confetti stays on the winner alone, for the climax.
+        const confettiAt = winnerDelay + WINNER_POP_MS;
+        schedule(() => triggerConfetti(winnerAvatar, 'grand'), confettiAt);
+        if (restList) schedule(() => revealPodiumElement(restList), confettiAt + CANNON_PEAK_MS);
     }
 }
 
@@ -4614,9 +4618,10 @@ function initializePlayerFeatures(reconnectInfo) {
      */
     function displayQuestion(qData) {
         // The new question gets the stage to itself: nothing from the last
-        // result may still be flying.
+        // result may still be flying. A clean cut rather than a fade — the
+        // question is timed, so it can't wait for one.
         clearTimeout(resultCelebrationTimer);
-        globalThis.confetti?.clear(150);
+        globalThis.confetti?.clear(1);
         for (const el of document.querySelectorAll('.confetti-avatar')) el.remove();
         waitingRoom.classList.add('hidden');
         playerResultView.classList.add('hidden');

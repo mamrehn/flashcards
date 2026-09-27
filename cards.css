@@ -2856,7 +2856,7 @@ details[open] > .explanation-summary::after,
 }
 
 .keyboard-hints-toggle.pulse {
-    animation: hintsPulse 1.5s ease-in-out 3;
+    animation: hintsPulse 1.5s ease-in-out 2;
 }
 
 @keyframes hintsPulse {

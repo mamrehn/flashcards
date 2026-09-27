@@ -2763,24 +2763,13 @@ function initializeQuiz(loadedCards) {
     document.querySelector('#file-input-container').style.display = 'none';
     appContent.classList.remove('hidden');
 
-    // First session with keyboard and mouse: point at the shortcuts once.
+    // First session with keyboard and mouse: point at the shortcuts once — not
+    // now, while the first question comes in, but on the first calm answer side
+    // (see showAnswer).
     const hasFinePointer = Boolean(
         globalThis.matchMedia?.('(hover: hover) and (pointer: fine)').matches
     );
-    // Only the small toggle pulses, in the periphery; opening the panel would
-    // cover the first question.
-    if (hasFinePointer && !localStorage.getItem('keyboardHintsShown')) {
-        const hintsToggle = document.querySelector('.keyboard-hints-toggle');
-        persistToStorage('keyboardHintsShown', '1');
-        if (hintsToggle) {
-            hintsToggle.classList.add('pulse');
-            hintsToggle.addEventListener(
-                'animationend',
-                () => hintsToggle.classList.remove('pulse'),
-                { once: true }
-            );
-        }
-    }
+    keyboardHintDue = hasFinePointer && !localStorage.getItem('keyboardHintsShown');
 
     // Update UI
     updateStatistics();
@@ -4456,6 +4445,12 @@ function showAnswer() {
     }
     nextCardBtn.setAttribute('tabindex', '0');
 
+    // The shortcuts pay off here (Enter, 1–4), so this is where they're pointed
+    // at — after the turn, and not on a card that's being celebrated.
+    if (keyboardHintDue && answeredCards[currentCardIndex] !== 1) {
+        afterCardMoves(pulseKeyboardHint);
+    }
+
     // Focus the first actionable control after flip animation
     setTimeout(() => {
         if (nextCardBtn.style.display !== 'none') {
@@ -4690,10 +4685,31 @@ function afterCardMoves(fn) {
     );
 }
 
+/** First session with a keyboard: the ⌨ toggle still has to be pointed at. */
+let keyboardHintDue = false;
+
+/** Two pulses on the small ⌨ toggle, in the periphery (opening the panel would cover the card). */
+function pulseKeyboardHint() {
+    const hintsToggle = document.querySelector('.keyboard-hints-toggle');
+    keyboardHintDue = false;
+    persistToStorage('keyboardHintsShown', '1');
+    if (!hintsToggle) return;
+    hintsToggle.classList.add('pulse');
+    hintsToggle.addEventListener('animationend', () => hintsToggle.classList.remove('pulse'), {
+        once: true,
+    });
+}
+
+/** End a running hint pulse early. */
+function stopKeyboardHint() {
+    document.querySelector('.keyboard-hints-toggle')?.classList.remove('pulse');
+}
+
 /** Abort the current pacing sequence (undo, restart, leaving the session). */
 function cancelPending() {
     for (const id of pendingTimers) clearTimeout(id);
     pendingTimers = [];
+    stopKeyboardHint(); // a hint pulse belongs to the card it started on
     advanceToken++;
     advancing = false;
 }
@@ -5455,6 +5471,7 @@ function undoLastAnswer() {
 function triggerConfetti(intensity = 'pop', origin = null) {
     const engine = globalThis.confetti;
     if (!engine) return;
+    stopKeyboardHint(); // the celebration gets the stage to itself
     if (intensity === 'pop') engine.pop(origin || celebrationOrigin());
     else engine[intensity]();
 }
