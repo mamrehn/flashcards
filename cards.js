@@ -237,7 +237,6 @@ let appTitle;
 let appSubtitle;
 let questionText;
 let questionBack;
-let sourceDeckDisplay;
 let answerText;
 let userAnswerInput;
 let userAnswerContainer;
@@ -291,8 +290,9 @@ let identifyMediaEl;
 let identifyChoicesEl;
 let identifyResultContainer;
 let answerVerdictEl;
-let explanationToggle;
-let cardEyebrows;
+let mcExplanationsToggle;
+let calibrationCueEl;
+let sessionNoteEl;
 let feedbackProgressBtn;
 let bookViewImportLink;
 let matchingPairedSection = null;
@@ -324,7 +324,6 @@ function initializeApp() {
     appSubtitle = document.querySelector('#app-subtitle');
     questionText = document.querySelector('#question-text');
     questionBack = document.querySelector('#question-back');
-    sourceDeckDisplay = document.querySelector('#source-deck-display');
     answerText = document.querySelector('#answer-text');
     userAnswerInput = document.querySelector('#user-answer-input');
     userAnswerContainer = document.querySelector('#user-answer-container');
@@ -378,8 +377,9 @@ function initializeApp() {
     identifyChoicesEl = document.querySelector('#identify-choices');
     identifyResultContainer = document.querySelector('#identify-result-container');
     answerVerdictEl = document.querySelector('#answer-verdict');
-    explanationToggle = document.querySelector('.explanation-toggle');
-    cardEyebrows = document.querySelectorAll('.card-eyebrow');
+    mcExplanationsToggle = document.querySelector('#mc-explanations-toggle');
+    calibrationCueEl = document.querySelector('#calibration-cue');
+    sessionNoteEl = document.querySelector('#session-note');
     feedbackProgressBtn = document.querySelector('#feedback-progress-btn');
     bookViewImportLink = document.querySelector('#book-view-import');
     matchingContainer.addEventListener('keydown', (e) => {
@@ -398,13 +398,22 @@ function initializeApp() {
     // showAnswer itself ignores repeats while the card is already flipped.
     showAnswerBtn.addEventListener('click', showAnswer);
     // Graded self-rating (text cards): the rating IS the "continue" action —
-    // grade and advance in one click (no separate "Nächste"). The student has
-    // already read the answer on the back before choosing a rating.
+    // the student has already read the answer on the back. Closure first: the
+    // chosen rating stays marked for a beat (a full score gets its confetti
+    // from the button), then the next card comes in.
     recallRating.addEventListener('click', (e) => {
         const btn = e.target.closest('.recall-rating-btn');
         if (!btn || isAnswered) return;
-        markAnswer(Number(btn.dataset.score));
-        showNextCard();
+        const score = Number(btn.dataset.score);
+        markAnswer(score, { fromRating: true });
+        recallRating.classList.add('decided');
+        btn.classList.add('chosen');
+        if (score >= 0.999) {
+            triggerConfetti('pop', btn);
+            later(showNextCard, CLOSURE_MS);
+        } else {
+            later(showNextCard, STAMP_MS);
+        }
     });
     nextCardBtn.addEventListener('click', showNextCard);
     restartBtn.addEventListener('click', throttle(restartQuiz, 500));
@@ -479,8 +488,14 @@ function initializeApp() {
     // Drop zone drag-and-drop
     setupDropZone();
 
-    // Explanation disclosure (a real <button>, so Enter/Space work natively)
-    explanationToggle.addEventListener('click', () => toggleTextExplanation());
+    // Explanations are opt-in: text cards use a native <details> (toggles by
+    // itself); multiple choice has one toggle for all option explanations.
+    // Both labels say what the next tap does.
+    textExplanationContainer.addEventListener('toggle', () => {
+        textExplanationContainer.querySelector('.explanation-label').textContent =
+            textExplanationContainer.open ? 'Erklärung ausblenden' : 'Erklärung anzeigen';
+    });
+    mcExplanationsToggle.addEventListener('click', () => toggleMcExplanations());
 
     // Add Enter key support for answer submission
     userAnswerInput.addEventListener('keydown', (e) => {
@@ -717,8 +732,7 @@ function handleCardBackKeys(e) {
     }
 
     // Graded self-rating (text cards): keys 1-4 grade, arrows move focus.
-    // Only active while the rating group is visible — for MC cards it stays
-    // hidden, so the 1-9 option-tooltip shortcut below keeps working.
+    // Only active while the rating group is visible (MC cards are auto-scored).
     if (!recallRating.classList.contains('hidden')) {
         const ratingBtns = [...recallRating.querySelectorAll('.recall-rating-btn')];
         const num = Number.parseInt(e.key);
@@ -738,10 +752,15 @@ function handleCardBackKeys(e) {
         }
     }
 
-    // E: toggle explanation (text answers)
-    if (e.key === 'e' && !textExplanationContainer.classList.contains('hidden')) {
-        e.preventDefault();
-        toggleTextExplanation();
+    // E: open/close the explanation(s)
+    if (e.key === 'e') {
+        if (!textExplanationContainer.classList.contains('hidden')) {
+            e.preventDefault();
+            toggleTextExplanation();
+        } else if (!mcExplanationsToggle.hidden) {
+            e.preventDefault();
+            toggleMcExplanations();
+        }
     }
 }
 
@@ -2744,19 +2763,15 @@ function initializeQuiz(loadedCards) {
     document.querySelector('#file-input-container').style.display = 'none';
     appContent.classList.remove('hidden');
 
-    // Auto-show keyboard hints on the first quiz — only where there is a
-    // keyboard-and-mouse setup to use them (hidden on touch devices anyway).
+    // First session with keyboard and mouse: point at the shortcuts once.
     const hasFinePointer = Boolean(
         globalThis.matchMedia?.('(hover: hover) and (pointer: fine)').matches
     );
+    // Only the small toggle pulses, in the periphery; opening the panel would
+    // cover the first question.
     if (hasFinePointer && !localStorage.getItem('keyboardHintsShown')) {
-        const hintsPanel = document.querySelector('.keyboard-hints-panel');
         const hintsToggle = document.querySelector('.keyboard-hints-toggle');
-        if (hintsPanel) {
-            hintsPanel.classList.remove('hidden');
-            persistToStorage('keyboardHintsShown', '1');
-            setTimeout(() => hintsPanel.classList.add('hidden'), 5000);
-        }
+        persistToStorage('keyboardHintsShown', '1');
         if (hintsToggle) {
             hintsToggle.classList.add('pulse');
             hintsToggle.addEventListener(
@@ -2793,14 +2808,15 @@ function orderCardsForReview() {
     ranked.sort((a, b) => a.rank.group - b.rank.group || a.rank.value - b.rank.value);
     cards = ranked.map((r) => r.card);
 
-    // Tell the student what this session looks like (only once cards are known)
+    // Tell the student what this session looks like: a quiet line in the
+    // progress bar (a toast would compete with the first question).
     const dueCount = ranked.filter((r) => r.rank.group === 0).length;
     const newCount = ranked.filter((r) => r.rank.group === 1).length;
+    sessionNoteEl.hidden = true;
     if (dueCount + newCount < cards.length) {
         const laterCount = cards.length - dueCount - newCount;
-        showMessage(
-            `📅 ${dueCount} fällig · ${newCount} neu · ${laterCount} erst später fällig (kommen zuletzt)`
-        );
+        sessionNoteEl.textContent = `📅 ${dueCount} fällig · ${newCount} neu · ${laterCount} erst später fällig (kommen zuletzt)`;
+        sessionNoteEl.hidden = false;
     }
 }
 
@@ -3722,13 +3738,6 @@ function updateCardContent(card) {
     // Set question on both sides
     questionText.textContent = card.question;
     questionBack.textContent = card.question;
-    // Category as a small label above the question (context while mixing topics).
-    const eyebrow = (card.categories || []).join(' · ');
-    for (const el of cardEyebrows) el.textContent = eyebrow;
-
-    // Source deck: only informative when several decks are mixed in a session.
-    sourceDeckDisplay.textContent =
-        new Set(cards.map((c) => c.sourceDeck)).size > 1 ? `Quelle: ${card.sourceDeck}` : '';
 
     // Check if current card is identify, multiple choice, matching, or standard
     const isIdentify = cardType(card) === 'identify';
@@ -4068,10 +4077,17 @@ function updateCardContent(card) {
     }
     identifyResultContainer.classList.add('hidden');
 
-    // The explanation is open by default on the answer side; the verdict is
-    // filled in by showAnswer.
-    toggleTextExplanation(true);
+    // Explanations start folded (opt-in); verdict and calibration note are
+    // filled in by showAnswer; the stamp from the last rating is cleared.
+    toggleTextExplanation(false);
+    mcExplanationsToggle.hidden = true;
+    toggleMcExplanations(false);
     setAnswerVerdict(null);
+    calibrationCueEl.hidden = true;
+    recallRating.classList.remove('decided');
+    for (const b of recallRating.querySelectorAll('.recall-rating-btn')) {
+        b.classList.remove('chosen');
+    }
 
     // Reset buttons + calibration UI for the fresh card
     recallRating.classList.add('hidden');
@@ -4094,8 +4110,8 @@ function updateCardContent(card) {
     nextCardBtn.setAttribute('tabindex', '-1');
     showAnswerBtn.setAttribute('tabindex', '0');
 
-    // Focus management: auto-focus the appropriate element
-    setTimeout(() => {
+    // Focus management: auto-focus the appropriate element once the card is in
+    afterCardSettles(() => {
         if (isIdentify) {
             // Recall modes type into the input; pick modes act via the reveal button.
             if (
@@ -4113,7 +4129,7 @@ function updateCardContent(card) {
         } else if (isMultipleChoice) {
             showAnswerBtn.focus({ preventScroll: true });
         }
-    }, 100);
+    });
 
     updateStatistics();
 }
@@ -4148,16 +4164,29 @@ function addOptionStatus(optionItem, text) {
 }
 
 /**
- * Open/close the text-card explanation. It starts open on the answer side —
- * the student already flipped the card, so hiding it behind one more tap (per
- * card, while cramming) cost more than it helped.
+ * Open/close the text-card explanation (a native <details>, folded by default:
+ * the long form is there for students who want it, not in everyone's way).
  * @param {boolean} [open] - force a state; toggles when omitted
  */
 function toggleTextExplanation(open) {
+    textExplanationContainer.open =
+        typeof open === 'boolean' ? open : !textExplanationContainer.open;
+}
+
+/**
+ * Show/hide the per-option explanations of a revealed multiple-choice card.
+ * @param {boolean} [open] - force a state; toggles when omitted
+ */
+function toggleMcExplanations(open) {
     const next =
-        typeof open === 'boolean' ? open : textExplanationContent.classList.contains('hidden');
-    textExplanationContent.classList.toggle('hidden', !next);
-    explanationToggle.setAttribute('aria-expanded', String(next));
+        typeof open === 'boolean'
+            ? open
+            : !optionsContainerBack.classList.contains('explanations-open');
+    optionsContainerBack.classList.toggle('explanations-open', next);
+    mcExplanationsToggle.setAttribute('aria-expanded', String(next));
+    mcExplanationsToggle.querySelector('.explanation-label').textContent = next
+        ? 'Erklärungen ausblenden'
+        : 'Erklärungen anzeigen';
 }
 
 /**
@@ -4368,6 +4397,9 @@ function showAnswer() {
         // Show back options container and hide other answer displays
         optionsContainerBack.classList.remove('hidden');
         selectedOptionsContainer.classList.add('hidden');
+        const explanationCount =
+            optionsContainerBack.querySelectorAll('.option-explanation').length;
+        mcExplanationsToggle.hidden = explanationCount === 0;
 
         // Auto-score with a set-based (Jaccard) overlap of correct vs. selected
         // options — far more discriminating than the old per-option scheme, where
@@ -4401,6 +4433,8 @@ function showAnswer() {
 
         if (isExactMatch) {
             // Exact text match is a fair correctness proxy: auto-grade as perfect.
+            // The student's answer equals the correct one — show it once.
+            userAnswerContainer.classList.add('hidden');
             setAnswerVerdict('correct', '✓ Richtig');
             markAnswer(true);
             recallRating.classList.add('hidden');
@@ -4489,8 +4523,10 @@ function scoreMultipleChoice(correctIndices, selectedIndices) {
 /**
  * Mark the current answer as correct or incorrect
  * @param {number|boolean} scoreOrBool - Score from 0.0 to 1.0, or boolean
+ * @param {{fromRating?: boolean}} [options] - fromRating: a self-rating click,
+ *   which handles its own closure and advance (see the recallRating handler)
  */
-function markAnswer(scoreOrBool) {
+function markAnswer(scoreOrBool, { fromRating = false } = {}) {
     if (isAnswered) {
         return;
     }
@@ -4520,8 +4556,12 @@ function markAnswer(scoreOrBool) {
     if (calibrationMode && currentConfidence !== null) {
         sessionCalibration.push({ confidence: currentConfidence, score });
         if (undoStack.length > 0) undoStack.at(-1).calibrationPushed = true;
-        showCalibrationCue(currentConfidence, score);
+        // Self-rated cards compare two self-judgements; the round summary
+        // covers those. Auto-graded ones get the note next to the verdict.
+        if (!fromRating) showCalibrationCue(currentConfidence, score);
     }
+    // The round-start note has done its job once the first card is answered.
+    sessionNoteEl.hidden = true;
 
     // Accumulate fractional scores
     correctCount += score;
@@ -4535,15 +4575,15 @@ function markAnswer(scoreOrBool) {
         }
     }
 
-    if (isFullyCorrect) {
-        // Trigger confetti animation for fully correct answers
-        triggerConfetti();
-    }
+    // Celebrate once the card has turned: the result first, then the
+    // confetti from it — not both flying at the same moment.
+    if (isFullyCorrect && !fromRating) afterCardMoves(() => triggerConfetti('pop'));
 
-    // Hide the rating control and show next button
-    recallRating.classList.add('hidden');
     confidencePrompt.classList.add('hidden');
-    nextCardBtn.style.display = 'inline-block';
+    if (!fromRating) {
+        recallRating.classList.add('hidden');
+        nextCardBtn.style.display = 'inline-block';
+    }
 
     // If this was a multiple choice question, highlight correct/incorrect options
     if (Array.isArray(card.options) && Array.isArray(card.correct)) {
@@ -4575,31 +4615,129 @@ function markAnswer(scoreOrBool) {
 }
 
 /**
- * Surface a calibration nudge as a brief toast — only when the self-estimate
- * and the outcome actually disagree (the cases worth acting on). Matches stay
- * silent so the flow stays quiet. Toast-based so it survives the immediate
- * advance after a rating click.
+ * Calibration note on the card, right under the verdict it refers to — only
+ * when the self-estimate and the outcome disagree (the cases worth acting on).
  * @param {number} confidence - 1 (unsicher) … 3 (sicher)
  * @param {number} score - answer score 0..1
  */
 function showCalibrationCue(confidence, score) {
     const correct = score >= SR_PASS_SCORE;
-    if (confidence === 3 && !correct) {
-        showMessage('Überschätzt: Diese Karte kommt früher wieder.');
-    } else if (confidence === 1 && correct) {
-        showMessage('Besser als gedacht!');
-    }
+    let text = '';
+    if (confidence === 3 && !correct) text = 'Überschätzt: Diese Karte kommt früher wieder.';
+    else if (confidence === 1 && correct) text = 'Besser als gedacht!';
+    calibrationCueEl.textContent = text;
+    calibrationCueEl.className = `calibration-cue ${correct ? 'calibration-under' : 'calibration-over'}`;
+    calibrationCueEl.hidden = !text;
+}
+
+// ============================================================================
+// Pacing: one focal event at a time
+// ============================================================================
+// Attention moves act → result → closure → next task. A step starts only when
+// the previous one has finished moving: the celebration waits for the card to
+// turn, the next card waits for the celebration to clear.
+
+/** How long a full-score self-rating celebrates before the next card. */
+const CLOSURE_MS = 750;
+/** A beat to see which rating was chosen before moving on. */
+const STAMP_MS = 250;
+/** The results screen settles before the round's celebration starts. */
+const RESULTS_BEAT_MS = 400;
+
+/** @type {number[]} timers of the current pacing sequence */
+let pendingTimers = [];
+/** Bumped by cancelPending(), so an in-flight advance knows it was undone. */
+let advanceToken = 0;
+let advancing = false;
+
+/** @returns {boolean} */
+function prefersReducedMotion() {
+    return Boolean(globalThis.matchMedia?.('(prefers-reduced-motion: reduce)').matches);
 }
 
 /**
- * Move to the next card
+ * Run `fn` after `ms` (immediately-ish under reduced motion) as part of the
+ * current pacing sequence, so undo/leaving can cancel it.
+ * @param {() => void} fn
+ * @param {number} ms
+ */
+function later(fn, ms) {
+    const id = setTimeout(
+        () => {
+            pendingTimers = pendingTimers.filter((t) => t !== id);
+            fn();
+        },
+        prefersReducedMotion() ? 0 : ms
+    );
+    pendingTimers.push(id);
+}
+
+/**
+ * Run `fn` once the card has stopped moving (the turn to the answer side, or a
+ * fly-in still in progress). Waits for the real CSS transition rather than a
+ * timer guessing its length, which drifts on a busy phone. Skipped when the
+ * sequence is cancelled or the turn is interrupted.
+ * @param {() => void} fn
+ */
+function afterCardMoves(fn) {
+    const token = advanceToken;
+    // getAnimations() flushes styles, so the just-started turn is included.
+    Promise.all(flipCard.getAnimations().map((a) => a.finished)).then(
+        () => {
+            if (token === advanceToken) fn();
+        },
+        () => {} // interrupted (e.g. undo turned the card back): no celebration
+    );
+}
+
+/** Abort the current pacing sequence (undo, restart, leaving the session). */
+function cancelPending() {
+    for (const id of pendingTimers) clearTimeout(id);
+    pendingTimers = [];
+    advanceToken++;
+    advancing = false;
+}
+
+/**
+ * Move to the next card — after anything still celebrating the last one has
+ * faded, so the new question gets the stage to itself.
  */
 function showNextCard() {
     // Only an answered card can be left; this also absorbs a double tap on
-    // "Weiter" (the next card starts unanswered) without a time-based throttle.
-    if (!isAnswered) return;
-    currentCardIndex++;
-    showCurrentCard();
+    // "Weiter" (the next card starts unanswered).
+    if (!isAnswered || advancing) return;
+    cancelPending();
+    advancing = true;
+    const token = advanceToken;
+    const cleared = globalThis.confetti ? globalThis.confetti.clear() : Promise.resolve();
+    cleared.then(() => {
+        if (token !== advanceToken) return; // undone or left meanwhile
+        advancing = false;
+        currentCardIndex++;
+        showCurrentCard();
+    });
+}
+
+/**
+ * Run `fn` once the entering card has landed. Focusing the answer field opens
+ * the keyboard on a phone, which must not resize the page mid-animation.
+ * @param {() => void} fn
+ */
+function afterCardSettles(fn) {
+    setTimeout(() => {
+        if (!flipCard.classList.contains('fly-in-bottom')) {
+            fn();
+            return;
+        }
+        let done = false;
+        const run = () => {
+            if (done) return;
+            done = true;
+            fn();
+        };
+        flipCard.addEventListener('animationend', run, { once: true });
+        setTimeout(run, 700);
+    }, 0);
 }
 
 /**
@@ -4770,6 +4908,7 @@ function showFeedback() {
  * Restart the quiz with the same cards
  */
 function restartQuiz() {
+    cancelPending();
     // Don't allow restart from SR buckets mode
     const isFromSRBuckets = activeDecks.length === 1 && activeDecks[0] === 'SR Buckets';
     if (isFromSRBuckets) {
@@ -4810,6 +4949,7 @@ function restartQuiz() {
  * Return to SR Manager after completing a quiz from SR buckets
  */
 function returnToSRManager() {
+    cancelPending();
     // Hide quiz content, return to the hub on the "Karten verwalten" tab
     appContent.classList.add('hidden');
     feedbackElement.classList.add('hidden');
@@ -4823,6 +4963,7 @@ function returnToSRManager() {
  * Reset the app and return to deck selection
  */
 function resetAndUpload() {
+    cancelPending();
     // Don't allow upload from SR buckets mode
     const isFromSRBuckets = activeDecks.length === 1 && activeDecks[0] === 'SR Buckets';
     if (isFromSRBuckets) {
@@ -5244,6 +5385,9 @@ function captureUndoSnapshot(card, score) {
  * Undo the last answer and go back one card
  */
 function undoLastAnswer() {
+    // Stop any closure/advance still in progress and clear the stage.
+    cancelPending();
+    globalThis.confetti?.clear(1);
     // Pre-grading case: answer is shown but Richtig/Falsch not yet pressed →
     // flip back to the question side so the user can re-attempt before grading.
     if (undoStack.length === 0) {
@@ -5304,19 +5448,32 @@ function undoLastAnswer() {
 
 /**
  * Celebrate with the shared confetti engine (confetti.js). `pop` bursts from
- * the upper part of the card — where the answer was just revealed — instead
- * of raining over the whole screen on every correct card.
+ * the result the student is looking at (verdict, rating button, reveal badge).
  * @param {'pop'|'celebrate'|'grand'} [intensity]
+ * @param {Element|null} [origin] - where a pop starts; defaults to the result
  */
-function triggerConfetti(intensity = 'pop') {
+function triggerConfetti(intensity = 'pop', origin = null) {
     const engine = globalThis.confetti;
     if (!engine) return;
-    if (intensity === 'pop') {
-        const r = cardContainer.getBoundingClientRect();
-        engine.pop({ x: r.left + r.width / 2, y: r.top + Math.min(r.height * 0.3, 160) });
-    } else {
-        engine[intensity]();
+    if (intensity === 'pop') engine.pop(origin || celebrationOrigin());
+    else engine[intensity]();
+}
+
+/**
+ * The visible result on the answer side, or the upper card area.
+ * @returns {Element|{x: number, y: number}}
+ */
+function celebrationOrigin() {
+    const candidates = [
+        answerVerdictEl,
+        identifyResultContainer.querySelector('.identify-reveal-status'),
+        identifyResultContainer.querySelector('.identify-reveal-name'),
+    ];
+    for (const el of candidates) {
+        if (el && !el.classList.contains('hidden') && el.getClientRects().length > 0) return el;
     }
+    const r = cardContainer.getBoundingClientRect();
+    return { x: r.left + r.width / 2, y: r.top + Math.min(r.height * 0.3, 160) };
 }
 
 // ============================================================================
@@ -5674,7 +5831,10 @@ function buildLadderDistributionHTML(deckNames) {
     if (total === 0) {
         return '<p class="progress-empty">Noch keine Karten im Wiederholungssystem – starte eine Lernsitzung.</p>';
     }
-    const colors = ['#e74c3c', '#e67e22', '#f1c40f', '#2ecc71', '#27ae60'];
+    // Warm (wobbly) to cool (settled), getting darker towards both ends. The
+    // old red→green ramp collapsed for red-green colour-blind students: the
+    // first and last stage (the difference that matters) looked alike.
+    const colors = ['#d73027', '#fc8d59', '#fee090', '#91bfdb', '#4575b4'];
     const labels = ['Wackelig (Minuten)', 'Im Aufbau (Stunden)', '1 Tag', '3 Tage', '7 Tage'];
     const counts = [0, 0, 0, 0, 0];
     let attempts = 0;
@@ -6441,9 +6601,12 @@ function renderFeedbackGamification(knowledge) {
         parts.push(`<span class="gam-badge gam-best">Neue Bestleistung: ${pct} %</span>`);
     }
 
-    // The bigger shows are for real milestones: a mastered deck, or a strong round.
-    if (earned.length > 0) triggerConfetti('grand');
-    else if (totalAnswered > 0 && pct >= 80) triggerConfetti('celebrate');
+    // The bigger shows are for real milestones: a mastered deck, or a strong
+    // round — and only after the results have appeared.
+    if (earned.length > 0) later(() => triggerConfetti('grand'), RESULTS_BEAT_MS);
+    else if (totalAnswered > 0 && pct >= 80) {
+        later(() => triggerConfetti('celebrate'), RESULTS_BEAT_MS);
+    }
 
     if (parts.length > 0) {
         el.innerHTML = parts.join('');
@@ -6537,8 +6700,10 @@ function closeProgressView() {
 /**
  * Scope selector for the progress dashboard: a wrapping row of chips that
  * switch the stats between the whole library ("Gesamt") and a single deck
- * (one imported ZIP = one topic). Each chip carries a traffic-light dot so the
- * selector itself doubles as an at-a-glance per-deck overview.
+ * (one imported ZIP = one topic). Each chip carries a traffic-light dot and its
+ * Lernstand in numbers (the dot alone is lost on red-green colour-blind
+ * students, and a title tooltip never shows on a phone), so the selector
+ * doubles as an at-a-glance per-deck overview.
  * @param {Array<{key:string,title:string,decks:string[]}>} topics
  * @param {string} activeKey
  * @returns {string} HTML
@@ -6556,6 +6721,7 @@ function progressScopeSelector(topics, activeKey) {
             title="${titleAttr}">
             <span class="scope-dot scope-dot-${dotLevel}"></span>
             <span class="scope-chip-label">${safeLabel}</span>
+            ${attempted > 0 ? `<span class="scope-chip-pct">${percent} %</span>` : ''}
         </button>`;
     };
     const all = computeDeckKnowledge(Object.keys(savedDecks));

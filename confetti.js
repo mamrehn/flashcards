@@ -8,6 +8,8 @@
  *   confetti.pop(origin)   – a small burst from where the answer was given
  *   confetti.celebrate()   – two cannons from the bottom corners
  *   confetti.grand()       – cannons, a second volley and a gentle rain
+ *   confetti.clear(ms)     – fade out whatever is still flying (Promise), so
+ *                            the next task never shares the screen with it
  * Does nothing when the user prefers reduced motion.
  */
 (function () {
@@ -26,6 +28,10 @@
     let particles = [];
     let rafId = 0;
     let lastTime = 0;
+    // Quick fade-out requested by clear(): start time, duration, waiters.
+    let fadeStart = 0;
+    let fadeMs = 0;
+    let fadeWaiters = [];
 
     /** @returns {boolean} */
     function reducedMotion() {
@@ -138,10 +144,11 @@
     /**
      * Draw a single piece at its current state.
      * @param {object} p
+     * @param {number} clearFade - 1, or less while clear() fades everything out
      */
-    function draw(p) {
+    function draw(p, clearFade) {
         const flip = Math.cos(p.tilt);
-        const fade = Math.min(1, (p.life - p.age) / 0.6);
+        const fade = Math.min(1, (p.life - p.age) / 0.6) * clearFade;
         ctx.globalAlpha = Math.max(0, fade);
         ctx.save();
         ctx.translate(p.x, p.y);
@@ -188,6 +195,8 @@
         ctx.clearRect(0, 0, canvas.width / dpr, canvas.height / dpr);
 
         const height = globalThis.innerHeight;
+        const clearFade = fadeMs ? Math.max(0, 1 - (now - fadeStart) / fadeMs) : 1;
+        if (clearFade === 0) particles = [];
         particles = particles.filter((p) => {
             p.age += dt;
             p.vx *= drag;
@@ -198,7 +207,7 @@
             p.x += (p.vx + Math.sin(p.wobble) * p.sway) * k;
             p.y += p.vy * k;
             if (p.age >= p.life || p.y > height + 40) return false;
-            draw(p);
+            draw(p, clearFade);
             return true;
         });
         ctx.globalAlpha = 1;
@@ -208,7 +217,30 @@
         } else {
             rafId = 0;
             ctx.clearRect(0, 0, canvas.width / dpr, canvas.height / dpr);
+            settleFade();
         }
+    }
+
+    /** Resolve everyone waiting on clear(). */
+    function settleFade() {
+        fadeMs = 0;
+        const waiters = fadeWaiters;
+        fadeWaiters = [];
+        for (const resolve of waiters) resolve();
+    }
+
+    /**
+     * Fade out everything still in the air.
+     * @param {number} [ms]
+     * @returns {Promise<void>} resolves once the screen is clear
+     */
+    function clear(ms = 180) {
+        if (particles.length === 0) return Promise.resolve();
+        if (!fadeMs) {
+            fadeStart = performance.now();
+            fadeMs = Math.max(1, ms);
+        }
+        return new Promise((resolve) => fadeWaiters.push(resolve));
     }
 
     /**
@@ -274,5 +306,5 @@
         }
     }
 
-    globalThis.confetti = { pop, celebrate, grand };
+    globalThis.confetti = { pop, celebrate, grand, clear };
 })();

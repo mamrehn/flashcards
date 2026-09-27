@@ -4605,11 +4605,19 @@ function initializePlayerFeatures(reconnectInfo) {
         }, 100); // Update every 100ms
     }
 
+    /** Pending result celebration, cancelled when the next question arrives. */
+    let resultCelebrationTimer = null;
+
     /**
      * Displays the question and options for the player.
      * @param {object} qData - The question data received from the host.
      */
     function displayQuestion(qData) {
+        // The new question gets the stage to itself: nothing from the last
+        // result may still be flying.
+        clearTimeout(resultCelebrationTimer);
+        globalThis.confetti?.clear(150);
+        for (const el of document.querySelectorAll('.confetti-avatar')) el.remove();
         waitingRoom.classList.add('hidden');
         playerResultView.classList.add('hidden');
         playerQuestionView.classList.remove('hidden');
@@ -4717,7 +4725,6 @@ function initializePlayerFeatures(reconnectInfo) {
             state = 'correct';
             icon = '✓';
             label = 'Richtig!';
-            triggerConfetti();
         } else if (partialCorrect) {
             state = 'partial';
             icon = `${correctHits}/${correctSet.size}`;
@@ -4759,6 +4766,14 @@ function initializePlayerFeatures(reconnectInfo) {
                 pointsEl.classList.remove('animate-pop');
                 pointsEl.textContent = '';
             }
+        }
+
+        // One thing at a time: the result slides in, the points pop (CSS delay),
+        // then — once they have landed — the celebration.
+        clearTimeout(resultCelebrationTimer);
+        if (fullyCorrect) {
+            const reduce = globalThis.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+            resultCelebrationTimer = setTimeout(() => triggerConfetti(), reduce ? 0 : 950);
         }
 
         playerScoreEl.textContent = Math.round(currentScore);

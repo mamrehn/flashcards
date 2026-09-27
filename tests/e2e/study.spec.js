@@ -125,7 +125,10 @@ test('the service worker precaches the self-hosted libraries', async ({ device }
     await expect
         .poll(() =>
             page.evaluate(async () => {
-                const cache = await caches.open('flashcards-v7');
+                // Whatever the current version is (sw.js bumps CACHE_NAME).
+                const name = (await caches.keys()).find((k) => k.startsWith('flashcards-'));
+                if (!name) return false;
+                const cache = await caches.open(name);
                 const wanted = [
                     'vendor/jszip-3.10.1.min.js',
                     'vendor/qrcode-1.0.0.min.js',
@@ -218,12 +221,17 @@ test('multiple choice: tapping the option text toggles it exactly once', async (
     await expect(option('4')).toHaveAttribute('aria-checked', 'false');
 
     await page.click('#show-answer');
-    // Outcome in words, and the missed option explains itself inline.
+    // Outcome in words; the explanations are opt-in behind one toggle.
     await expect(page.locator('#answer-verdict')).toContainText('Teilweise richtig');
     const back = page.locator('#options-container-back');
     await expect(back.locator('.mc-missed .option-status')).toHaveText('! fehlte');
-    await expect(back.locator('.mc-missed .option-explanation')).toHaveText(
-        '7 ist nur durch 1 und 7 teilbar.'
-    );
+    const explanation = back.locator('.mc-missed .option-explanation');
+    const toggle = page.locator('#mc-explanations-toggle');
+    await expect(explanation).toBeHidden();
+    await expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    await toggle.click();
+    await expect(explanation).toHaveText('7 ist nur durch 1 und 7 teilbar.');
+    await expect(toggle).toHaveAttribute('aria-expanded', 'true');
+    await expect(toggle).toContainText('Erklärungen ausblenden');
     await expect(back.locator('.mc-correct-selected .option-status')).toHaveText('✓ richtig');
 });

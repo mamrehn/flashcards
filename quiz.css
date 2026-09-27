@@ -7,8 +7,13 @@
     --accent-color: #ff3366; /* magenta-leaning red for high-energy CTA */
     --light-color: var(--surface-secondary);
     --dark-color: #343a40;
-    --correct-color: #28a745; /* green stays universal for correct */
-    --wrong-color: #dc3545; /* red stays universal for wrong */
+    /* Green stays universal for correct, red for wrong. The green is a shade
+       deeper than Bootstrap's #28a745, which carried white text at 3.1:1. */
+    --correct-color: #1e7e34;
+    --wrong-color: #dc3545;
+    /* Status colours as small text on white or their own tints (≥ 4.5:1). */
+    --correct-text: #187030;
+    --wrong-text: #b02a37;
     --warning-color: #ffc107;
 
     --quiz-surface: #f2e9ff; /* cards' #e9f2ff rotated */
@@ -348,7 +353,7 @@ header h1 {
 #submit-answer-btn.is-sent {
     opacity: 1;
     background-color: var(--success-bg);
-    color: var(--correct-color);
+    color: var(--correct-text);
     border: 1px solid var(--success-border);
     font-weight: 600;
 }
@@ -447,7 +452,7 @@ header h1 {
 }
 
 .question-item-options li.is-correct {
-    color: var(--correct-color);
+    color: var(--correct-text);
     font-weight: 600;
 }
 
@@ -469,7 +474,7 @@ header h1 {
 
 @media (hover: hover) {
     .remove-question:hover {
-        color: var(--wrong-color);
+        color: var(--wrong-text);
         border-color: currentColor;
     }
 }
@@ -811,6 +816,15 @@ select:focus {
     font-weight: bold;
 }
 
+/* A ✓ as well as the green: readable for red-green colour-blind students and
+   on washed-out projectors. */
+.host-options-list li.correct::after {
+    content: '✓';
+    margin-left: auto;
+    padding-left: 0.5rem;
+    color: var(--correct-text);
+}
+
 /* --- Player per-question result screen ---
  * Visual hierarchy (top → bottom):
  *   1. Status badge: circular icon + verdict label (green/yellow/red/gray)
@@ -849,11 +863,11 @@ select:focus {
 
 .result-status[data-state='correct'] .result-icon {
     background-color: rgba(40, 167, 69, 0.18);
-    color: var(--correct-color);
+    color: var(--correct-text);
     box-shadow: 0 0 0 4px rgba(40, 167, 69, 0.08);
 }
 .result-status[data-state='correct'] .result-label {
-    color: var(--correct-color);
+    color: var(--correct-text);
 }
 
 .result-status[data-state='partial'] .result-icon {
@@ -872,11 +886,11 @@ select:focus {
 
 .result-status[data-state='incorrect'] .result-icon {
     background-color: rgba(220, 53, 69, 0.18);
-    color: var(--wrong-color);
+    color: var(--wrong-text);
     box-shadow: 0 0 0 4px rgba(220, 53, 69, 0.08);
 }
 .result-status[data-state='incorrect'] .result-label {
-    color: var(--wrong-color);
+    color: var(--wrong-text);
 }
 
 .result-status[data-state='none'] .result-icon {
@@ -896,8 +910,9 @@ select:focus {
     line-height: 1;
 }
 
+/* Starts once the result panel has slid in (phase-fly-up, 320ms). */
 .result-points-pop.animate-pop {
-    animation: result-points-pop 650ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
+    animation: result-points-pop 650ms cubic-bezier(0.34, 1.56, 0.64, 1) 300ms both;
 }
 
 @keyframes result-points-pop {
@@ -960,7 +975,7 @@ select:focus {
 .result-correct-items .correct-answer-chip {
     display: inline-block;
     background-color: rgba(40, 167, 69, 0.15);
-    color: var(--correct-color);
+    color: var(--correct-text);
     border-radius: 999px;
     padding: 0.15rem 0.6rem;
     margin: 0.15rem;
@@ -1758,7 +1773,7 @@ select:focus {
 
 .correct-answers {
     margin-top: 0.5rem;
-    color: var(--correct-color);
+    color: var(--correct-text);
     font-weight: bold;
 }
 
@@ -1933,7 +1948,7 @@ body.player-in-game footer {
 }
 
 .qr-error {
-    color: var(--wrong-color);
+    color: var(--wrong-text);
 }
 
 /* Mobile */
@@ -1984,6 +1999,8 @@ body.player-in-game footer {
     --dark-color: #f5f5f5;
     --correct-color: #5cd66f;
     --wrong-color: #ff8560;
+    --correct-text: #5cd66f;
+    --wrong-text: #ff8560;
 
     --text-color: #f5f5f5; /* was #e0e0e0 — brighter body text */
     --text-muted: #c0bed0; /* was #a0a0b0 — readable hints */

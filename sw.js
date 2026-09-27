@@ -13,7 +13,7 @@ const SW_DEBUG =
 // eslint-disable-next-line no-console
 const swLog = SW_DEBUG ? console.log.bind(console) : () => {};
 
-const CACHE_NAME = 'flashcards-v7';
+const CACHE_NAME = 'flashcards-v8';
 const ASSETS_TO_CACHE = [
     './',
     './index.html',
@@ -61,7 +61,13 @@ self.addEventListener('install', (event) => {
             .open(CACHE_NAME)
             .then((cache) => {
                 swLog('[Service Worker] Caching assets');
-                return cache.addAll(ASSETS_TO_CACHE);
+                // Bypass the HTTP cache: otherwise a fresh index.html could be
+                // stored next to a stale index.js (GitHub Pages sends
+                // max-age=600), and a page with mismatched scripts breaks
+                // quietly (e.g. no start confetti).
+                return cache.addAll(
+                    ASSETS_TO_CACHE.map((asset) => new Request(asset, { cache: 'reload' }))
+                );
             })
             .then(() => {
                 swLog('[Service Worker] Installation complete');

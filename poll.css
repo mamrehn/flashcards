@@ -28,6 +28,7 @@
 
 /* Violet used as *text* needs the light variant on dark surfaces (#6b42a6
    would be ~2.5:1). Filled buttons keep the deeper violet. */
+[data-theme='dark'] h1,
 [data-theme='dark'] h2,
 [data-theme='dark'] h3,
 [data-theme='dark'] h4,
@@ -1025,4 +1026,13 @@ button.player-chip:focus-visible {
     .rank-options {
         grid-template-columns: 1fr 1fr;
     }
+}
+
+.footer-link {
+    color: var(--text-muted);
+    text-decoration: none;
+}
+
+.footer-link:hover {
+    text-decoration: underline;
 }

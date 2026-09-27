@@ -294,9 +294,19 @@
                 --dark-color: #e0e0e0;
             }
 
+            /* Violet as text needs its light variant on the dark page
+               (#7b4ec9 is 2.9:1); the filled quiz button keeps the deep one. */
+            [data-theme='dark'] h1,
+            [data-theme='dark'] footer a {
+                color: #c4a6ea;
+            }
+
+            /* The study card's gradient in dark mode: the study app's light
+               dark-mode blues put white text at 2.8:1, so the deeper pair of
+               its dark progress headers is used here. */
             [data-theme='dark'] .flashcard-colors {
-                --primary: #6b9fd4;
-                --secondary: #4a8ab8;
+                --primary: #3a6a9e;
+                --secondary: #2a5a88;
                 --light: #2a2a3c;
                 --dark: #e0e0e0;
                 --warning: #ffca28;

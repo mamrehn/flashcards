@@ -272,7 +272,8 @@
                     >
                         <div class="progress" id="progress-bar"></div>
                     </div>
-                    <div class="session-row">
+                    <p id="session-note" class="session-note" hidden></p>
+                    <div class="session-bar-row">
                         <div
                             class="stats"
                             aria-live="polite"
@@ -343,7 +344,6 @@
                     <div class="card" id="flip-card">
                         <div class="card-front">
                             <div class="card-content">
-                                <div class="card-eyebrow" id="card-eyebrow"></div>
                                 <div class="question" id="question-text">Frage erscheint hier</div>
 
                                 <!-- Identify: profile image — shown above the input/choices so
@@ -420,18 +420,31 @@
                         </div>
                         <div class="card-back">
                             <div class="card-content">
-                                <div class="card-eyebrow" id="card-eyebrow-back"></div>
                                 <div class="question" id="question-back">Frage erscheint hier</div>
                                 <div
                                     id="answer-verdict"
                                     class="answer-verdict hidden"
                                     role="status"
                                 ></div>
+                                <!-- Confidence vs. outcome, next to the result it refers to -->
+                                <p id="calibration-cue" class="calibration-cue" hidden></p>
 
                                 <!-- Multiple choice options container (for back side with feedback) -->
                                 <div id="options-container-back" class="options-container hidden">
                                     <!-- Color-coded options will be cloned here -->
                                 </div>
+                                <!-- Opt-in: per-option explanations stay folded until asked for -->
+                                <button
+                                    type="button"
+                                    id="mc-explanations-toggle"
+                                    class="explanation-summary"
+                                    aria-expanded="false"
+                                    aria-controls="options-container-back"
+                                    hidden
+                                >
+                                    <span class="explanation-icon" aria-hidden="true">ℹ️</span>
+                                    <span class="explanation-label">Erklärungen anzeigen</span>
+                                </button>
 
                                 <!-- Text answer display -->
                                 <div id="user-answer-container" class="hidden">
@@ -459,29 +472,21 @@
                                     </div>
                                 </div>
 
-                                <!-- Explanation for text answers (shown only when marked incorrect) -->
-                                <div id="text-explanation-container" class="hidden">
-                                    <div class="explanation-box">
-                                        <button
-                                            type="button"
-                                            class="explanation-toggle"
-                                            aria-expanded="true"
-                                            aria-controls="text-explanation-content"
-                                        >
-                                            <span class="explanation-icon" aria-hidden="true"
-                                                >ℹ️</span
-                                            >
-                                            <span class="explanation-label">Erklärung</span>
-                                            <span class="explanation-chevron" aria-hidden="true"
-                                                >▾</span
-                                            >
-                                        </button>
-                                        <div
-                                            class="explanation-content"
-                                            id="text-explanation-content"
-                                        ></div>
-                                    </div>
-                                </div>
+                                <!-- Explanation for text answers (when the card has one). Opt-in:
+                                     the long form is one tap away, not in the way. -->
+                                <details
+                                    id="text-explanation-container"
+                                    class="explanation-box hidden"
+                                >
+                                    <summary class="explanation-summary">
+                                        <span class="explanation-icon" aria-hidden="true">ℹ️</span>
+                                        <span class="explanation-label">Erklärung anzeigen</span>
+                                    </summary>
+                                    <div
+                                        class="explanation-content"
+                                        id="text-explanation-content"
+                                    ></div>
+                                </details>
 
                                 <!-- Matching result display -->
                                 <div
@@ -498,7 +503,6 @@
                                 >
                                     <!-- Identify result inserted dynamically -->
                                 </div>
-                                <div class="source-deck" id="source-deck-display"></div>
                             </div>
                             <div class="controls">
                                 <button

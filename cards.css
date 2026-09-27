@@ -9,6 +9,10 @@
     /* Yellow is fine for bars/borders but unreadable as text on white
        (~1.6:1); text in the "mid" level uses this darker amber instead. */
     --warning-text: #8a5a00;
+    /* Same for green and red: the fill shades are too light for text on white
+       or on their own tinted backgrounds (#28a745 on #d4edda is 2.5:1). */
+    --success-text: #187030;
+    --danger-text: #b02a37;
     /* Text on primary-filled controls: white here, dark in dark mode where the
        primary is light (white on #6b9fd4 would be 2.8:1). */
     --on-primary: #ffffff;
@@ -34,8 +38,9 @@
     --sr-gradient-end: #166088;
     --sr-gradient-hover-start: #3d5d8c;
     --sr-gradient-hover-end: #124d6f;
-    --sr-info-color: #17a2b8;
-    --sr-info-hover: #138496;
+    /* Deep enough for white text (#17a2b8 was 3.0:1). */
+    --sr-info-color: #117a8b;
+    --sr-info-hover: #0f6b7a;
 }
 
 body {
@@ -261,7 +266,7 @@ body.has-decks #app-subtitle {
 }
 
 .topic-knowledge-low .topic-knowledge-text {
-    color: var(--danger, #dc3545);
+    color: var(--danger-text);
 }
 
 .topic-knowledge-mid .topic-knowledge-fill {
@@ -277,7 +282,7 @@ body.has-decks #app-subtitle {
 }
 
 .topic-knowledge-high .topic-knowledge-text {
-    color: var(--success, #28a745);
+    color: var(--success-text);
 }
 
 /* Knowledge estimate line on the session feedback screen */
@@ -288,7 +293,7 @@ body.has-decks #app-subtitle {
 }
 
 .feedback-knowledge-low {
-    color: var(--danger, #dc3545);
+    color: var(--danger-text);
 }
 
 .feedback-knowledge-mid {
@@ -296,7 +301,7 @@ body.has-decks #app-subtitle {
 }
 
 .feedback-knowledge-high {
-    color: var(--success, #28a745);
+    color: var(--success-text);
 }
 
 .feedback-knowledge-low::before {
@@ -563,12 +568,12 @@ body.has-decks #app-subtitle {
 }
 
 .identify-reveal-status.correct {
-    color: var(--success);
+    color: var(--success-text);
     background: var(--success-bg);
 }
 
 .identify-reveal-status.incorrect {
-    color: var(--danger);
+    color: var(--danger-text);
     background: var(--danger-bg);
 }
 
@@ -678,17 +683,6 @@ body.has-decks #app-subtitle {
     z-index: 2;
 }
 
-/* Category above the question: context at a glance ("Geografie"). */
-.card-eyebrow {
-    margin: 0 0 0.2rem;
-    font-size: 0.85rem;
-    color: var(--text-muted);
-}
-
-.card-eyebrow:empty {
-    display: none;
-}
-
 .card-content {
     /* Fill the space above the action buttons (pushing them to the bottom) and
        scroll internally when the content is taller than the card. */
@@ -733,7 +727,7 @@ body.has-decks #app-subtitle {
 }
 
 .answer-verdict-correct {
-    color: var(--success);
+    color: var(--success-text);
     background: var(--success-bg);
 }
 
@@ -743,8 +737,23 @@ body.has-decks #app-subtitle {
 }
 
 .answer-verdict-incorrect {
-    color: var(--danger);
+    color: var(--danger-text);
     background: var(--danger-bg);
+}
+
+/* Confidence vs. outcome, right under the verdict. */
+.calibration-cue {
+    margin: -0.2rem 0 0.6rem;
+    font-size: 0.9rem;
+    font-weight: 600;
+}
+
+.calibration-over {
+    color: var(--warning-text);
+}
+
+.calibration-under {
+    color: var(--success-text);
 }
 
 /* User answer input styling */
@@ -810,17 +819,26 @@ body.has-decks #app-subtitle {
     line-height: 1.4;
 }
 
-/* Keyboard shortcut number: a quiet badge, hidden on touch-only devices. */
+/* Keyboard shortcut number, styled like a key cap: full text colour (a grey
+   digit on a grey border was hard to read). Hidden on touch-only devices and
+   on the answer side, where the number keys no longer pick options. */
 .option-key {
     flex: 0 0 auto;
-    min-width: 1.4em;
+    min-width: 1.5em;
     padding: 0 0.3em;
-    border: 1px solid var(--border-color);
+    border: 1px solid var(--input-border);
+    border-bottom-width: 2px;
     border-radius: 4px;
-    font-size: 0.75rem;
+    background: var(--surface-secondary);
+    font-size: 0.8rem;
+    font-weight: 600;
     line-height: 1.5;
     text-align: center;
-    color: var(--text-muted);
+    color: var(--text-color);
+}
+
+#options-container-back .option-key {
+    display: none;
 }
 
 @media (hover: none) and (pointer: coarse) {
@@ -844,11 +862,11 @@ body.has-decks #app-subtitle {
 }
 
 .mc-correct-selected .option-status {
-    color: var(--success);
+    color: var(--success-text);
 }
 
 .mc-incorrect-selected .option-status {
-    color: var(--danger);
+    color: var(--danger-text);
 }
 
 .mc-missed .option-status {
@@ -1071,7 +1089,7 @@ body.has-decks #app-subtitle {
 }
 
 .link-btn-danger {
-    color: var(--danger);
+    color: var(--danger-text);
 }
 
 /* ── First visit: empty state + drop zone ────────────────────────────────── */
@@ -1283,6 +1301,32 @@ body:not(.has-decks) #export-backup-btn {
 
 .rating-easy {
     border-bottom-color: var(--success);
+}
+
+/* After a rating the chosen button stays marked for a beat and the others
+   step back — closure before the next card comes in. */
+.recall-rating.decided .recall-rating-btn:not(.chosen) {
+    opacity: 0.4;
+}
+
+.rating-again.chosen {
+    background: var(--danger-bg);
+    border-color: var(--danger);
+}
+
+.rating-hard.chosen {
+    background: var(--warning-bg);
+    border-color: var(--warning);
+}
+
+.rating-good.chosen {
+    background: var(--cards-highlight-bg);
+    border-color: var(--primary);
+}
+
+.rating-easy.chosen {
+    background: var(--success-bg);
+    border-color: var(--success);
 }
 
 /* ── Pre-answer confidence capture (calibration mode) ────────────────────── */
@@ -1519,6 +1563,11 @@ body:not(.has-decks) #export-backup-btn {
 
 .scope-dot-high {
     background-color: var(--success, #28a745);
+}
+
+.scope-chip-pct {
+    flex-shrink: 0;
+    font-variant-numeric: tabular-nums;
 }
 
 .scope-chip.active .scope-dot-none {
@@ -1936,7 +1985,7 @@ body:not(.has-decks) #export-backup-btn {
 
 .gam-up {
     background: rgba(40, 167, 69, 0.12);
-    color: var(--success);
+    color: var(--success-text);
 }
 
 .gam-master {
@@ -1994,12 +2043,12 @@ body:has(#app-content:not(.hidden)) .header {
 
 .stat-correct .stat-icon,
 .stat-correct .stat-value {
-    color: var(--success);
+    color: var(--success-text);
 }
 
 .stat-incorrect .stat-icon,
 .stat-incorrect .stat-value {
-    color: var(--danger);
+    color: var(--danger-text);
 }
 
 .progress-bar {
@@ -2081,7 +2130,7 @@ body:has(#app-content:not(.hidden)) .header {
 }
 
 .error-message {
-    color: var(--danger);
+    color: var(--danger-text);
     text-align: center;
     margin: 1rem 0;
 }
@@ -2345,7 +2394,8 @@ body:has(#app-content:not(.hidden)) .header {
         font-size: 1.1rem;
     }
 
-    .options-container {
+    .options-container,
+    #mc-explanations-toggle {
         width: 100%;
         margin: 0.75rem 0;
     }
@@ -2371,6 +2421,9 @@ body:has(#app-content:not(.hidden)) .header {
     margin-top: 1rem;
 }
 
+/* Opt-in explanations: a tappable summary row; the long text appears only
+   when the student asks for it. No pulsing icon — a perpetual animation next
+   to the answer competes with reading it. */
 .explanation-box {
     background-color: var(--explanation-bg);
     border: 2px solid var(--explanation-border);
@@ -2378,48 +2431,61 @@ body:has(#app-content:not(.hidden)) .header {
     text-align: left;
 }
 
-.explanation-toggle {
+.explanation-summary {
     display: flex;
     align-items: center;
     gap: 0.5rem;
     width: 100%;
     min-height: 44px;
+    box-sizing: border-box;
     padding: 0.35rem 0.75rem;
-    border: 0;
-    background: none;
     color: var(--explanation-text);
     font: inherit;
     font-weight: 600;
     text-align: left;
     cursor: pointer;
+    list-style: none;
+}
+
+.explanation-summary::-webkit-details-marker {
+    display: none;
+}
+
+.explanation-summary::after {
+    content: '▸';
+    margin-left: auto;
+    transition: transform 0.2s ease;
+}
+
+details[open] > .explanation-summary::after,
+.explanation-summary[aria-expanded='true']::after {
+    transform: rotate(90deg);
+}
+
+/* Multiple choice: one toggle under the options for all their explanations. */
+#mc-explanations-toggle {
+    width: 90%;
+    margin: 0.25rem auto 0;
+    background-color: var(--explanation-bg);
+    border: 2px solid var(--explanation-border);
+    border-radius: 8px;
+}
+
+#mc-explanations-toggle[hidden] {
+    display: none;
+}
+
+#options-container-back:not(.explanations-open) .option-explanation {
+    display: none;
 }
 
 .explanation-icon {
-    font-size: 1.3rem;
+    font-size: 1.2rem;
     flex-shrink: 0;
-    animation: pulse 2s infinite;
-}
-
-@keyframes pulse {
-    0%,
-    100% {
-        transform: scale(1);
-    }
-    50% {
-        transform: scale(1.1);
-    }
 }
 
 .explanation-label {
     flex: 1 1 auto;
-}
-
-.explanation-chevron {
-    transition: transform 0.2s ease;
-}
-
-.explanation-toggle[aria-expanded='false'] .explanation-chevron {
-    transform: rotate(-90deg);
 }
 
 .explanation-content {
@@ -2671,10 +2737,10 @@ body:has(#app-content:not(.hidden)) .header {
 
 /* SR card review status colors */
 .sr-overdue {
-    color: var(--danger);
+    color: var(--danger-text);
 }
 .sr-on-time {
-    color: var(--success);
+    color: var(--success-text);
 }
 
 /* ============================================================================
@@ -2724,7 +2790,7 @@ body:has(#app-content:not(.hidden)) .header {
 }
 
 /* Explanation disclosure */
-.explanation-toggle:focus-visible {
+.explanation-summary:focus-visible {
     outline: 3px solid var(--explanation-border);
     outline-offset: -3px;
 }
@@ -2749,14 +2815,21 @@ body:has(#app-content:not(.hidden)) .header {
 
 /* Keyboard hints: a small toggle at the end of the session bar, so nothing
    floats over the card's buttons. */
-.session-row {
+/* Round-start note (due / new / later); hidden after the first answer. */
+.session-note {
+    margin: 0.3rem 0 0;
+    font-size: 0.8rem;
+    color: var(--text-muted);
+}
+
+.session-bar-row {
     display: flex;
     align-items: center;
     gap: 0.5rem;
     margin-top: 0.35rem;
 }
 
-.session-row .stats {
+.session-bar-row .stats {
     flex: 1 1 auto;
     margin-top: 0;
 }
@@ -2848,6 +2921,8 @@ body:has(#app-content:not(.hidden)) .header {
     --danger: #ef5350;
     --warning: #ffca28;
     --warning-text: #ffca28;
+    --success-text: #81c784;
+    --danger-text: #ff8a80;
     --on-primary: #0f1b2b;
 
     --cards-highlight-bg: rgba(107, 159, 212, 0.15);
@@ -2863,7 +2938,8 @@ body:has(#app-content:not(.hidden)) .header {
     --explanation-border: #6b9fd4;
     --explanation-border-light: rgba(107, 159, 212, 0.3);
     --explanation-text: #8bbae8;
-    --explanation-content-text: #a0c8f0;
+    /* Also readable on the tinted wrong/missed option rows. */
+    --explanation-content-text: #c3dcf5;
     --tooltip-bg: #2a4a6b;
     --btn-secondary-bg: #5a5a6e;
     --btn-secondary-hover: #6a6a7e;
@@ -2871,8 +2947,8 @@ body:has(#app-content:not(.hidden)) .header {
     --sr-gradient-end: #2a5a88;
     --sr-gradient-hover-start: #4a7aae;
     --sr-gradient-hover-end: #3a6a98;
-    --sr-info-color: #20b2cc;
-    --sr-info-hover: #18a2bc;
+    --sr-info-color: #117a8b;
+    --sr-info-hover: #0f6b7a;
 }
 
 /* The dark-mode blue and green fills are light: dark text on them. */
@@ -2889,12 +2965,13 @@ body:has(#app-content:not(.hidden)) .header {
     background-color: #e53935;
 }
 
+/* White on the light dark-mode red is 3.5:1: a deeper fill. */
 [data-theme='dark'] .sr-delete-btn {
-    background: var(--danger);
+    background: #c62828;
 }
 
 [data-theme='dark'] .sr-delete-btn:hover {
-    background: #e53935;
+    background: #b71c1c;
 }
 
 [data-theme='dark'] .btn:focus-visible {
@@ -3012,12 +3089,12 @@ body:has(#app-content:not(.hidden)) .header {
 }
 
 .book-sr-overdue {
-    color: var(--danger);
+    color: var(--danger-text);
     border-color: var(--danger);
 }
 
 .book-sr-good {
-    color: var(--success, #27ae60);
+    color: var(--success-text);
     border-color: var(--success, #27ae60);
 }
 
@@ -3057,8 +3134,9 @@ body:has(#app-content:not(.hidden)) .header {
     border-left: 3px solid var(--success, #27ae60);
 }
 
+/* Muted colour instead of opacity: faded text dropped below 4.5:1. */
 .book-option-wrong {
-    opacity: 0.65;
+    color: var(--text-muted);
 }
 
 .book-option-explanation {
@@ -3349,11 +3427,11 @@ body:has(#app-content:not(.hidden)) .header {
 }
 
 .matching-result-pair.correct .matching-result-icon {
-    color: var(--success, #28a745);
+    color: var(--success-text);
 }
 
 .matching-result-pair.incorrect .matching-result-icon {
-    color: var(--danger, #dc3545);
+    color: var(--danger-text);
 }
 
 .matching-result-text {
@@ -3363,7 +3441,7 @@ body:has(#app-content:not(.hidden)) .header {
 }
 
 .matching-correction {
-    color: var(--text-muted, #888);
+    color: var(--text-color);
     font-style: italic;
     font-size: 0.88em;
 }
