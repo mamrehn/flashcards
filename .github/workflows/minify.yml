@@ -93,7 +93,10 @@ jobs:
                   sed -i 's|<link rel="stylesheet" href="cards\.css" />|<link inline rel="stylesheet" href="cards.css" />|g' cards.html
                   sed -i 's|<script src="sanitize\.js"></script>|<script inline src="sanitize.js"></script>|g' cards.html
                   sed -i 's|<script src="ui-dialog\.js"></script>|<script inline src="ui-dialog.js"></script>|g' cards.html
-                  sed -i 's|<script src="cards\.js"></script>|<script inline src="cards.js"></script>|g' cards.html
+                  # cards.js / library.js carry `defer` in the source HTML (so they run
+                  # after the deferred vendor scripts); inlined at the end of <body>
+                  # they still run before DOMContentLoaded, which is all they need.
+                  sed -i 's|<script defer src="cards\.js"></script>|<script inline src="cards.js"></script>|g' cards.html
 
                   # library.html
                   sed -i 's|<link rel="stylesheet" href="theme\.css" />|<link inline rel="stylesheet" href="theme.css" />|g' library.html
@@ -101,7 +104,7 @@ jobs:
                   sed -i 's|<script src="logger\.js"></script>|<script inline src="logger.js"></script>|g' library.html
                   sed -i 's|<link rel="stylesheet" href="library\.css" />|<link inline rel="stylesheet" href="library.css" />|g' library.html
                   sed -i 's|<script src="sanitize\.js"></script>|<script inline src="sanitize.js"></script>|g' library.html
-                  sed -i 's|<script src="library\.js"></script>|<script inline src="library.js"></script>|g' library.html
+                  sed -i 's|<script defer src="library\.js"></script>|<script inline src="library.js"></script>|g' library.html
 
                   # quiz.html (vendor/ scripts stay separate files)
                   sed -i 's|<link rel="stylesheet" href="theme\.css" />|<link inline rel="stylesheet" href="theme.css" />|g' quiz.html
@@ -153,6 +156,16 @@ jobs:
                   # Inline datenschutz.html
                   inline-source datenschutz.html --compress false --root ./ > datenschutz.inline.html
                   mv datenschutz.inline.html datenschutz.html
+
+            - name: Verify every first-party script and stylesheet was inlined
+              run: |
+                  # A sed pattern that silently stops matching (e.g. after adding
+                  # `defer` to a tag) used to ship unminified, separately fetched
+                  # files without anyone noticing. Fail the deploy instead.
+                  if grep -nE '<(script[^>]*src|link[^>]*href)="(index|cards|quiz|poll|library|sanitize|logger|theme|ws-client|ui-dialog)\.(js|css)"' *.html; then
+                    echo "::error::The files above were not inlined — update the sed patterns."
+                    exit 1
+                  fi
 
             - name: Minify inlined HTML files
               run: |

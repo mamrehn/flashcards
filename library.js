@@ -2,14 +2,16 @@
  * Lernkarten-Bibliothek (Library) page.
  *
  * Renders a grid of decks from decks/library.json and a per-deck detail view
- * (?deck=<id>). On import, writes the deck into localStorage in the same
- * shape cards.js expects, plus per-deck library metadata into a separate map
- * so the detail page can show "imported" and "update available" badges.
+ * (?deck=<id>). Importing (and updating) always goes through cards.html
+ * (?import=<id>), which validates the cards, keeps the deck's meta and writes
+ * per-deck library metadata; this page only reads that metadata to show the
+ * "imported" and "update available" badges.
  */
 
 const MANIFEST_URL = 'decks/library.json';
 const SAVED_DECKS_KEY = 'flashcardDecks';
 const LIBRARY_META_KEY = 'flashcardLibraryMeta';
+const NARROW_QUERY = '(max-width: 600px)';
 
 let manifest = null;
 
@@ -23,7 +25,6 @@ const els = {
     backLink: null,
     search: null,
     empty: null,
-    banner: null,
     title: null,
     subtitle: null,
     resultCount: null,
@@ -92,6 +93,8 @@ document.addEventListener('DOMContentLoaded', init);
 async function init() {
     cacheElements();
     bindEvents();
+    // A way back to the study app once there is something to study.
+    if (els.myDecksLink) els.myDecksLink.hidden = readSavedDeckIndex().names.size === 0;
     await loadManifest();
     routeFromURL();
 }
@@ -109,7 +112,6 @@ function cacheElements() {
     els.backLink = document.querySelector('.back-link');
     els.search = document.querySelector('#library-search');
     els.empty = document.querySelector('#empty-state');
-    els.banner = document.querySelector('#message-banner');
     els.title = document.querySelector('#library-title');
     els.subtitle = document.querySelector('#library-subtitle');
     els.resultCount = document.querySelector('#result-count');
@@ -117,6 +119,7 @@ function cacheElements() {
     els.facets = document.querySelector('#facets');
     els.facetsClear = document.querySelector('#facets-clear');
     els.facetsToggle = document.querySelector('#facets-toggle');
+    els.myDecksLink = document.querySelector('#my-decks-link');
 }
 
 /**
@@ -192,7 +195,7 @@ function routeFromURL() {
 function showGrid() {
     els.detail.classList.add('hidden');
     els.gridContainer.classList.remove('hidden');
-    els.title.textContent = '📚 Lernkarten-Bibliothek';
+    els.title.textContent = 'Bibliothek';
     els.backLink.href = 'index.html';
     els.backLink.title = 'Zur Startseite';
     els.subtitle.textContent =
@@ -417,7 +420,8 @@ function toggleFacet(key, value, checked) {
 function renderGrid() {
     els.grid.innerHTML = '';
     const filtered = visibleDecks();
-    const importedMeta = readLibraryMeta();
+    const libMeta = readLibraryMeta();
+    const saved = readSavedDeckIndex();
 
     if (filtered.length === 0) {
         renderEmptyState();
@@ -426,7 +430,7 @@ function renderGrid() {
     els.empty.classList.add('hidden');
 
     for (const deck of filtered) {
-        els.grid.append(buildDeckCard(deck, importedMeta[deck.title]));
+        els.grid.append(buildDeckCard(deck, importStatus(deck, libMeta, saved)));
     }
 }
 
@@ -491,9 +495,9 @@ function resetAllFilters() {
 /**
  *
  * @param deck
- * @param importedMeta
+ * @param {{current: boolean}|null} status - see importStatus
  */
-function buildDeckCard(deck, importedMeta) {
+function buildDeckCard(deck, status) {
     const card = document.createElement('a');
     card.className = 'deck-card';
     card.href = `library.html?deck=${encodeURIComponent(deck.id)}`;
@@ -527,22 +531,24 @@ function buildDeckCard(deck, importedMeta) {
     card.append(stats);
 
     if (deck.categories.length > 0) {
-        card.append(buildCategoryList(deck.categories, 5));
+        // Phones: a shorter teaser keeps the grid scannable.
+        const narrow = globalThis.matchMedia?.(NARROW_QUERY).matches;
+        card.append(buildCategoryList(deck.categories, narrow ? 3 : 5));
     }
 
-    if (importedMeta) {
-        const status = document.createElement('div');
-        status.className = 'deck-card-status';
+    if (status) {
+        const statusEl = document.createElement('div');
+        statusEl.className = 'deck-card-status';
         const pill = document.createElement('span');
-        if (importedMeta.libraryVersion === deck.version) {
+        if (status.current) {
             pill.className = 'status-pill imported';
             pill.textContent = '✓ Importiert';
         } else {
             pill.className = 'status-pill update';
             pill.textContent = '🔄 Aktualisierung verfügbar';
         }
-        status.append(pill);
-        card.append(status);
+        statusEl.append(pill);
+        card.append(statusEl);
     }
 
     return card;
@@ -683,19 +689,18 @@ function showDetail(deckId) {
 
     els.gridContainer.classList.add('hidden');
     els.detail.classList.remove('hidden');
-    els.title.textContent = '📚 Deck-Details';
+    els.title.textContent = 'Deck-Details';
     els.subtitle.textContent = '';
 
-    const meta = readLibraryMeta()[deck.title];
-    renderDetail(deck, meta);
+    renderDetail(deck, importStatus(deck, readLibraryMeta(), readSavedDeckIndex()));
 }
 
 /**
  *
  * @param deck
- * @param importedMeta
+ * @param {{current: boolean}|null} status - see importStatus
  */
-function renderDetail(deck, importedMeta) {
+function renderDetail(deck, status) {
     els.detailContent.innerHTML = '';
 
     const card = document.createElement('div');
@@ -706,8 +711,8 @@ function renderDetail(deck, importedMeta) {
     title.textContent = deck.title;
     card.append(title);
 
-    if (importedMeta) {
-        if (importedMeta.libraryVersion === deck.version) {
+    if (status) {
+        if (status.current) {
             card.append(
                 buildBanner(
                     'imported-banner',
@@ -720,7 +725,7 @@ function renderDetail(deck, importedMeta) {
                 buildBanner(
                     'update-banner',
                     '🔄 Aktualisierung verfügbar',
-                    `Deine importierte Version (${importedMeta.libraryVersion}) ist nicht mehr aktuell. Beim Aktualisieren bleibt dein Lernfortschritt für unveränderte Fragen erhalten — nur Fragen mit geändertem Wortlaut starten neu.`
+                    'Deine importierte Version ist nicht mehr aktuell. Beim Aktualisieren bleibt dein Lernfortschritt für unveränderte Fragen erhalten — nur Fragen mit geändertem Wortlaut starten neu.'
                 )
             );
         }
@@ -729,31 +734,26 @@ function renderDetail(deck, importedMeta) {
     const actions = document.createElement('div');
     actions.className = 'detail-actions detail-actions-top';
 
-    if (importedMeta && importedMeta.libraryVersion !== deck.version) {
-        const updateBtn = document.createElement('button');
-        updateBtn.className = 'btn btn-update';
-        updateBtn.textContent = '🔄 Aktualisieren (Fortschritt erhalten)';
-        updateBtn.addEventListener('click', () => updateDeck(deck, updateBtn));
-        actions.append(updateBtn);
+    // One import path for all three cases: cards.html validates the cards,
+    // keeps the deck's meta (topic grouping) and SR progress survives for
+    // every question whose wording is unchanged.
+    const importHref = `cards.html?import=${encodeURIComponent(deck.id)}`;
+    const importBtn = document.createElement('a');
+    importBtn.href = importHref;
+    if (status && !status.current) {
+        importBtn.className = 'btn btn-update';
+        importBtn.textContent = '🔄 Aktualisieren & lernen';
+    } else {
+        importBtn.className = 'btn btn-primary';
+        importBtn.textContent = status ? '▶ Lernen' : '⬇ Importieren & lernen';
     }
-
-    const isCurrentlyImported = importedMeta && importedMeta.libraryVersion === deck.version;
-
-    const importBtn = document.createElement('button');
-    importBtn.className = 'btn btn-primary';
-    importBtn.textContent = isCurrentlyImported ? '▶ Lernen starten' : '⬇ Importieren & lernen';
-    importBtn.addEventListener('click', () => {
-        location.href = `cards.html?import=${encodeURIComponent(deck.id)}`;
-    });
     actions.append(importBtn);
 
-    const previewBtn = document.createElement('button');
+    const previewBtn = document.createElement('a');
     previewBtn.className = 'btn btn-secondary';
+    previewBtn.href = `cards.html?preview=${encodeURIComponent(deck.id)}`;
     previewBtn.textContent = '👁 Vorschau';
     previewBtn.title = 'Alle Karten dieses Decks linear anzeigen — keine Speicherung';
-    previewBtn.addEventListener('click', () => {
-        location.href = `cards.html?preview=${encodeURIComponent(deck.id)}`;
-    });
     actions.append(previewBtn);
 
     card.append(actions);
@@ -902,117 +902,6 @@ function formatBytes(n) {
 }
 
 /**
- * Re-import a deck in place from the library, writing the new version
- * into localStorage. Existing SR stats survive automatically for any
- * question whose text is unchanged (keys are deckName|||question).
- * @param deck
- * @param btn
- */
-async function updateDeck(deck, btn) {
-    btn.disabled = true;
-    btn.textContent = 'Aktualisiere …';
-    try {
-        await importDeckFromLibrary(deck);
-        showMessage(
-            `„${deck.title}“ wurde aktualisiert. Ungeänderte Fragen behalten ihren Fortschritt.`
-        );
-        renderDetail(deck, readLibraryMeta()[deck.title]);
-    } catch (error) {
-        console.error(error);
-        showMessage('Aktualisierung fehlgeschlagen.', true);
-        btn.disabled = false;
-        btn.textContent = '🔄 Aktualisieren (Fortschritt erhalten)';
-    }
-}
-
-/**
- *
- * @param deckMeta
- */
-async function importDeckFromLibrary(deckMeta) {
-    const url = `decks/${encodeURIComponent(deckMeta.filename)}?v=${encodeURIComponent(deckMeta.version)}`;
-    const res = await fetch(url);
-    if (!res.ok) throw new Error(`Fetch failed: HTTP ${res.status}`);
-
-    const isJson = /\.json$/i.test(deckMeta.filename);
-    let entries;
-    if (isJson) {
-        entries = [{ name: deckMeta.filename, content: await res.text() }];
-    } else {
-        if (typeof JSZip === 'undefined') {
-            throw new TypeError('JSZip nicht geladen.');
-        }
-        const zip = await JSZip.loadAsync(await res.arrayBuffer());
-        const zipEntries = Object.values(zip.files).filter(
-            (e) => !e.dir && e.name.endsWith('.json')
-        );
-        entries = await Promise.all(
-            zipEntries.map(async (e) => ({ name: e.name, content: await e.async('string') }))
-        );
-    }
-
-    let savedDecks;
-    try {
-        savedDecks = JSON.parse(localStorage.getItem(SAVED_DECKS_KEY) || '{}');
-    } catch {
-        savedDecks = {};
-    }
-    savedDecks = sanitizeParsedJSON(savedDecks) || {};
-
-    let importedAny = false;
-    for (const entry of entries) {
-        let data;
-        try {
-            data = sanitizeParsedJSON(JSON.parse(entry.content));
-        } catch {
-            continue;
-        }
-        if (!data || !Array.isArray(data.cards)) continue;
-        const validCards = data.cards.filter((c) => isValidCard(c));
-        if (validCards.length === 0) continue;
-
-        const deckName = entry.name
-            .split('/')
-            .pop()
-            .replace(/\.json$/i, '');
-        savedDecks[deckName] = { cards: validCards };
-        importedAny = true;
-    }
-
-    if (!importedAny) throw new Error('Keine gültigen Karten in der Datei gefunden.');
-
-    localStorage.setItem(SAVED_DECKS_KEY, JSON.stringify(savedDecks));
-
-    const meta = readLibraryMeta();
-    meta[deckMeta.title] = {
-        libraryId: deckMeta.id,
-        libraryVersion: deckMeta.version,
-        importedAt: new Date().toISOString(),
-    };
-    localStorage.setItem(LIBRARY_META_KEY, JSON.stringify(meta));
-}
-
-/**
- *
- * @param card
- */
-function isValidCard(card) {
-    if (!card || typeof card !== 'object') return false;
-    if (Array.isArray(card.pairs) && card.pairs.length > 0) return true;
-    if (typeof card.question !== 'string' || card.question.trim() === '') return false;
-    if (typeof card.answer === 'string' && card.answer.trim() !== '') return true;
-    if (
-        Array.isArray(card.options) &&
-        card.options.length > 0 &&
-        Array.isArray(card.correct) &&
-        card.correct.length > 0
-    ) {
-        return card.correct.every((i) => Number.isInteger(i) && i >= 0 && i < card.options.length);
-    }
-    return false;
-}
-
-/**
  *
  */
 function readLibraryMeta() {
@@ -1027,13 +916,44 @@ function readLibraryMeta() {
 }
 
 /**
- *
- * @param text
- * @param isError
+ * Names and topic titles of the decks saved on this device (cards.js storage).
+ * @returns {{names: Set<string>, titles: Set<string>}}
  */
-function showMessage(text, isError) {
-    els.banner.textContent = text;
-    els.banner.classList.remove('hidden', 'error');
-    if (isError) els.banner.classList.add('error');
-    setTimeout(() => els.banner.classList.add('hidden'), 4000);
+function readSavedDeckIndex() {
+    const names = new Set();
+    const titles = new Set();
+    try {
+        const saved = sanitizeParsedJSON(JSON.parse(localStorage.getItem(SAVED_DECKS_KEY) || '{}'));
+        for (const [name, deck] of Object.entries(saved || {})) {
+            names.add(name);
+            if (deck && deck.meta && typeof deck.meta.name === 'string') titles.add(deck.meta.name);
+        }
+    } catch {
+        // Unreadable storage: treat as nothing imported.
+    }
+    return { names, titles };
+}
+
+/**
+ * Import status of a library deck on this device, or null when not imported.
+ * Metadata entries are keyed by saved deck name (cards.js); entries from the
+ * library's former in-page update were keyed by the deck title. Match on
+ * libraryId and only count entries whose deck still exists, so a deck deleted
+ * in the study app no longer shows as "imported".
+ * @param {{id: string, title: string, version: string}} deck
+ * @param {object} libMeta - readLibraryMeta()
+ * @param {{names: Set<string>, titles: Set<string>}} saved - readSavedDeckIndex()
+ * @returns {{current: boolean}|null}
+ */
+function importStatus(deck, libMeta, saved) {
+    let status = null;
+    for (const [key, m] of Object.entries(libMeta)) {
+        if (!m || m.libraryId !== deck.id) continue;
+        const exists = saved.names.has(key) || (key === deck.title && saved.titles.has(key));
+        if (!exists) continue;
+        const current = m.libraryVersion === deck.version;
+        // Any outdated part of a multi-file deck makes the whole deck outdated.
+        if (!status || !current) status = { current };
+    }
+    return status;
 }

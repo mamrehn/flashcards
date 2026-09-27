@@ -28,10 +28,7 @@ test('start page and library load everything from this site', async ({ device, b
 
     await page.goto('/library.html');
     await page.waitForFunction(
-        () =>
-            globalThis.JSZip !== undefined &&
-            globalThis.marked !== undefined &&
-            globalThis.DOMPurify !== undefined
+        () => globalThis.marked !== undefined && globalThis.DOMPurify !== undefined
     );
     expect(external, 'no request may leave the site').toEqual([]);
 });
@@ -128,7 +125,7 @@ test('the service worker precaches the self-hosted libraries', async ({ device }
     await expect
         .poll(() =>
             page.evaluate(async () => {
-                const cache = await caches.open('flashcards-v6');
+                const cache = await caches.open('flashcards-v7');
                 const wanted = [
                     'vendor/jszip-3.10.1.min.js',
                     'vendor/qrcode-1.0.0.min.js',
@@ -142,4 +139,91 @@ test('the service worker precaches the self-hosted libraries', async ({ device }
             })
         )
         .toBe(true);
+});
+
+test('a library import shows up as imported and stays selected after a reload', async ({
+    device,
+}) => {
+    const page = await device('cards', STATIC);
+    // Nothing saved yet: the library offers no way "back" to an empty study app.
+    await page.goto('/library.html');
+    await expect(page.locator('.deck-card').first()).toBeVisible();
+    await expect(page.locator('#my-decks-link')).toBeHidden();
+
+    await page.goto('/cards.html?import=beispiel-allgemeinwissen');
+    // The confirmation is a real, visible toast (it used to be unstyled text
+    // appended below the page).
+    const toast = page.locator('#toast-region .message-popup');
+    await expect(toast).toContainText('importiert');
+    await expect(toast).toHaveClass(/show/);
+    await expect(page.locator('#toast-region')).toHaveCSS('position', 'fixed');
+
+    const start = page.locator('#start-selected-decks');
+    await expect(start).toBeEnabled();
+    await expect(start).toHaveText(/▶ \d+ Karten lernen/);
+    const label = await start.textContent();
+
+    // Returning later: the remembered selection makes "start" one tap away.
+    await page.reload();
+    await expect(start).toBeEnabled();
+    await expect(start).toHaveText(label);
+
+    // The library matches imports by id (the study app keys them by file name).
+    await page.goto('/library.html');
+    await expect(page.locator('#my-decks-link')).toBeVisible();
+    await expect(
+        page.locator('.deck-card', { hasText: 'Allgemeinwissen' }).locator('.status-pill')
+    ).toHaveText('✓ Importiert');
+
+    // Deleting the deck in the study app clears that badge again.
+    await page.goto('/cards.html');
+    await page.locator('.topic-toggle', { hasText: 'Allgemeinwissen' }).click();
+    await page.getByRole('button', { name: /Deck löschen/ }).click();
+    await page.click('.ui-modal-confirm');
+    await page.goto('/library.html');
+    await expect(page.locator('.deck-card', { hasText: 'Allgemeinwissen' })).toBeVisible();
+    await expect(page.locator('.status-pill')).toHaveCount(0);
+});
+
+test('multiple choice: tapping the option text toggles it exactly once', async ({
+    device,
+}, testInfo) => {
+    const deck = testInfo.outputPath('one-mc.json');
+    fs.writeFileSync(
+        deck,
+        JSON.stringify({
+            cards: [
+                {
+                    question: 'Welche sind Primzahlen?',
+                    options: ['2', '4', '7'],
+                    correct: [0, 2],
+                    explanations: { 1: '4 = 2×2', 2: '7 ist nur durch 1 und 7 teilbar.' },
+                },
+            ],
+        })
+    );
+    const page = await device('cards', STATIC);
+    await page.goto('/cards.html');
+    await page.setInputFiles('#file-input', deck);
+
+    const option = (text) =>
+        page.locator('#options-container .option-item', {
+            has: page.locator('.option-text', { hasText: new RegExp(`^${text}$`) }),
+        });
+    for (const text of ['2', '4']) {
+        await option(text).locator('.option-text').click();
+        await expect(option(text)).toHaveAttribute('aria-checked', 'true');
+    }
+    await option('4').locator('.option-text').click();
+    await expect(option('4')).toHaveAttribute('aria-checked', 'false');
+
+    await page.click('#show-answer');
+    // Outcome in words, and the missed option explains itself inline.
+    await expect(page.locator('#answer-verdict')).toContainText('Teilweise richtig');
+    const back = page.locator('#options-container-back');
+    await expect(back.locator('.mc-missed .option-status')).toHaveText('! fehlte');
+    await expect(back.locator('.mc-missed .option-explanation')).toHaveText(
+        '7 ist nur durch 1 und 7 teilbar.'
+    );
+    await expect(back.locator('.mc-correct-selected .option-status')).toHaveText('✓ richtig');
 });

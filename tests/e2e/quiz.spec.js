@@ -38,8 +38,11 @@ async function hostQuiz(device) {
 async function joinQuiz(device, code, name) {
     const page = await device(name);
     await page.goto(`/quiz.html?host=${code}`);
-    await page.fill('#player-name-input', name);
-    await page.click('#join-btn');
+    // The code comes from the link; the name field has focus and the phone
+    // keyboard's Enter ("Los") joins.
+    await expect(page.locator('#player-name-input')).toBeFocused();
+    await page.keyboard.type(name);
+    await page.keyboard.press('Enter');
     await expect(page.locator('#waiting-message')).toContainText('Du bist drin');
     return page;
 }
@@ -94,6 +97,7 @@ test('a relay restart mid-question resumes the round; double click and reload ar
 
     await test.step('the server restarts after Mia answered', async () => {
         await answer(mia);
+        await expect(mia.locator('#submit-answer-btn')).toContainText('Antwort gesendet');
         await expect(host.locator('#answers-count')).toHaveText('1');
         // Mark the current buttons so we can tell the resumed question apart.
         for (const page of [mia, ben]) {

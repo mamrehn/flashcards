@@ -45,6 +45,16 @@ function showMessage(message, type = 'info') {
 }
 
 /**
+ * Letter label for an answer option (A, B, C …), shown on the host's screen
+ * and the players' buttons so the class can talk about "B".
+ * @param {number} index
+ * @returns {string}
+ */
+function optionLetter(index) {
+    return String.fromCodePoint(65 + index);
+}
+
+/**
  * Shows a specific view and hides all other views.
  * @param {string} viewToShowId - The ID of the view element to show.
  */
@@ -476,6 +486,7 @@ document.addEventListener('DOMContentLoaded', () => {
         showView('player-view');
         initializePlayerFeatures();
         document.querySelector('#room-code-input').value = hostIdFromUrl;
+        document.querySelector('#player-name-input').focus();
     } else if (savedSession && savedSession.role === 'player') {
         showView('player-view');
         initializePlayerFeatures({
@@ -488,10 +499,12 @@ document.addEventListener('DOMContentLoaded', () => {
         reconnectHostBtn.classList.remove('hidden');
         reconnectHostBtn.classList.add('pulse-cta');
     } else if (hostIdFromUrl) {
-        // URL param: navigate directly to player view and pre-fill room code
+        // URL param: navigate directly to player view and pre-fill room code;
+        // the name is all that's left to type.
         showView('player-view');
         initializePlayerFeatures();
         document.querySelector('#room-code-input').value = hostIdFromUrl;
+        document.querySelector('#player-name-input').focus();
     } else {
         showView('role-selection');
     }
@@ -1085,6 +1098,79 @@ function getNonHostPlayerCount() {
  * Initializes all features and event listeners for the host role.
  * @param reconnectInfo
  */
+/** Current host importer used by the library picker (see setupLibraryPicker). */
+let libraryPickerImport = null;
+
+/**
+ * "Aus der Bibliothek" on the host setup: lists the library decks that contain
+ * multiple-choice questions and feeds the chosen one through the same import
+ * as a file upload — a teacher no longer has to download a ZIP from the
+ * library just to upload it again here. Stays hidden when the manifest can't
+ * be loaded (offline, or served without decks/).
+ * @param {(files: File[]) => Promise<void>} importFiles - the host's file importer
+ */
+async function setupLibraryPicker(importFiles) {
+    // "Neues Quiz hosten" re-runs host setup with a fresh importer (bound to
+    // the fresh quiz state): always import through the latest one, but build
+    // the list and listeners only once.
+    libraryPickerImport = importFiles;
+    const wrap = document.querySelector('#library-picker');
+    const select = document.querySelector('#library-deck-select');
+    const loadBtn = document.querySelector('#library-load-btn');
+    if (!wrap || !select || !loadBtn || wrap.dataset.ready) return;
+    wrap.dataset.ready = '1';
+
+    let decks = [];
+    try {
+        const res = await fetch('decks/library.json', { cache: 'no-cache' });
+        if (!res.ok) return;
+        const manifest = sanitizeParsedJSON(await res.json());
+        decks = (manifest && Array.isArray(manifest.decks) ? manifest.decks : []).filter(
+            (d) => d && typeof d.filename === 'string' && (d.types?.multipleChoice ?? 0) > 0
+        );
+    } catch {
+        return;
+    }
+    if (decks.length === 0) return;
+
+    for (const deck of decks.toSorted((a, b) => String(a.title).localeCompare(b.title, 'de'))) {
+        const option = document.createElement('option');
+        option.value = deck.id;
+        option.textContent = `${deck.title} (${deck.types.multipleChoice} MC-Fragen)`;
+        select.append(option);
+    }
+    wrap.classList.remove('hidden');
+    select.addEventListener('change', () => {
+        loadBtn.disabled = !select.value;
+    });
+
+    loadBtn.addEventListener('click', async () => {
+        const deck = decks.find((d) => d.id === select.value);
+        if (!deck) return;
+        loadBtn.disabled = true;
+        const label = loadBtn.textContent;
+        loadBtn.textContent = 'Lädt …';
+        try {
+            const url = `decks/${encodeURIComponent(deck.filename)}?v=${encodeURIComponent(deck.version)}`;
+            const res = await fetch(url);
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            const blob = await res.blob();
+            const isZip = /\.zip$/i.test(deck.filename);
+            await libraryPickerImport([
+                new File([blob], deck.filename, {
+                    type: isZip ? 'application/zip' : 'application/json',
+                }),
+            ]);
+        } catch (error) {
+            console.error('Library deck could not be loaded:', error);
+            showMessage('Das Deck konnte nicht geladen werden.', 'error');
+        } finally {
+            loadBtn.textContent = label;
+            loadBtn.disabled = !select.value;
+        }
+    });
+}
+
 async function initializeHostFeatures(reconnectInfo) {
     // logger.log("Initializing Host Features. Initialized flag:", isHostInitialized);
     // Initialize quiz state if not already set
@@ -1315,7 +1401,15 @@ async function initializeHostFeatures(reconnectInfo) {
                     importFiles([...files]);
                 }
             });
+            quizDropZone.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    jsonFileInput.click();
+                }
+            });
         }
+
+        setupLibraryPicker(importFiles);
 
         // Category filter: "select all / deselect all" toggle
         const categoryToggleAllBtn = document.querySelector('#category-filter-toggle-all');
@@ -1614,7 +1708,7 @@ async function initializeHostFeatures(reconnectInfo) {
         window.addEventListener('beforeunload', hostBeforeUnloadHandler);
 
         // Event listener for opening the QR code modal
-        qrcodeElement.addEventListener('click', () => {
+        const openQrModal = () => {
             if (qrModalOverlay && largeQrcodeContainer && hostRoomId) {
                 qrModalOverlay.classList.remove('hidden');
                 largeQrcodeContainer.innerHTML = ''; // Clear previous QR
@@ -1622,13 +1716,23 @@ async function initializeHostFeatures(reconnectInfo) {
                 // eslint-disable-next-line sonarjs/constructor-for-side-effects
                 new QRCode(largeQrcodeContainer, {
                     text: joinLinkElement.href,
-                    width: 300,
-                    height: 300,
+                    // Rendered large and scaled down by CSS, so it stays crisp
+                    // on a projector.
+                    width: 600,
+                    height: 600,
                     colorDark: '#000000',
                     colorLight: '#ffffff',
                     correctLevel: QRCode.CorrectLevel.H,
                 });
                 modalRoomIdSpan.textContent = quizState.roomId;
+                document.querySelector('#qr-modal-close')?.focus();
+            }
+        };
+        qrcodeElement.addEventListener('click', openQrModal);
+        qrcodeElement.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                openQrModal();
             }
         });
 
@@ -1706,7 +1810,16 @@ async function initializeHostFeatures(reconnectInfo) {
         // Reconciles + (re)renders the category filter for the current pool.
         renderCategoryFilter();
         questionsContainer.innerHTML = '';
-        if (quizState.questions.length === 0) {
+        const count = quizState.questions.length;
+        // The list is collapsed by default (16 imported questions made the
+        // setup page ~6000px tall on a phone); its summary carries the count.
+        const summary = document.querySelector('#questions-list-summary');
+        if (summary) {
+            const noun = count === 1 ? 'Frage' : 'Fragen';
+            summary.textContent = count === 0 ? 'Fragen ansehen' : `${count} ${noun} ansehen`;
+        }
+        document.querySelector('#setup-start-hint')?.classList.toggle('hidden', count > 0);
+        if (count === 0) {
             questionsContainer.innerHTML = '<p>Noch keine Fragen hinzugefügt</p>';
             startQuizBtn.classList.add('hidden');
             return;
@@ -1715,19 +1828,27 @@ async function initializeHostFeatures(reconnectInfo) {
         for (const [index, q] of quizState.questions.entries()) {
             const item = document.createElement('div');
             item.className = 'question-item';
-            const correctIndices = q.correct.map((i) => i + 1).join(', ');
+            const correctSet = new Set(q.correct);
+            const optionsHtml = q.options
+                .map(
+                    (o, i) =>
+                        `<li class="${correctSet.has(i) ? 'is-correct' : ''}">${sanitizeHTML(o)}</li>`
+                )
+                .join('');
             item.innerHTML = `
-                        <p><strong>F${index + 1}:</strong> ${sanitizeHTML(q.question)}</p>
-                        <p><strong>Optionen:</strong> ${q.options.map((o) => sanitizeHTML(o)).join('; ')}</p>
-                        <p><strong>Richtige Option(en):</strong> ${correctIndices}</p>
-                        <button class="btn remove-question" data-index="${index}">Entfernen</button>
+                        <div class="question-item-head">
+                            <p class="question-item-text"><strong>F${index + 1}:</strong> ${sanitizeHTML(q.question)}</p>
+                            <button type="button" class="remove-question" data-index="${index}"
+                                aria-label="Frage ${index + 1} entfernen" title="Frage entfernen">✕</button>
+                        </div>
+                        <ol class="question-item-options">${optionsHtml}</ol>
                     `;
             questionsContainer.append(item);
         }
 
         for (const button of document.querySelectorAll('.remove-question')) {
             button.addEventListener('click', (e) => {
-                const index = Number.parseInt(e.target.dataset.index);
+                const index = Number.parseInt(e.currentTarget.dataset.index);
                 quizState.questions.splice(index, 1);
                 renderQuestionsList();
                 // Removing the last card of a category drops it from the pool;
@@ -2677,8 +2798,10 @@ async function initializeHostFeatures(reconnectInfo) {
         try {
             new QRCode(qrcodeElement, {
                 text: url, // Encode the full URL
-                width: 240, // Increased size for initial display
-                height: 240,
+                // Drawn at 480px and sized by CSS (up to ~22rem on a projector),
+                // so it stays sharp when scaled.
+                width: 480,
+                height: 480,
                 colorDark: '#000000',
                 colorLight: '#ffffff',
                 correctLevel: QRCode.CorrectLevel.H, // High error correction for complex URLs
@@ -2836,11 +2959,14 @@ async function initializeHostFeatures(reconnectInfo) {
         const correctSet = new Set(correctIndices);
         for (const [index, option] of options.entries()) {
             const li = document.createElement('li');
+            const letter = document.createElement('span');
+            letter.className = 'option-letter';
+            letter.textContent = optionLetter(index);
             let optionText = option;
             if (optionCounts && optionCounts[index] !== undefined) {
-                optionText += ` (${optionCounts[index]}x gewählt)`;
+                optionText += ` (${optionCounts[index]}× gewählt)`;
             }
-            li.textContent = optionText;
+            li.append(letter, document.createTextNode(optionText));
             if (correctSet.has(index)) {
                 li.classList.add('correct');
             }
@@ -3957,6 +4083,21 @@ function initializePlayerFeatures(reconnectInfo) {
             initPlayerConnection(roomCode, finalPlayerName);
         });
 
+        // The phone keyboard's "Weiter"/"Los" key: code → name → join.
+        roomCodeInput.addEventListener('keydown', (e) => {
+            if (e.key !== 'Enter' || e.isComposing) return;
+            e.preventDefault();
+            playerNameInput.focus();
+        });
+        playerNameInput.addEventListener('keydown', (e) => {
+            if (e.key !== 'Enter' || e.isComposing) return;
+            e.preventDefault();
+            // A held key auto-repeats; joining hides the form, so a second
+            // Enter must not start a second connection.
+            if (e.repeat || joinForm.classList.contains('hidden')) return;
+            joinBtn.click();
+        });
+
         submitAnswerBtn.addEventListener('click', async () => {
             if (playerHasSubmitted) return;
             if (selectedAnswers.length === 0) {
@@ -3993,6 +4134,10 @@ function initializePlayerFeatures(reconnectInfo) {
 
             playerHasSubmitted = true;
             submitAnswerBtn.disabled = true;
+            // Say that it worked — a merely greyed-out button left players
+            // unsure whether their tap had registered.
+            submitAnswerBtn.textContent = '✓ Antwort gesendet – warte auf die anderen';
+            submitAnswerBtn.classList.add('is-sent');
             submitAnswerBtn.classList.remove('pulse-cta');
             for (const btn of optionsContainer.querySelectorAll('button.option-btn')) {
                 btn.disabled = true;
@@ -4516,7 +4661,15 @@ function initializePlayerFeatures(reconnectInfo) {
         for (const [index, option] of qData.options.entries()) {
             const btn = document.createElement('button');
             btn.className = 'option-btn';
-            btn.textContent = option;
+            const letter = document.createElement('span');
+            letter.className = 'option-letter';
+            letter.setAttribute('aria-hidden', 'true');
+            letter.textContent = optionLetter(index);
+            const text = document.createElement('span');
+            text.className = 'option-btn-text';
+            text.textContent = option;
+            btn.append(letter, text);
+            btn.setAttribute('aria-pressed', 'false');
             btn.dataset.index = index;
 
             btn.addEventListener('click', () => {
@@ -4530,6 +4683,7 @@ function initializePlayerFeatures(reconnectInfo) {
                     selectedAnswers.splice(pos, 1);
                     btn.classList.remove('selected');
                 }
+                btn.setAttribute('aria-pressed', String(pos === -1));
 
                 submitAnswerBtn.disabled = selectedAnswers.length === 0;
             });
@@ -4544,7 +4698,8 @@ function initializePlayerFeatures(reconnectInfo) {
         // render the locked state in one paint instead of enable→disable.
         const alreadySubmitted = !!qData.alreadySubmitted;
         submitAnswerBtn.classList.toggle('hidden', alreadySubmitted);
-        submitAnswerBtn.classList.remove('pulse-cta');
+        submitAnswerBtn.classList.remove('pulse-cta', 'is-sent');
+        submitAnswerBtn.textContent = 'Antwort absenden';
         submitAnswerBtn.disabled = true;
         playerHasSubmitted = alreadySubmitted;
         playerWasAutoSubmitted = false;
@@ -4655,7 +4810,8 @@ function initializePlayerFeatures(reconnectInfo) {
             const cls = playerAnsSet.has(index)
                 ? 'correct-answer-chip player-selected'
                 : 'correct-answer-chip';
-            correctHtml += `<span class="${cls}">${sanitizeHTML(option)}</span>`;
+            // Same letter as on the host's screen and the answer buttons.
+            correctHtml += `<span class="${cls}"><span class="option-letter">${optionLetter(index)}</span>${sanitizeHTML(option)}</span>`;
         }
         correctHtml += '</div>';
 

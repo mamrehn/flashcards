@@ -31,7 +31,7 @@
         updateToggleIcon(theme);
         var meta = document.querySelector('meta[name="theme-color"]');
         if (meta) {
-            meta.setAttribute('content', theme === DARK ? '#1e1e2e' : '#3498db');
+            meta.setAttribute('content', theme === DARK ? '#12141a' : '#f2f4f7');
         }
     }
 
@@ -74,7 +74,15 @@
         btn.className = 'theme-toggle';
         btn.type = 'button';
         btn.addEventListener('click', toggleTheme);
-        document.body.append(btn);
+        // Pages with a header offer a slot so the toggle sits inside it instead
+        // of floating over the header text (which it covered on phones).
+        var slot = document.querySelector('[data-theme-toggle-slot]');
+        if (slot) {
+            btn.classList.add('theme-toggle--inline');
+            slot.append(btn);
+        } else {
+            document.body.append(btn);
+        }
         updateToggleIcon(document.documentElement.dataset.theme || LIGHT);
     }
 

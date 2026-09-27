@@ -26,11 +26,19 @@
     <body>
         <div class="container">
             <header class="library-header">
-                <a href="index.html" class="back-link" title="Zur Startseite">←</a>
+                <a
+                    href="index.html"
+                    class="back-link"
+                    title="Zur Startseite"
+                    aria-label="Zur Startseite"
+                    >←</a
+                >
                 <div class="header-content">
-                    <h1 id="library-title">📚 Lernkarten-Bibliothek</h1>
+                    <h1 id="library-title">Bibliothek</h1>
                     <p id="library-subtitle">Wähle ein Deck zum Importieren</p>
                 </div>
+                <a href="cards.html" id="my-decks-link" class="header-link" hidden>Meine Decks</a>
+                <div data-theme-toggle-slot></div>
             </header>
 
             <div id="loading-state" class="state-message">Lade Bibliothek …</div>
@@ -39,11 +47,14 @@
             <!-- Grid view (default) -->
             <section id="grid-view" class="hidden">
                 <div class="search-row">
+                    <label for="library-search" class="sr-only">Decks durchsuchen</label>
                     <input
-                        type="text"
+                        type="search"
                         id="library-search"
                         class="library-search-input"
                         placeholder="🔍 Decks durchsuchen …"
+                        enterkeyhint="search"
+                        autocomplete="off"
                     />
                     <button
                         type="button"
@@ -77,12 +88,9 @@
             <section id="detail-view" class="hidden">
                 <div id="detail-content"></div>
             </section>
-
-            <div id="message-banner" class="message-banner hidden"></div>
         </div>
 
         <!-- Self-hosted (vendor/README.md): offline-capable, no CDN requests. -->
-        <script defer src="vendor/jszip-3.10.1.min.js"></script>
         <script defer src="vendor/marked-16.3.0.umd.min.js"></script>
         <script defer src="vendor/purify-3.2.7.min.js"></script>
         <script defer src="library.js"></script>

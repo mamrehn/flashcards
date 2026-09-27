@@ -20,13 +20,19 @@
     --cards-highlight-border: #b592e3; /* cards' #92b5e3 rotated */
     --progress-track: #e9ecef;
     --primary-rgb: 107, 66, 166;
+    /* Text on filled primary / accent / status surfaces. White in light mode;
+       dark in dark mode, where those fills turn light (white on #c4a6ea was
+       2.1:1 — every button and selected answer failed contrast). */
+    --on-primary: #ffffff;
+    --on-accent: #ffffff;
+    --on-status: #ffffff;
 }
 
 * {
     margin: 0;
     padding: 0;
     box-sizing: border-box;
-    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    font-family: var(--font-sans);
 }
 
 body {
@@ -34,6 +40,7 @@ body {
     color: var(--text-color);
     font-size: 18px;
     line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
 }
 
 /* The `* { padding: 0 }` reset above strips the indentation browsers normally
@@ -95,30 +102,38 @@ h4 {
 header {
     background-color: var(--surface-color);
     color: var(--primary-color);
-    padding: 0.5rem 1rem;
+    min-height: 56px;
+    padding: 0.5rem 0.6rem;
     text-align: center;
-    border-radius: 8px;
+    border-radius: var(--radius-lg);
     margin-bottom: 0.75rem;
-    box-shadow: 0 2px 4px var(--shadow-color);
+    box-shadow: var(--shadow-sm);
     display: flex;
     align-items: center;
     gap: 1rem;
 }
 
 header h1 {
-    color: var(--primary-color);
+    color: var(--text-color);
     margin: 0;
     flex: 1;
+    font-size: 1.2rem;
+    font-weight: 700;
+    letter-spacing: -0.01em;
 }
 
 .back-link {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 40px;
     color: var(--primary-color);
     text-decoration: none;
-    font-size: 1.5rem;
+    font-size: 1.35rem;
     font-weight: 500;
     line-height: 1;
-    padding: 0.25rem 0.5rem;
-    border-radius: 4px;
+    border-radius: 50%;
     transition: background-color 0.2s;
     flex-shrink: 0;
 }
@@ -137,15 +152,15 @@ header h1 {
 
 .btn {
     background-color: var(--primary-color);
-    color: white;
+    color: var(--on-primary);
     border: none;
     padding: 0.5rem 1rem;
     /* >=44px tap target (WCAG 2.5.5 / mobile guidelines). */
     min-height: 44px;
-    border-radius: 4px;
+    border-radius: var(--radius-md);
     cursor: pointer;
     font-size: 1.05rem;
-    font-weight: 500;
+    font-weight: 600;
     transition: background-color 0.2s;
     margin: 0.3rem 0.3rem 0.3rem 0;
 }
@@ -162,6 +177,7 @@ header h1 {
 
 .btn-accent {
     background-color: var(--accent-color);
+    color: var(--on-accent);
 }
 
 @media (hover: hover) {
@@ -181,7 +197,7 @@ header h1 {
 @media (hover: hover) {
     .btn-reconnect:hover {
         background-color: var(--secondary-color);
-        color: white;
+        color: var(--on-primary);
     }
 }
 
@@ -196,16 +212,360 @@ header h1 {
 @media (hover: hover) {
     .btn-finish:hover {
         background-color: var(--accent-color);
-        color: white;
+        color: var(--on-accent);
     }
 }
 
 .card {
     background-color: var(--surface-color);
-    border-radius: 8px;
+    border-radius: var(--radius-lg);
     padding: 0.75rem 1rem;
-    box-shadow: 0 2px 4px var(--shadow-color);
+    box-shadow: var(--shadow-sm);
     margin-bottom: 0.75rem;
+}
+
+.btn.btn-block {
+    display: block;
+    width: 100%;
+    margin: 0.5rem 0 0;
+    min-height: 50px;
+    font-weight: 600;
+}
+
+/* Quiet secondary action inside forms ("+ Option"). */
+.btn.btn-quiet {
+    background-color: transparent;
+    color: var(--primary-color);
+    border: 1px dashed var(--cards-highlight-border);
+}
+
+@media (hover: hover) {
+    .btn.btn-quiet:hover {
+        background-color: var(--quiz-hover);
+    }
+}
+
+/* ── Role choice: two big, described buttons ─────────────────────────────── */
+.role-choices {
+    display: grid;
+    gap: 0.75rem;
+    margin-top: 0.5rem;
+}
+
+@media (min-width: 640px) {
+    .role-choices {
+        grid-template-columns: 1fr 1fr;
+    }
+}
+
+.btn.role-btn {
+    display: flex;
+    align-items: center;
+    gap: 0.9rem;
+    width: 100%;
+    margin: 0;
+    min-height: 76px;
+    padding: 0.75rem 1rem;
+    border-radius: var(--radius-lg);
+    text-align: left;
+}
+
+.btn.role-btn-host {
+    background-color: var(--surface-color);
+    color: var(--primary-color);
+    border: 2px solid var(--cards-highlight-border);
+}
+
+@media (hover: hover) {
+    .btn.role-btn-host:hover {
+        background-color: var(--quiz-hover);
+    }
+}
+
+.role-btn-icon {
+    font-size: 1.9rem;
+    line-height: 1;
+}
+
+.role-btn-text {
+    display: flex;
+    flex-direction: column;
+    gap: 0.1rem;
+}
+
+.role-btn-title {
+    font-size: 1.1rem;
+    font-weight: 700;
+}
+
+.role-btn-hint {
+    font-size: 0.85rem;
+    font-weight: 400;
+    opacity: 0.85;
+}
+
+/* ── Join form ───────────────────────────────────────────────────────────── */
+#join-form input {
+    min-height: 48px;
+    /* ≥16px so iOS Safari doesn't zoom on focus. */
+    font-size: max(16px, 1em);
+}
+
+#room-code-input {
+    text-transform: uppercase;
+    letter-spacing: 0.15em;
+    font-weight: 600;
+}
+
+#room-code-input::placeholder {
+    text-transform: none;
+    letter-spacing: normal;
+    font-weight: 400;
+}
+
+.join-hint {
+    margin-top: 0.75rem;
+    font-size: 0.9rem;
+    color: var(--text-muted);
+}
+
+/* ── Player question: hint + sticky submit ───────────────────────────────── */
+.player-question-hint {
+    margin: 0.5rem 0;
+    font-size: 0.85rem;
+    color: var(--text-muted);
+}
+
+/* The submit button stays reachable under long option lists. */
+.submit-bar {
+    position: sticky;
+    bottom: 0;
+    margin: 0 -0.25rem;
+    padding: 0.25rem 0.25rem calc(0.5rem + env(safe-area-inset-bottom));
+    background: linear-gradient(to top, var(--surface-color) 75%, transparent);
+}
+
+.submit-bar .btn {
+    margin-top: 0.25rem;
+}
+
+#submit-answer-btn:disabled {
+    cursor: default;
+    opacity: 0.6;
+}
+
+#submit-answer-btn.is-sent {
+    opacity: 1;
+    background-color: var(--success-bg);
+    color: var(--correct-color);
+    border: 1px solid var(--success-border);
+    font-weight: 600;
+}
+
+/* ── Host setup: numbered steps ──────────────────────────────────────────── */
+.setup-step {
+    margin: 0.75rem 0;
+    padding: 0.85rem 1rem;
+    border: 1px solid var(--cards-highlight-border);
+    border-radius: var(--radius-lg);
+}
+
+.setup-step-title {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin: 0 0 0.5rem;
+    font-size: 1.1rem;
+}
+
+.setup-step-num {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.6rem;
+    height: 1.6rem;
+    border-radius: 50%;
+    background-color: var(--primary-color);
+    color: var(--on-primary);
+    font-size: 0.9rem;
+}
+
+.setup-step .upload-section {
+    margin: 0.25rem 0 0;
+}
+
+.library-picker {
+    margin-bottom: 0.75rem;
+}
+
+.library-picker-label,
+.duration-setting-label {
+    display: block;
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: var(--text-muted);
+}
+
+.library-picker-row {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+}
+
+.library-picker-row select {
+    flex: 1 1 auto;
+    min-width: 0;
+    min-height: 44px;
+}
+
+.library-picker-row .btn {
+    margin: 0;
+    flex: 0 0 auto;
+}
+
+.setup-start-hint {
+    margin: 0.5rem 0 0;
+    font-size: 0.9rem;
+    color: var(--text-muted);
+}
+
+.setup-details {
+    margin: 0.75rem 0;
+    border: 1px solid var(--input-border);
+    border-radius: var(--radius-lg);
+    padding: 0 1rem;
+}
+
+.setup-details > summary {
+    min-height: 44px;
+    display: flex;
+    align-items: center;
+    font-weight: 600;
+    color: var(--primary-color);
+    cursor: pointer;
+}
+
+.setup-details[open] > summary {
+    margin-bottom: 0.5rem;
+}
+
+.setup-details[open] {
+    padding-bottom: 0.75rem;
+}
+
+.question-item-head {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.5rem;
+}
+
+.question-item-text {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+.question-item-options {
+    margin: 0.25rem 0 0.1rem;
+    font-size: 0.9rem;
+    color: var(--text-muted);
+}
+
+.question-item-options li.is-correct {
+    color: var(--correct-color);
+    font-weight: 600;
+}
+
+.question-item-options li.is-correct::after {
+    content: ' ✓';
+}
+
+.remove-question {
+    flex: 0 0 auto;
+    width: 36px;
+    height: 36px;
+    border: 1px solid transparent;
+    border-radius: 6px;
+    background: none;
+    color: var(--text-muted);
+    font-size: 1rem;
+    cursor: pointer;
+}
+
+@media (hover: hover) {
+    .remove-question:hover {
+        color: var(--wrong-color);
+        border-color: currentColor;
+    }
+}
+
+/* ── Host lobby: join info next to the roster on wide screens ─────────────── */
+.lobby-join {
+    text-align: center;
+}
+
+#qrcode {
+    display: inline-block;
+    margin: 0.5rem auto 0;
+    padding: 0.5rem;
+    background: #fff;
+    border-radius: var(--radius-md);
+    cursor: zoom-in;
+}
+
+#qrcode img,
+#qrcode canvas {
+    display: block;
+    width: min(16rem, 70vw);
+    height: auto;
+}
+
+.qr-enlarge-hint {
+    margin: 0.2rem 0 0.5rem;
+    font-size: 0.8rem;
+    color: var(--text-muted);
+}
+
+.join-step {
+    margin: 0.35rem 0;
+}
+
+.join-link {
+    font-size: 1.4em;
+    font-weight: 700;
+}
+
+.room-code {
+    display: inline-block;
+    padding: 0.05em 0.45em;
+    border-radius: var(--radius-md);
+    background-color: var(--quiz-surface);
+    color: var(--primary-color);
+    font-size: 1.8em;
+    font-weight: 800;
+    letter-spacing: 0.12em;
+    font-variant-numeric: tabular-nums;
+}
+
+.player-count-line {
+    font-weight: 600;
+}
+
+@media (min-width: 960px) {
+    #qr-container:not(.hidden) {
+        display: grid;
+        grid-template-columns: minmax(20rem, 2fr) 3fr;
+        gap: 2rem;
+        align-items: start;
+    }
+
+    #qrcode img,
+    #qrcode canvas {
+        width: min(22rem, 40vh);
+    }
+
+    .room-code {
+        font-size: 2.4em;
+    }
 }
 
 input,
@@ -214,7 +574,7 @@ select {
     padding: 0.5rem 0.75rem;
     margin: 0.3rem 0;
     border: 1px solid var(--input-border);
-    border-radius: 4px;
+    border-radius: var(--radius-md);
     font-size: 1em;
     background-color: var(--input-bg);
     color: var(--text-color);
@@ -228,17 +588,17 @@ select:focus {
 }
 
 .duration-setting {
-    margin-top: 0.5rem;
+    margin-top: 0.25rem;
 }
 
 .duration-range-row {
     display: flex;
-    gap: 1rem;
+    gap: 1.5rem;
     margin-top: 0.3rem;
 }
 
 .duration-input-group {
-    flex: 1;
+    flex: 0 0 auto;
     display: flex;
     align-items: center;
     gap: 0.5rem;
@@ -261,7 +621,7 @@ select:focus {
 .drop-zone {
     margin-top: 0.5rem;
     border: 2px dashed var(--text-muted, #aaa);
-    border-radius: 8px;
+    border-radius: var(--radius-lg);
     padding: 1rem;
     text-align: center;
     cursor: pointer;
@@ -346,24 +706,71 @@ select:focus {
 .question-item {
     background-color: var(--quiz-surface);
     padding: 0.5rem 0.75rem;
-    border-radius: 4px;
+    border-radius: var(--radius-md);
     margin-bottom: 0.4rem;
     border-left: 3px solid var(--primary-color);
 }
 
 /* Player option buttons */
 .option-btn {
-    display: block;
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
     width: 100%;
-    padding: 0.75rem 1rem;
+    min-height: 56px;
+    padding: 0.6rem 0.9rem 0.6rem 0.6rem;
     margin-bottom: 0.5rem;
     border: 2px solid var(--input-border);
-    border-radius: 8px;
+    border-radius: 10px;
     background-color: var(--quiz-surface-alt);
     color: var(--text-color);
     text-align: left;
     cursor: pointer;
-    transition: all 0.2s ease;
+    transition:
+        background-color 0.15s ease,
+        border-color 0.15s ease,
+        color 0.15s ease;
+    font-size: 1.1em;
+    line-height: 1.35;
+    -webkit-tap-highlight-color: transparent;
+}
+
+.option-btn:active:not(:disabled) {
+    transform: scale(0.99);
+}
+
+.option-btn-text {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+/* A/B/C… badge — the same letters as on the host's screen, so the class can
+   talk about "B" and players can find it on the projector. */
+.option-letter {
+    flex: 0 0 auto;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.9em;
+    height: 1.9em;
+    border-radius: 6px;
+    background-color: var(--primary-color);
+    color: var(--on-primary);
+    font-size: 0.85em;
+    font-weight: 700;
+    line-height: 1;
+}
+
+.option-btn.selected .option-letter {
+    background-color: var(--on-primary);
+    color: var(--primary-color);
+}
+
+/* Selection is also shown as a check, not only by colour. */
+.option-btn.selected::after {
+    content: '✓';
+    flex: 0 0 auto;
+    font-weight: 700;
     font-size: 1.1em;
 }
 
@@ -376,14 +783,14 @@ select:focus {
 
 .option-btn.selected {
     background-color: var(--primary-color);
-    color: white;
+    color: var(--on-primary);
     border-color: var(--primary-color);
 }
 
 .option-btn.correct-answer,
 .option-btn.correct {
     background-color: var(--correct-color);
-    color: white;
+    color: var(--on-status);
     border-color: var(--correct-color);
     font-weight: bold;
 }
@@ -391,7 +798,7 @@ select:focus {
 .option-btn.incorrect-answer.selected,
 .option-btn.incorrect {
     background-color: var(--wrong-color);
-    color: white;
+    color: var(--on-status);
     border-color: var(--wrong-color);
     font-weight: bold;
 }
@@ -404,13 +811,21 @@ select:focus {
 }
 
 .host-options-list li {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
     background-color: var(--quiz-surface-alt);
     border: 1px solid var(--input-border);
     border-left: 4px solid var(--primary-color);
     padding: 0.6rem 0.9rem;
     margin-bottom: 0.4rem;
-    border-radius: 6px;
+    border-radius: var(--radius-md);
     font-size: 1.25em;
+}
+
+.host-options-list li.correct .option-letter {
+    background-color: var(--correct-color);
+    color: var(--on-status);
 }
 
 .host-options-list li.correct {
@@ -556,6 +971,16 @@ select:focus {
     line-height: 1.7;
 }
 
+.correct-answer-chip .option-letter {
+    width: 1.6em;
+    height: 1.6em;
+    margin-right: 0.4em;
+    vertical-align: middle;
+    background-color: var(--correct-color);
+    color: var(--on-status);
+    font-size: 0.8em;
+}
+
 .result-correct-items .correct-answer-chip {
     display: inline-block;
     background-color: rgba(40, 167, 69, 0.15);
@@ -649,7 +1074,7 @@ select:focus {
 .qr-modal-content {
     background: var(--surface-color);
     padding: 1.5rem;
-    border-radius: 12px;
+    border-radius: var(--radius-lg);
     position: relative;
     text-align: center;
     box-shadow: 0 8px 16px rgba(0, 0, 0, 0.3);
@@ -683,11 +1108,6 @@ select:focus {
     width: 300px;
     max-width: 100%;
     height: auto;
-}
-
-#qrcode {
-    margin: 0.75rem auto;
-    text-align: center;
 }
 
 /* Leaderboard / scoreboard rank highlights */
@@ -1217,7 +1637,7 @@ select:focus {
     animation: pulse-cta 0.6s ease-in-out infinite alternate;
     background-color: var(--accent-color);
     border-color: var(--accent-color);
-    color: white;
+    color: var(--on-accent);
 }
 
 @keyframes pulse-cta {
@@ -1511,7 +1931,7 @@ select:focus {
     left: 50%;
     transform: translateX(-50%) translateY(20px);
     padding: 12px 24px;
-    border-radius: 8px;
+    border-radius: var(--radius-md);
     color: white;
     font-weight: 500;
     z-index: 10001;
@@ -1531,10 +1951,12 @@ select:focus {
 
 .toast-info {
     background-color: var(--primary-color);
+    color: var(--on-primary);
 }
 
 .toast-error {
     background-color: var(--wrong-color);
+    color: var(--on-status);
 }
 
 .footer-link {
@@ -1623,6 +2045,9 @@ body.player-in-game footer {
     --success-bg: rgba(76, 175, 80, 0.22);
     --success-border: rgba(92, 214, 111, 0.45);
     --primary-rgb: 196, 166, 234;
+    --on-primary: #1c1030;
+    --on-accent: #2b0a14;
+    --on-status: #10200f;
 }
 
 [data-theme='dark'] a:hover,
@@ -1681,7 +2106,7 @@ body.player-in-game footer {
     margin: 1rem 0;
     padding: 0.75rem;
     background-color: var(--quiz-surface);
-    border-radius: 8px;
+    border-radius: var(--radius-lg);
 }
 
 .lobby-section h3 {
@@ -1804,7 +2229,7 @@ body.player-in-game footer {
     margin: 0.75rem 0;
     padding: 0.85rem 1rem;
     border: 1px solid var(--cards-highlight-border);
-    border-radius: 10px;
+    border-radius: var(--radius-lg);
     background-color: var(--surface-color);
 }
 
@@ -1875,7 +2300,7 @@ body.player-in-game footer {
 .category-chip.selected {
     background-color: var(--primary-color);
     border-color: var(--primary-color);
-    color: #fff;
+    color: var(--on-primary);
 }
 
 .category-chip-count {
@@ -1921,7 +2346,7 @@ body.player-in-game footer {
     gap: 0.4rem;
     padding: 0.7rem 0.8rem;
     border: 2px solid var(--cards-highlight-border);
-    border-radius: 12px;
+    border-radius: var(--radius-lg);
     background-color: var(--surface-color, #fff);
     color: var(--text-color, #222);
     cursor: pointer;
@@ -2200,7 +2625,7 @@ body.player-in-game footer {
     height: 1.5rem;
     border-radius: 50%;
     background: var(--accent-color);
-    color: white;
+    color: var(--on-accent);
     font-size: 1rem;
     line-height: 1.05;
     display: flex;
@@ -2375,7 +2800,7 @@ body.player-in-game footer {
     margin: 0.75rem 0;
     padding: 0.5rem 0.75rem;
     background-color: var(--quiz-surface);
-    border-radius: 8px;
+    border-radius: var(--radius-md);
 }
 
 .host-lobby-music h4 {

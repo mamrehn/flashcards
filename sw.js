@@ -13,7 +13,7 @@ const SW_DEBUG =
 // eslint-disable-next-line no-console
 const swLog = SW_DEBUG ? console.log.bind(console) : () => {};
 
-const CACHE_NAME = 'flashcards-v6';
+const CACHE_NAME = 'flashcards-v7';
 const ASSETS_TO_CACHE = [
     './',
     './index.html',
@@ -38,6 +38,7 @@ const ASSETS_TO_CACHE = [
     './ws-client.js',
     './ui-dialog.js',
     './manifest.json',
+    './icon.svg',
     // Self-hosted libraries (vendor/README.md) — cached so ZIP import, the
     // library and the join QR code also work offline.
     './vendor/jszip-3.10.1.min.js',

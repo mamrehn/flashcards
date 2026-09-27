@@ -2,27 +2,71 @@
    Theme Infrastructure - Shared across all pages
    ============================================================================ */
 
-/* Shared semantic variables for dark mode support */
+/* Shared design tokens. Each app keeps its own accent (study blue, library
+   green, quiz violet); everything else — type, neutrals, radii, elevation —
+   comes from here so the apps read as one product. */
 :root {
+    /* Native controls (checkboxes, date pickers, selects, scrollbars) follow
+       the theme — unchecked checkboxes were white squares in dark mode. */
+    color-scheme: light;
+
+    /* System UI font: the old stack ('Segoe UI', Tahoma, Geneva, Verdana)
+       rendered as Verdana/Geneva on iPhones and Macs. */
+    --font-sans:
+        system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', 'Noto Sans', Arial,
+        sans-serif;
+    --font-mono: ui-monospace, 'SF Mono', 'Cascadia Mono', Menlo, Consolas, monospace;
+
+    --radius-sm: 6px;
+    --radius-md: 10px;
+    --radius-lg: 16px;
+    --radius-pill: 999px;
+
     --surface-color: #ffffff;
-    --surface-secondary: #f8f9fa;
-    --text-color: #333;
-    --text-muted: #6c757d;
-    --border-color: #dee2e6;
-    --input-border: #ced4da;
+    /* Page background and inset wells — a touch deeper than before so white
+       cards separate from the page without heavy shadows. */
+    --surface-secondary: #f2f4f7;
+    --text-color: #1d2430;
+    /* #6c757d on the page background was 4.45:1 (below AA). */
+    --text-muted: #586274;
+    --border-color: #e1e5eb;
+    --input-border: #cbd2dc;
     --input-bg: #ffffff;
-    --shadow-color: rgba(0, 0, 0, 0.1);
+    --shadow-color: rgba(16, 24, 40, 0.08);
+
+    --shadow-sm: 0 1px 2px rgba(16, 24, 40, 0.05), 0 1px 3px rgba(16, 24, 40, 0.07);
+    --shadow-md: 0 2px 4px rgba(16, 24, 40, 0.04), 0 8px 20px rgba(16, 24, 40, 0.08);
+    --shadow-lg: 0 16px 40px rgba(16, 24, 40, 0.16);
 }
 
 [data-theme='dark'] {
-    --surface-color: #1e1e2e;
-    --surface-secondary: #2a2a3c;
-    --text-color: #e0e0e0;
-    --text-muted: #a0a0b0;
-    --border-color: #3a3a4c;
-    --input-border: #4a4a5c;
-    --input-bg: #2a2a3c;
-    --shadow-color: rgba(0, 0, 0, 0.3);
+    color-scheme: dark;
+
+    /* Elevation reads lighter-is-higher: cards sit above the page. (Cards were
+       #1e1e2e on a #2a2a3c page — darker than their background, so every
+       panel looked sunken.) */
+    --surface-color: #1c1f28;
+    --surface-secondary: #12141a;
+    --text-color: #e6e8ee;
+    --text-muted: #a1a8b6;
+    --border-color: #2c3140;
+    --input-border: #3d4456;
+    --input-bg: #161920;
+    --shadow-color: rgba(0, 0, 0, 0.4);
+
+    --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+    --shadow-md: 0 2px 4px rgba(0, 0, 0, 0.3), 0 8px 24px rgba(0, 0, 0, 0.35);
+    --shadow-lg: 0 16px 40px rgba(0, 0, 0, 0.5);
+}
+
+/* Shared base: the system font everywhere (form controls don't inherit it
+   by default). */
+body,
+button,
+input,
+select,
+textarea {
+    font-family: var(--font-sans);
 }
 
 /* Smooth transition for theme changes - applied momentarily during toggle */
@@ -126,6 +170,87 @@ html.theme-transition *::after {
     }
 }
 
+/* Inline variant: mounted into a page header's [data-theme-toggle-slot], so it
+   takes part in the header's layout instead of floating over its text. */
+.theme-toggle.theme-toggle--inline,
+[data-theme='dark'] .theme-toggle.theme-toggle--inline {
+    position: static;
+    flex: 0 0 auto;
+    width: 40px;
+    height: 40px;
+    font-size: 1.05rem;
+    border: 1px solid transparent;
+    background-color: transparent;
+    box-shadow: none;
+}
+
+.theme-toggle.theme-toggle--inline:hover {
+    transform: none;
+    background-color: rgba(128, 128, 128, 0.15);
+}
+
+[data-theme-toggle-slot] {
+    display: flex;
+    align-items: center;
+    flex: 0 0 auto;
+    /* Always the trailing item, whatever order the header gives the others. */
+    order: 99;
+}
+
+/* ── Toast region (study app) ─────────────────────────────────────────────────
+   Top-centred: the bottom of the screen holds the actions a student is about
+   to tap (start bar, "Antwort zeigen", rating buttons) and a toast there
+   covered them. Toasts stack; pointer-transparent so they never block a tap. */
+.toast-region {
+    position: fixed;
+    left: 50%;
+    top: calc(0.75rem + env(safe-area-inset-top));
+    transform: translateX(-50%);
+    z-index: 10001;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.5rem;
+    width: max-content;
+    max-width: calc(100vw - 2rem);
+    pointer-events: none;
+}
+
+.message-popup {
+    padding: 0.7rem 1.1rem;
+    border-radius: 10px;
+    background: #2f3a4a;
+    color: #fff;
+    font-size: 0.95rem;
+    line-height: 1.4;
+    text-align: center;
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.25);
+    opacity: 0;
+    transform: translateY(-12px);
+    transition:
+        opacity 0.25s ease,
+        transform 0.25s ease;
+}
+
+.message-popup.show {
+    opacity: 1;
+    transform: translateY(0);
+}
+
+.message-popup.message-popup--error {
+    background: #b3261e;
+}
+
+[data-theme='dark'] .message-popup {
+    background: #e6e8ee;
+    color: #1d2330;
+}
+
+[data-theme='dark'] .message-popup.message-popup--error {
+    background: #ff8a80;
+    color: #2b0b08;
+}
+
 /* ── Accessible confirm/prompt dialog (replaces native confirm/prompt) ─────── */
 .ui-modal-backdrop {
     position: fixed;
@@ -134,7 +259,7 @@ html.theme-transition *::after {
     display: flex;
     align-items: center;
     justify-content: center;
-    background: rgba(0, 0, 0, 0.5);
+    background: rgba(10, 14, 22, 0.55);
     padding: max(1rem, env(safe-area-inset-top)) max(1rem, env(safe-area-inset-right))
         max(1rem, env(safe-area-inset-bottom)) max(1rem, env(safe-area-inset-left));
 }
@@ -142,11 +267,11 @@ html.theme-transition *::after {
 .ui-modal {
     width: 100%;
     max-width: 26rem;
-    padding: 1.25rem;
-    border-radius: 10px;
+    padding: 1.25rem 1.25rem 1rem;
+    border-radius: var(--radius-lg);
     background: var(--surface-color, #fff);
     color: var(--text-color, #333);
-    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.35);
+    box-shadow: var(--shadow-lg);
 }
 
 .ui-modal-message {
@@ -161,9 +286,9 @@ html.theme-transition *::after {
     box-sizing: border-box;
     margin: 0 0 1rem;
     padding: 0.55rem 0.75rem;
-    font-size: 1rem;
+    font-size: max(16px, 1rem);
     border: 1px solid var(--input-border, #ced4da);
-    border-radius: 6px;
+    border-radius: var(--radius-md);
     background: var(--input-bg, #fff);
     color: var(--text-color, #333);
 }
@@ -179,7 +304,7 @@ html.theme-transition *::after {
     min-height: 44px;
     padding: 0.5rem 1.1rem;
     border: none;
-    border-radius: 6px;
+    border-radius: var(--radius-md);
     font-size: 1rem;
     font-weight: 600;
     cursor: pointer;
@@ -192,7 +317,8 @@ html.theme-transition *::after {
 
 .ui-modal-confirm {
     background: var(--primary-color, var(--primary, #4a6fa5));
-    color: #fff;
+    /* Dark themes lighten the primary; white text on it failed contrast. */
+    color: var(--on-primary, #fff);
 }
 
 .ui-modal-danger {

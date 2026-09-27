@@ -27,13 +27,20 @@
     <body>
         <div class="container">
             <div class="header">
-                <a href="index.html" class="back-link" title="Zur Startseite">←</a>
+                <a
+                    href="index.html"
+                    class="back-link"
+                    title="Zur Startseite"
+                    aria-label="Zur Startseite"
+                    >←</a
+                >
                 <div class="header-content">
-                    <h1 id="app-title">Lernkarten App</h1>
+                    <h1 id="app-title">Lernkarten</h1>
                     <p id="app-subtitle">
                         Importiere neue Lernkarten oder wähle ein gespeichertes Deck
                     </p>
                 </div>
+                <div data-theme-toggle-slot></div>
             </div>
 
             <div id="file-input-container">
@@ -45,33 +52,131 @@
                         multiple
                         class="hidden"
                     />
-                    <div class="drop-zone" id="drop-zone">
+                    <!-- First visit: nothing saved yet. Students normally arrive via a
+                         deep link to their deck (library.html?deck=…), so there is
+                         deliberately no library link here — only a file import. -->
+                    <div id="empty-state" class="empty-state">
+                        <div class="empty-state-icon" aria-hidden="true">🗂️</div>
+                        <h2 class="empty-state-title">Noch keine Lernkarten gespeichert</h2>
+                        <p class="empty-state-text">
+                            Öffne den Link zu deinem Deck, den du bekommen hast – oder importiere
+                            eine eigene Datei.
+                        </p>
+                    </div>
+                    <div
+                        class="drop-zone"
+                        id="drop-zone"
+                        role="button"
+                        tabindex="0"
+                        aria-label="Lernkarten oder Backup importieren"
+                    >
                         <div class="drop-zone-content">
-                            <span class="drop-zone-icon">📂</span>
-                            <span class="drop-zone-text">Lernkarten oder Backup importieren</span>
+                            <span class="drop-zone-icon" aria-hidden="true">📂</span>
+                            <span class="drop-zone-text">Eigene Datei importieren</span>
                             <span class="drop-zone-hint"
-                                >Datei hierher ziehen oder klicken — .json, .zip oder Backup</span
+                                >Tippen oder Datei hierher ziehen — .json, .zip oder Backup</span
                             >
                         </div>
                     </div>
-                    <p class="upload-actions">
-                        <span
-                            class="json-toggle"
-                            onclick="toggleJsonSample()"
-                            tabindex="0"
-                            role="button"
-                            onkeydown="
-                                if (event.key === 'Enter' || event.key === ' ') {
-                                    event.preventDefault();
-                                    toggleJsonSample();
-                                }
-                            "
-                            >JSON-Format Beispiel</span
-                        >
-                    </p>
                 </div>
-                <div id="sample-json" class="hidden">
-                    <pre><code>{
+
+                <div id="saved-decks-container">
+                    <div id="menu-summary" class="menu-summary hidden">
+                        <!-- Quick progress summary rendered dynamically -->
+                    </div>
+                    <div class="saved-decks-header">
+                        <h2 class="section-title">Meine Decks</h2>
+                        <span class="select-actions">
+                            <button
+                                type="button"
+                                id="select-all-decks"
+                                class="link-btn"
+                                title="Alle Decks auswählen"
+                            >
+                                Alle
+                            </button>
+                            <button
+                                type="button"
+                                id="deselect-all-decks"
+                                class="link-btn"
+                                title="Auswahl aufheben"
+                            >
+                                Keine
+                            </button>
+                        </span>
+                    </div>
+                    <div class="deck-search-container">
+                        <label for="deck-search" class="sr-only">Decks durchsuchen</label>
+                        <input
+                            type="search"
+                            id="deck-search"
+                            class="deck-search-input"
+                            placeholder="🔍 Decks durchsuchen …"
+                            enterkeyhint="search"
+                            autocomplete="off"
+                        />
+                    </div>
+
+                    <div id="saved-decks">
+                        <!-- Saved decks will be dynamically inserted here -->
+                    </div>
+
+                    <label class="study-option" id="calibration-option">
+                        <input type="checkbox" id="calibration-mode" />
+                        <span>
+                            <span class="study-option-title">Selbsteinschätzung</span>
+                            <span class="study-option-hint"
+                                >Vor dem Aufdecken angeben, wie sicher du bist — die App zeigt dir,
+                                wie gut du dich einschätzt.</span
+                            >
+                        </span>
+                    </label>
+
+                    <!-- Act on the selection. Sticky at the bottom of the screen so
+                         the start button stays in reach while scrolling a long list. -->
+                    <div id="deck-selection-controls" class="deck-action-bar">
+                        <div class="start-actions">
+                            <button id="start-selected-decks" class="btn btn-primary" disabled>
+                                Lernen starten
+                            </button>
+                            <button id="read-mode-btn" class="btn btn-soft" disabled>
+                                📖 Lesen
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="picker-footer">
+                        <button type="button" class="link-btn" id="import-file-btn">
+                            📂 Datei importieren
+                        </button>
+                        <button
+                            type="button"
+                            class="link-btn"
+                            id="export-backup-btn"
+                            title="Alle Decks, Lernfortschritt und Einstellungen als Backup-Datei speichern"
+                        >
+                            💾 Backup exportieren
+                        </button>
+                        <button
+                            type="button"
+                            class="link-btn"
+                            id="import-backup-btn"
+                            title="Backup-Datei wiederherstellen"
+                        >
+                            Backup wiederherstellen
+                        </button>
+                        <button
+                            type="button"
+                            class="link-btn json-toggle"
+                            aria-expanded="false"
+                            aria-controls="sample-json"
+                            onclick="toggleJsonSample()"
+                        >
+                            Eigene Decks erstellen (JSON-Format)
+                        </button>
+                    </div>
+                    <div id="sample-json" class="hidden">
+                        <pre><code>{
   "cards": [
     {
       "categories": ["Geografie", "Politik"],
@@ -99,70 +204,6 @@
     }
   ]
 }</code></pre>
-                </div>
-
-                <div id="saved-decks-container">
-                    <div id="menu-summary" class="menu-summary hidden">
-                        <!-- Quick progress summary rendered dynamically -->
-                    </div>
-                    <div class="saved-decks-header">
-                        <h3>Gespeicherte Decks</h3>
-                        <button
-                            class="btn btn-soft"
-                            id="export-backup-btn"
-                            title="Alle Decks, Lernfortschritt und Einstellungen als Backup-Datei speichern"
-                        >
-                            💾 Backup exportieren
-                        </button>
-                    </div>
-                    <div class="deck-search-container">
-                        <input
-                            type="text"
-                            id="deck-search"
-                            class="deck-search-input"
-                            placeholder="🔍 Decks durchsuchen..."
-                        />
-                    </div>
-
-                    <!-- Act on the selection -->
-                    <div id="deck-selection-controls">
-                        <div class="start-actions">
-                            <button id="start-selected-decks" class="btn btn-primary" disabled>
-                                Lernen starten
-                            </button>
-                            <button id="read-mode-btn" class="btn btn-soft" disabled>
-                                📖 Lesen
-                            </button>
-                        </div>
-                        <div class="deck-options">
-                            <label
-                                class="study-option"
-                                title="Schätze vor dem Aufdecken ein, wie sicher du dir bist. Die App zeigt dir danach, wie gut deine Einschätzung mit dem Ergebnis übereinstimmt."
-                            >
-                                <input type="checkbox" id="calibration-mode" />
-                                Selbsteinschätzung
-                            </label>
-                            <span class="select-actions">
-                                <button
-                                    id="select-all-decks"
-                                    class="btn btn-soft btn-sm"
-                                    title="Alle Decks auswählen"
-                                >
-                                    Alle
-                                </button>
-                                <button
-                                    id="deselect-all-decks"
-                                    class="btn btn-soft btn-sm"
-                                    title="Auswahl aufheben"
-                                >
-                                    Keine
-                                </button>
-                            </span>
-                        </div>
-                    </div>
-
-                    <div id="saved-decks">
-                        <!-- Saved decks will be dynamically inserted here -->
                     </div>
                 </div>
 
@@ -196,15 +237,22 @@
                             <button id="start-selected-buckets" class="btn btn-primary" disabled>
                                 Mit ausgewählten Buckets üben
                             </button>
-                            <button id="select-all-buckets" class="btn">Alle auswählen</button>
-                            <button id="deselect-all-buckets" class="btn">Alle abwählen</button>
-                            <button
-                                id="cleanup-orphans-btn"
-                                class="btn btn-soft"
-                                title="Entfernt SR-Daten für gelöschte Decks oder geänderte Fragen"
-                            >
-                                🧹 Aufräumen
-                            </button>
+                            <div class="sr-bucket-utility">
+                                <button type="button" id="select-all-buckets" class="link-btn">
+                                    Alle auswählen
+                                </button>
+                                <button type="button" id="deselect-all-buckets" class="link-btn">
+                                    Alle abwählen
+                                </button>
+                                <button
+                                    type="button"
+                                    id="cleanup-orphans-btn"
+                                    class="link-btn"
+                                    title="Entfernt SR-Daten für gelöschte Decks oder geänderte Fragen"
+                                >
+                                    🧹 Aufräumen
+                                </button>
+                            </div>
                         </div>
 
                         <div id="sr-buckets-display">
@@ -215,40 +263,89 @@
             </div>
 
             <div id="app-content" class="hidden">
-                <div class="stats" aria-live="polite" aria-label="Lernfortschritt dieser Sitzung">
-                    <div class="stat-item">
-                        <div class="stat-value" id="cards-remaining">0</div>
-                        <div class="stat-label">Verbleibend</div>
+                <div class="session-bar">
+                    <div
+                        class="progress-bar"
+                        role="progressbar"
+                        aria-label="Fortschritt"
+                        aria-valuemin="0"
+                        aria-valuemax="100"
+                        aria-valuenow="0"
+                    >
+                        <div class="progress" id="progress-bar"></div>
                     </div>
-                    <div class="stat-item">
-                        <div class="stat-value" id="cards-completed">0</div>
-                        <div class="stat-label">Bearbeitet</div>
+                    <div class="session-row">
+                        <div
+                            class="stats"
+                            aria-live="polite"
+                            aria-label="Lernfortschritt dieser Sitzung"
+                        >
+                            <div class="stat-item stat-progress">
+                                <span class="stat-value" id="cards-completed">0</span>
+                                <span class="stat-label">erledigt ·</span>
+                                <span class="stat-value" id="cards-remaining">0</span>
+                                <span class="stat-label">übrig</span>
+                            </div>
+                            <div
+                                class="stat-item stat-correct"
+                                title="Richtig (Teilpunkte zählen anteilig)"
+                            >
+                                <span class="stat-icon" aria-hidden="true">✓</span>
+                                <span class="stat-value" id="correct-count">0</span>
+                                <span class="sr-only">richtig</span>
+                            </div>
+                            <div
+                                class="stat-item stat-incorrect"
+                                title="Falsch (Teilpunkte zählen anteilig)"
+                            >
+                                <span class="stat-icon" aria-hidden="true">✗</span>
+                                <span class="stat-value" id="incorrect-count">0</span>
+                                <span class="sr-only">falsch</span>
+                            </div>
+                        </div>
+                        <div id="keyboard-hints" class="keyboard-hints">
+                            <button
+                                class="keyboard-hints-toggle"
+                                aria-expanded="false"
+                                aria-label="Tastaturkürzel anzeigen"
+                                title="Tastaturkürzel (?)"
+                            >
+                                <span>&#x2328;</span>
+                            </button>
+                            <div class="keyboard-hints-panel hidden">
+                                <div class="keyboard-hints-title">Tastaturkürzel</div>
+                                <div class="keyboard-hint">
+                                    <kbd>Leertaste</kbd> Antwort zeigen / Weiter
+                                </div>
+                                <div class="keyboard-hint">
+                                    <kbd>1</kbd>–<kbd>9</kbd> MC-Option wählen
+                                </div>
+                                <div class="keyboard-hint">
+                                    <kbd>1</kbd>–<kbd>9</kbd> / <kbd>←</kbd><kbd>→</kbd> Name/Bild
+                                    wählen (Personen-Karten)
+                                </div>
+                                <div class="keyboard-hint">
+                                    <kbd>1</kbd>–<kbd>3</kbd> Sicherheit einschätzen (vor dem
+                                    Aufdecken)
+                                </div>
+                                <div class="keyboard-hint">
+                                    <kbd>1</kbd>–<kbd>4</kbd> Selbstbewertung (Textkarten)
+                                </div>
+                                <div class="keyboard-hint"><kbd>E</kbd> Erklärung ein/aus</div>
+                                <div class="keyboard-hint">
+                                    <kbd>⌫</kbd> Letzte Antwort rückgängig
+                                </div>
+                                <div class="keyboard-hint"><kbd>?</kbd> Diese Hilfe</div>
+                            </div>
+                        </div>
                     </div>
-                    <div class="stat-item">
-                        <div class="stat-value" id="correct-count">0</div>
-                        <div class="stat-label">Richtig</div>
-                    </div>
-                    <div class="stat-item">
-                        <div class="stat-value" id="incorrect-count">0</div>
-                        <div class="stat-label">Falsch</div>
-                    </div>
-                </div>
-
-                <div
-                    class="progress-bar"
-                    role="progressbar"
-                    aria-label="Fortschritt"
-                    aria-valuemin="0"
-                    aria-valuemax="100"
-                    aria-valuenow="0"
-                >
-                    <div class="progress" id="progress-bar"></div>
                 </div>
 
                 <div class="card-container" id="card-container">
                     <div class="card" id="flip-card">
                         <div class="card-front">
                             <div class="card-content">
+                                <div class="card-eyebrow" id="card-eyebrow"></div>
                                 <div class="question" id="question-text">Frage erscheint hier</div>
 
                                 <!-- Identify: profile image — shown above the input/choices so
@@ -262,7 +359,12 @@
                                     type="text"
                                     class="user-answer-input"
                                     id="user-answer-input"
-                                    placeholder="Deine Antwort..."
+                                    placeholder="Deine Antwort …"
+                                    aria-label="Deine Antwort"
+                                    autocomplete="off"
+                                    autocorrect="off"
+                                    spellcheck="false"
+                                    enterkeyhint="done"
                                 />
 
                                 <!-- Multiple choice options container -->
@@ -320,8 +422,13 @@
                         </div>
                         <div class="card-back">
                             <div class="card-content">
+                                <div class="card-eyebrow" id="card-eyebrow-back"></div>
                                 <div class="question" id="question-back">Frage erscheint hier</div>
-                                <div class="source-deck" id="source-deck-display"></div>
+                                <div
+                                    id="answer-verdict"
+                                    class="answer-verdict hidden"
+                                    role="status"
+                                ></div>
 
                                 <!-- Multiple choice options container (for back side with feedback) -->
                                 <div id="options-container-back" class="options-container hidden">
@@ -346,25 +453,33 @@
 
                                 <!-- Standard answer display -->
                                 <div id="standard-answer-container">
-                                    <div class="answer" id="answer-text" aria-live="polite">
-                                        Antwort erscheint hier
+                                    <div class="answer">
+                                        <strong class="answer-label">Richtige Antwort:</strong>
+                                        <div id="answer-text" aria-live="polite">
+                                            Antwort erscheint hier
+                                        </div>
                                     </div>
                                 </div>
 
                                 <!-- Explanation for text answers (shown only when marked incorrect) -->
                                 <div id="text-explanation-container" class="hidden">
-                                    <div
-                                        class="explanation-box"
-                                        tabindex="0"
-                                        role="button"
-                                        aria-label="Erklärung anzeigen"
-                                    >
-                                        <span class="explanation-icon" title="Klicke für Erklärung"
-                                            >ℹ️</span
+                                    <div class="explanation-box">
+                                        <button
+                                            type="button"
+                                            class="explanation-toggle"
+                                            aria-expanded="true"
+                                            aria-controls="text-explanation-content"
                                         >
-                                        <span class="explanation-label">Erklärung verfügbar</span>
+                                            <span class="explanation-icon" aria-hidden="true"
+                                                >💡</span
+                                            >
+                                            <span class="explanation-label">Erklärung</span>
+                                            <span class="explanation-chevron" aria-hidden="true"
+                                                >▾</span
+                                            >
+                                        </button>
                                         <div
-                                            class="explanation-content hidden"
+                                            class="explanation-content"
                                             id="text-explanation-content"
                                         ></div>
                                     </div>
@@ -385,15 +500,17 @@
                                 >
                                     <!-- Identify result inserted dynamically -->
                                 </div>
+                                <div class="source-deck" id="source-deck-display"></div>
                             </div>
                             <div class="controls">
                                 <button
-                                    class="btn btn-secondary btn-sm"
+                                    class="btn btn-soft btn-icon"
                                     id="undo-btn"
                                     disabled
                                     title="Letzte Antwort rückgängig (Backspace)"
+                                    aria-label="Letzte Antwort rückgängig"
                                 >
-                                    ↩ Zurück
+                                    ↩
                                 </button>
                                 <div
                                     id="recall-rating"
@@ -407,7 +524,8 @@
                                         data-score="0"
                                         title="Gar nicht gewusst (Taste 1)"
                                     >
-                                        Nochmal
+                                        <span class="rating-label">Nochmal</span>
+                                        <span class="rating-interval"></span>
                                     </button>
                                     <button
                                         type="button"
@@ -415,7 +533,8 @@
                                         data-score="0.6"
                                         title="Mit Mühe (Taste 2)"
                                     >
-                                        Schwer
+                                        <span class="rating-label">Schwer</span>
+                                        <span class="rating-interval"></span>
                                     </button>
                                     <button
                                         type="button"
@@ -423,7 +542,8 @@
                                         data-score="0.85"
                                         title="Gewusst (Taste 3)"
                                     >
-                                        Gut
+                                        <span class="rating-label">Gut</span>
+                                        <span class="rating-interval"></span>
                                     </button>
                                     <button
                                         type="button"
@@ -431,64 +551,33 @@
                                         data-score="1"
                                         title="Sofort gewusst (Taste 4)"
                                     >
-                                        Einfach
+                                        <span class="rating-label">Einfach</span>
+                                        <span class="rating-interval"></span>
                                     </button>
                                 </div>
-                                <button class="btn btn-secondary" id="next-card">Nächste</button>
+                                <button class="btn btn-primary" id="next-card">Weiter</button>
                             </div>
                         </div>
                     </div>
                 </div>
 
-                <div id="keyboard-hints" class="keyboard-hints">
-                    <button
-                        class="keyboard-hints-toggle"
-                        aria-label="Tastaturkürzel anzeigen"
-                        title="Tastaturkürzel (?)"
-                    >
-                        <span>&#x2328;</span>
-                    </button>
-                    <div class="keyboard-hints-panel hidden">
-                        <div class="keyboard-hints-title">Tastaturkürzel</div>
-                        <div class="keyboard-hint">
-                            <kbd>Leertaste</kbd> Antwort zeigen / Weiter
-                        </div>
-                        <div class="keyboard-hint">
-                            <kbd>1</kbd>–<kbd>9</kbd> MC-Option wählen / Erklärung
-                        </div>
-                        <div class="keyboard-hint">
-                            <kbd>1</kbd>–<kbd>9</kbd> / <kbd>←</kbd><kbd>→</kbd> Name/Bild wählen
-                            (Personen-Karten)
-                        </div>
-                        <div class="keyboard-hint">
-                            <kbd>1</kbd>–<kbd>3</kbd> Sicherheit einschätzen (vor dem Aufdecken)
-                        </div>
-                        <div class="keyboard-hint">
-                            <kbd>1</kbd>–<kbd>4</kbd> Selbstbewertung (Textkarten)
-                        </div>
-                        <div class="keyboard-hint"><kbd>E</kbd> Erklärung ein/aus</div>
-                        <div class="keyboard-hint"><kbd>⌫</kbd> Letzte Antwort rückgängig</div>
-                        <div class="keyboard-hint"><kbd>?</kbd> Diese Hilfe</div>
-                    </div>
-                </div>
-
                 <div class="feedback hidden" id="feedback">
-                    <h2>Quiz abgeschlossen!</h2>
+                    <div class="feedback-icon" aria-hidden="true">🎉</div>
+                    <h2>Runde geschafft!</h2>
                     <div id="overall-stats">
-                        <p>Gesamtergebnis: <span id="final-score">0%</span></p>
+                        <p>Ergebnis dieser Runde: <span id="final-score">0%</span></p>
                     </div>
                     <div id="deck-stats-container">
                         <!-- Individual deck statistics will appear here -->
                     </div>
-                    <div style="margin-top: 1rem">
-                        <button class="btn btn-primary" id="restart-btn">Neu starten</button>
-                        <button class="btn btn-secondary" id="upload-new-btn">Neues Deck</button>
-                        <button
-                            class="btn btn-secondary"
-                            id="return-to-sr-btn"
-                            style="display: none"
-                        >
-                            Zurück zur SR-Verwaltung
+                    <div class="feedback-actions">
+                        <button class="btn btn-primary" id="restart-btn">🔁 Nochmal üben</button>
+                        <button class="btn btn-soft" id="upload-new-btn">Zur Deck-Auswahl</button>
+                        <button class="btn btn-soft" id="feedback-progress-btn">
+                            📈 Fortschritt ansehen
+                        </button>
+                        <button class="btn btn-soft" id="return-to-sr-btn" style="display: none">
+                            Zurück zur Kartenverwaltung
                         </button>
                     </div>
                 </div>
@@ -499,16 +588,15 @@
             <div id="book-view" class="hidden">
                 <div class="book-view-toolbar">
                     <span class="book-view-title" id="book-view-title">Lesemodus</span>
+                    <a id="book-view-import" class="btn btn-primary hidden" href="#"
+                        >⬇ Importieren &amp; lernen</a
+                    >
                     <div class="book-view-export-btns">
-                        <button
-                            class="btn btn-secondary"
-                            id="book-view-print"
-                            onclick="window.print()"
-                        >
+                        <button class="btn btn-soft" id="book-view-print" onclick="window.print()">
                             🖨️ Drucken
                         </button>
-                        <button class="btn btn-secondary" id="book-view-csv">📥 Kahoot/CSV</button>
-                        <button class="btn btn-secondary" id="book-view-anki">📥 Anki</button>
+                        <button class="btn btn-soft" id="book-view-csv">📥 Kahoot/CSV</button>
+                        <button class="btn btn-soft" id="book-view-anki">📥 Anki</button>
                     </div>
                 </div>
                 <div id="book-view-cards"></div>

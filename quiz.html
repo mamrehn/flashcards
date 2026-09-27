@@ -28,14 +28,37 @@
     <body>
         <div class="container">
             <header>
-                <a href="index.html" class="back-link" title="Zur Startseite">←</a>
+                <a
+                    href="index.html"
+                    class="back-link"
+                    title="Zur Startseite"
+                    aria-label="Zur Startseite"
+                    >←</a
+                >
                 <h1>Multiplayer Quiz</h1>
+                <div data-theme-toggle-slot></div>
             </header>
 
             <div id="role-selection" class="view active card">
-                <h2>Wähle deine Rolle</h2>
-                <button id="host-btn" class="btn">Quiz hosten</button>
-                <button id="player-btn" class="btn">Quiz beitreten</button>
+                <h2>Wie möchtest du mitmachen?</h2>
+                <div class="role-choices">
+                    <button id="player-btn" class="btn role-btn">
+                        <span class="role-btn-icon" aria-hidden="true">📱</span>
+                        <span class="role-btn-text">
+                            <span class="role-btn-title">Quiz beitreten</span>
+                            <span class="role-btn-hint">Mit dem Code vom Host mitspielen</span>
+                        </span>
+                    </button>
+                    <button id="host-btn" class="btn role-btn role-btn-host">
+                        <span class="role-btn-icon" aria-hidden="true">🖥️</span>
+                        <span class="role-btn-text">
+                            <span class="role-btn-title">Quiz hosten</span>
+                            <span class="role-btn-hint"
+                                >Fragen laden und auf dem Beamer zeigen</span
+                            >
+                        </span>
+                    </button>
+                </div>
                 <button id="reconnect-host-btn" class="btn btn-reconnect hidden">
                     Erneut als Host verbinden
                 </button>
@@ -48,56 +71,50 @@
                 <h2 id="host-view-heading">Quiz hosten</h2>
 
                 <div id="host-setup">
-                    <div class="duration-setting" style="margin-top: 15px">
-                        <label>Fragedauer (Sekunden):</label>
-                        <div class="duration-range-row">
-                            <div class="duration-input-group">
-                                <label for="question-duration-min">Min:</label>
-                                <input
-                                    type="number"
-                                    id="question-duration-min"
-                                    value="20"
-                                    min="5"
-                                    max="60"
-                                    class="duration-input"
-                                />
-                            </div>
-                            <div class="duration-input-group">
-                                <label for="question-duration-max">Max:</label>
-                                <input
-                                    type="number"
-                                    id="question-duration-max"
-                                    value="40"
-                                    min="5"
-                                    max="60"
-                                    class="duration-input"
-                                />
+                    <section class="setup-step">
+                        <h3 class="setup-step-title">
+                            <span class="setup-step-num" aria-hidden="true">1</span> Fragen laden
+                        </h3>
+                        <div id="library-picker" class="library-picker hidden">
+                            <label for="library-deck-select" class="library-picker-label"
+                                >Aus der Bibliothek</label
+                            >
+                            <div class="library-picker-row">
+                                <select id="library-deck-select">
+                                    <option value="">Deck auswählen …</option>
+                                </select>
+                                <button type="button" id="library-load-btn" class="btn" disabled>
+                                    Laden
+                                </button>
                             </div>
                         </div>
-                    </div>
-                    <button id="start-quiz-btn" class="btn btn-accent" style="margin-top: 10px">
-                        Quiz starten
-                    </button>
-
-                    <div class="upload-section">
-                        <input
-                            type="file"
-                            id="json-file"
-                            accept=".json,.zip"
-                            multiple
-                            class="hidden"
-                        />
-                        <div class="drop-zone" id="quiz-drop-zone">
-                            <div class="drop-zone-content">
-                                <span class="drop-zone-icon">📂</span>
-                                <span class="drop-zone-text">MC-Fragen importieren</span>
-                                <span class="drop-zone-hint"
-                                    >Datei hierher ziehen oder klicken — .json oder .zip</span
-                                >
+                        <div class="upload-section">
+                            <input
+                                type="file"
+                                id="json-file"
+                                accept=".json,.zip"
+                                multiple
+                                class="hidden"
+                            />
+                            <div
+                                class="drop-zone"
+                                id="quiz-drop-zone"
+                                role="button"
+                                tabindex="0"
+                                aria-label="MC-Fragen aus Datei importieren"
+                            >
+                                <div class="drop-zone-content">
+                                    <span class="drop-zone-icon" aria-hidden="true">📂</span>
+                                    <span class="drop-zone-text">Eigene Datei importieren</span>
+                                    <span class="drop-zone-hint"
+                                        >Datei hierher ziehen oder klicken — .json oder .zip (nur
+                                        Multiple-Choice-Fragen)</span
+                                    >
+                                </div>
                             </div>
+                            <p id="file-status" role="status"></p>
                         </div>
-                        <p id="file-status"></p>
-                    </div>
+                    </section>
 
                     <div id="category-filter" class="category-filter hidden">
                         <div class="category-filter-header">
@@ -119,94 +136,149 @@
                         ></div>
                     </div>
 
-                    <h3>Oder Fragen manuell erstellen:</h3>
-                    <form id="question-form">
-                        <div>
-                            <label for="question-text">Frage:</label>
-                            <input
-                                type="text"
-                                id="question-text"
-                                placeholder="Gib deine Frage ein"
-                            />
-                        </div>
-                        <div class="option-group">
-                            <input
-                                type="text"
-                                class="option-input"
-                                placeholder="Option 1"
-                                aria-label="Option 1"
-                            />
-                            <label
-                                ><input
-                                    type="checkbox"
-                                    class="correct-checkbox"
-                                    aria-label="Option 1 ist richtig"
-                                />
-                                Richtig</label
+                    <section class="setup-step" id="setup-start">
+                        <h3 class="setup-step-title">
+                            <span class="setup-step-num" aria-hidden="true">2</span> Einstellen
+                            &amp; starten
+                        </h3>
+                        <div class="duration-setting">
+                            <span class="duration-setting-label" id="duration-label"
+                                >Zeit pro Frage (Sekunden)</span
                             >
-                        </div>
-                        <div class="option-group">
-                            <input
-                                type="text"
-                                class="option-input"
-                                placeholder="Option 2"
-                                aria-label="Option 2"
-                            />
-                            <label
-                                ><input
-                                    type="checkbox"
-                                    class="correct-checkbox"
-                                    aria-label="Option 2 ist richtig"
-                                />
-                                Richtig</label
+                            <div
+                                class="duration-range-row"
+                                role="group"
+                                aria-labelledby="duration-label"
                             >
+                                <div class="duration-input-group">
+                                    <label for="question-duration-min">Min</label>
+                                    <input
+                                        type="number"
+                                        id="question-duration-min"
+                                        value="20"
+                                        min="5"
+                                        max="60"
+                                        inputmode="numeric"
+                                        class="duration-input"
+                                    />
+                                </div>
+                                <div class="duration-input-group">
+                                    <label for="question-duration-max">Max</label>
+                                    <input
+                                        type="number"
+                                        id="question-duration-max"
+                                        value="40"
+                                        min="5"
+                                        max="60"
+                                        inputmode="numeric"
+                                        class="duration-input"
+                                    />
+                                </div>
+                            </div>
                         </div>
-                        <button type="button" id="add-option-btn" class="btn">
-                            Option hinzufügen
+                        <p id="setup-start-hint" class="setup-start-hint">
+                            Lade zuerst Fragen (Schritt 1) oder erstelle eigene.
+                        </p>
+                        <button id="start-quiz-btn" class="btn btn-accent btn-block">
+                            Quiz starten
                         </button>
-                        <button type="submit" class="btn">Frage hinzufügen</button>
-                    </form>
+                    </section>
 
-                    <div id="questions-list">
-                        <h3>Hinzugefügte Fragen:</h3>
+                    <details class="setup-details" id="manual-question-details">
+                        <summary>Eigene Frage erstellen</summary>
+                        <form id="question-form">
+                            <div>
+                                <label for="question-text">Frage:</label>
+                                <input
+                                    type="text"
+                                    id="question-text"
+                                    placeholder="Gib deine Frage ein"
+                                />
+                            </div>
+                            <div class="option-group">
+                                <input
+                                    type="text"
+                                    class="option-input"
+                                    placeholder="Option 1"
+                                    aria-label="Option 1"
+                                />
+                                <label
+                                    ><input
+                                        type="checkbox"
+                                        class="correct-checkbox"
+                                        aria-label="Option 1 ist richtig"
+                                    />
+                                    Richtig</label
+                                >
+                            </div>
+                            <div class="option-group">
+                                <input
+                                    type="text"
+                                    class="option-input"
+                                    placeholder="Option 2"
+                                    aria-label="Option 2"
+                                />
+                                <label
+                                    ><input
+                                        type="checkbox"
+                                        class="correct-checkbox"
+                                        aria-label="Option 2 ist richtig"
+                                    />
+                                    Richtig</label
+                                >
+                            </div>
+                            <button type="button" id="add-option-btn" class="btn btn-quiet">
+                                + Option
+                            </button>
+                            <button type="submit" class="btn">Frage hinzufügen</button>
+                        </form>
+                    </details>
+
+                    <details class="setup-details" id="questions-list">
+                        <summary id="questions-list-summary">Fragen ansehen</summary>
                         <div id="questions-container">
                             <p>Noch keine Fragen hinzugefügt</p>
                         </div>
-                    </div>
+                    </details>
                 </div>
 
                 <div id="qr-container" class="hidden">
-                    <h3>QR-Code scannen oder URL eingeben, um beizutreten:</h3>
-                    <div id="qrcode" style="cursor: pointer"></div>
-                    <p>
-                        URL eingeben:
-                        <a
-                            id="join-link"
-                            href="#"
-                            target="_blank"
-                            style="font-size: 1.4em; font-weight: bold"
-                        ></a>
-                    </p>
-                    <p>
-                        Dann Code eingeben:
-                        <span
-                            id="room-id"
-                            style="font-size: 1.4em; font-weight: bold; letter-spacing: 0.1em"
-                        ></span>
-                    </p>
-                    <p>Verbundene Spieler: <span id="player-count">0</span></p>
-                    <div class="players-list" id="players-list"></div>
-                    <section class="host-lobby-music">
-                        <h4>Lobby-Musik</h4>
-                        <div id="host-lobby-music-options" class="host-music-options"></div>
-                        <p class="host-lobby-music-hint">
-                            Spielmusik wird per Spieler-Abstimmung entschieden.
+                    <div class="lobby-join">
+                        <h3>QR-Code scannen oder URL eingeben, um beizutreten:</h3>
+                        <div
+                            id="qrcode"
+                            role="button"
+                            tabindex="0"
+                            aria-label="QR-Code vergrößern"
+                            title="Klicken zum Vergrößern"
+                        ></div>
+                        <p class="qr-enlarge-hint">Klicken zum Vergrößern</p>
+                        <p class="join-step">
+                            URL eingeben:
+                            <a id="join-link" class="join-link" href="#" target="_blank"></a>
                         </p>
-                    </section>
-                    <p id="host-music-status" class="host-music-status hidden"></p>
-                    <button id="start-questions-btn" class="btn btn-accent hidden">
-                        Fragen starten
-                    </button>
+                        <p class="join-step">
+                            Dann Code eingeben:
+                            <span id="room-id" class="room-code"></span>
+                        </p>
+                    </div>
+                    <div class="lobby-roster">
+                        <p class="player-count-line">
+                            Verbundene Spieler: <span id="player-count">0</span>
+                        </p>
+                        <div class="players-list" id="players-list"></div>
+                        <section class="host-lobby-music">
+                            <h4>Lobby-Musik</h4>
+                            <div id="host-lobby-music-options" class="host-music-options"></div>
+                            <p class="host-lobby-music-hint">
+                                Spielmusik wird per Spieler-Abstimmung entschieden.
+                            </p>
+                        </section>
+                        <p id="host-music-status" class="host-music-status hidden"></p>
+                        <button id="start-questions-btn" class="btn btn-accent btn-block hidden">
+                            Fragen starten
+                        </button>
+                    </div>
                 </div>
 
                 <div id="host-question-display" class="hidden">
@@ -270,8 +342,10 @@
                         enterkeyhint="go"
                         maxlength="50"
                     />
-                    <button id="join-btn" class="btn">Quiz beitreten</button>
-                    <p>Oder scanne den vom Host bereitgestellten QR-Code</p>
+                    <button id="join-btn" class="btn btn-block">Quiz beitreten</button>
+                    <p class="join-hint">
+                        Tipp: Scanne den QR-Code am Beamer – dann ist der Code schon ausgefüllt.
+                    </p>
                 </div>
 
                 <div id="waiting-room" class="hidden">
@@ -345,8 +419,15 @@
                     <div class="timer-bar-container">
                         <div class="timer-bar" id="player-timer-bar"></div>
                     </div>
+                    <p class="player-question-hint">
+                        Tippe alle richtigen Antworten an – es können mehrere sein.
+                    </p>
                     <div id="options-container"></div>
-                    <button id="submit-answer-btn" class="btn hidden">Antwort absenden</button>
+                    <div class="submit-bar">
+                        <button id="submit-answer-btn" class="btn btn-block hidden">
+                            Antwort absenden
+                        </button>
+                    </div>
                 </div>
 
                 <div id="player-result" class="hidden">
@@ -376,24 +457,18 @@
 
         <div id="qr-modal-overlay" class="qr-modal-overlay hidden">
             <div id="qr-modal-content" class="qr-modal-content">
-                <button id="qr-modal-close" class="qr-modal-close">&times;</button>
+                <button id="qr-modal-close" class="qr-modal-close" aria-label="Schließen">
+                    &times;
+                </button>
                 <h3>Zum Beitreten scannen oder URL eingeben</h3>
                 <div id="large-qrcode"></div>
-                <p>
+                <p class="join-step">
                     URL eingeben:
-                    <a
-                        id="join-link-modal"
-                        href="#"
-                        target="_blank"
-                        style="font-size: 1.4em; font-weight: bold"
-                    ></a>
+                    <a id="join-link-modal" class="join-link" href="#" target="_blank"></a>
                 </p>
-                <p>
+                <p class="join-step">
                     Dann Code eingeben:
-                    <span
-                        id="modal-room-id"
-                        style="font-size: 1.4em; font-weight: bold; letter-spacing: 0.1em"
-                    ></span>
+                    <span id="modal-room-id" class="room-code"></span>
                 </p>
             </div>
         </div>

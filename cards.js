@@ -80,6 +80,10 @@ const SEL_SEP = '\u0000';
 let selectedCategories = new Set();
 /** @type {Set<string>} Type chips turned OFF (default is on), keyed `topicKey\0category\0type`. */
 let deselectedChips = new Set();
+/** @type {Set<string>} Topic keys whose category panel is open (survives re-renders). */
+const expandedTopics = new Set();
+/** Counter for unique ids linking each topic toggle to its panel. */
+let topicPanelSeq = 0;
 /**
  * @param {string} topicKey
  * @param {string} category
@@ -286,6 +290,7 @@ let matchingResultContainer;
 let identifyMediaEl;
 let identifyChoicesEl;
 let identifyResultContainer;
+let answerVerdictEl;
 let matchingPairedSection = null;
 let matchingUnpairedSection = null;
 let matchingUnpairedLeftCol = null;
@@ -368,6 +373,7 @@ function initializeApp() {
     identifyMediaEl = document.querySelector('#identify-media');
     identifyChoicesEl = document.querySelector('#identify-choices');
     identifyResultContainer = document.querySelector('#identify-result-container');
+    answerVerdictEl = document.querySelector('#answer-verdict');
     matchingContainer.addEventListener('keydown', (e) => {
         if (matchingDrag) return; // never re-render mid-drag (would break pointer capture)
         if (e.key === 'Escape' && (selectedLeftIndex !== null || selectedRightIndex !== null)) {
@@ -379,7 +385,10 @@ function initializeApp() {
 
     // Set up event listeners with debouncing/throttling for performance
     fileInput.addEventListener('change', handleFileUpload);
-    showAnswerBtn.addEventListener('click', throttle(showAnswer, 300));
+    // No time-based throttle: it silently dropped a legitimate reveal that
+    // came within 300 ms of the previous one (e.g. right after an undo).
+    // showAnswer itself ignores repeats while the card is already flipped.
+    showAnswerBtn.addEventListener('click', showAnswer);
     // Graded self-rating (text cards): the rating IS the "continue" action —
     // grade and advance in one click (no separate "Nächste"). The student has
     // already read the answer on the back before choosing a rating.
@@ -426,6 +435,17 @@ function initializeApp() {
         .addEventListener('click', throttle(exportToAnki, 300));
     undoBtn.addEventListener('click', throttle(undoLastAnswer, 300));
     exportBackupBtn.addEventListener('click', throttle(exportBackup, 500));
+    // Both open the same picker: handleFileUpload tells decks and backups apart.
+    for (const id of ['#import-file-btn', '#import-backup-btn']) {
+        document.querySelector(id)?.addEventListener('click', () => fileInput.click());
+    }
+    document.querySelector('#feedback-progress-btn')?.addEventListener(
+        'click',
+        throttle(() => {
+            resetAndUpload();
+            openProgressView('overview');
+        }, 500)
+    );
 
     // Self-assessment option (persisted, on by default). It lives on the deck
     // picker, so it's only set before a session starts — updateCardContent reads
@@ -451,8 +471,10 @@ function initializeApp() {
     // Drop zone drag-and-drop
     setupDropZone();
 
-    // Add event listener for text explanation toggle
-    textExplanationContainer.addEventListener('click', toggleTextExplanation);
+    // Explanation disclosure (a real <button>, so Enter/Space work natively)
+    textExplanationContainer
+        .querySelector('.explanation-toggle')
+        ?.addEventListener('click', () => toggleTextExplanation());
 
     // Add Enter key support for answer submission
     userAnswerInput.addEventListener('keydown', (e) => {
@@ -470,17 +492,24 @@ function initializeApp() {
     const hintsPanel = document.querySelector('.keyboard-hints-panel');
     if (hintsToggle && hintsPanel) {
         hintsToggle.addEventListener('click', () => {
-            hintsPanel.classList.toggle('hidden');
+            const open = hintsPanel.classList.toggle('hidden') === false;
+            hintsToggle.setAttribute('aria-expanded', String(open));
+        });
+        // The panel drops down over the card: any click elsewhere or Escape
+        // closes it, instead of only the ⌨ button.
+        document.addEventListener('click', (e) => {
+            if (!hintsPanel.classList.contains('hidden') && !e.target.closest('#keyboard-hints')) {
+                hintsPanel.classList.add('hidden');
+                hintsToggle.setAttribute('aria-expanded', 'false');
+            }
+        });
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape' && !hintsPanel.classList.contains('hidden')) {
+                hintsPanel.classList.add('hidden');
+                hintsToggle.setAttribute('aria-expanded', 'false');
+            }
         });
     }
-
-    // Keyboard support for explanation box
-    textExplanationContainer.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter' || e.key === ' ') {
-            e.preventDefault();
-            toggleTextExplanation();
-        }
-    });
 
     // Back-link: target index.html from the deck-picker, but stay on
     // cards.html (reload to a clean picker) while a quiz or Lesemodus
@@ -496,6 +525,7 @@ function initializeApp() {
     loadSavedDecks();
     loadSpacedRepetitionData();
     loadProgressData();
+    loadDeckSelection();
     displaySavedDecks();
 
     // Set up service worker update listener
@@ -706,25 +736,6 @@ function handleCardBackKeys(e) {
     if (e.key === 'e' && !textExplanationContainer.classList.contains('hidden')) {
         e.preventDefault();
         toggleTextExplanation();
-        return;
-    }
-
-    // Number keys 1-9: toggle MC option explanation tooltip on back side
-    const num = Number.parseInt(e.key);
-    if (num >= 1 && num <= 9) {
-        const backOptions = optionsContainerBack.querySelectorAll('.option-item');
-        if (!optionsContainerBack.classList.contains('hidden') && num <= backOptions.length) {
-            e.preventDefault();
-            const indicator = backOptions[num - 1].querySelector('.option-explanation-indicator');
-            if (indicator) {
-                // If already focused, blur to hide tooltip; otherwise focus to show it
-                if (document.activeElement === indicator) {
-                    indicator.blur();
-                } else {
-                    indicator.focus();
-                }
-            }
-        }
     }
 }
 
@@ -819,7 +830,9 @@ if (typeof document !== 'undefined' && globalThis.addEventListener) {
  */
 function toggleJsonSample() {
     const sampleJson = document.querySelector('#sample-json');
-    sampleJson.classList.toggle('hidden');
+    const open = sampleJson.classList.toggle('hidden') === false;
+    document.querySelector('.json-toggle')?.setAttribute('aria-expanded', String(open));
+    if (open) sampleJson.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 }
 
 // Exposed for the inline handler in cards.html's upload section. The SR-manager
@@ -880,37 +893,57 @@ function setupBackLink() {
  */
 function setupDropZone() {
     const dropZone = document.querySelector('#drop-zone');
-    if (!dropZone) return;
+    const pickerArea = document.querySelector('#file-input-container');
+    if (!dropZone || !pickerArea) return;
 
-    // Clicking the drop zone triggers the file input
+    // Clicking (or Enter/Space on) the drop zone opens the file picker
     dropZone.addEventListener('click', () => fileInput.click());
-
-    dropZone.addEventListener('dragenter', (e) => {
-        e.preventDefault();
-        dropZone.classList.add('drag-over');
-    });
-
-    dropZone.addEventListener('dragover', (e) => {
-        e.preventDefault();
-        dropZone.classList.add('drag-over');
-    });
-
-    dropZone.addEventListener('dragleave', (e) => {
-        e.preventDefault();
-        // Only remove if leaving the drop zone itself (not a child)
-        if (!dropZone.contains(e.relatedTarget)) {
-            dropZone.classList.remove('drag-over');
+    dropZone.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            fileInput.click();
         }
     });
 
-    dropZone.addEventListener('drop', (e) => {
+    // The whole picker accepts dropped files — once decks exist the big drop
+    // zone collapses into two small buttons, and dropping should still work.
+    pickerArea.addEventListener('dragenter', (e) => {
+        if (!hasFiles(e)) return;
         e.preventDefault();
-        dropZone.classList.remove('drag-over');
+        pickerArea.classList.add('is-dragging');
+    });
+
+    pickerArea.addEventListener('dragover', (e) => {
+        if (!hasFiles(e)) return;
+        e.preventDefault();
+        pickerArea.classList.add('is-dragging');
+    });
+
+    pickerArea.addEventListener('dragleave', (e) => {
+        // Only when the pointer leaves the picker itself (not a child)
+        if (!pickerArea.contains(e.relatedTarget)) {
+            pickerArea.classList.remove('is-dragging');
+        }
+    });
+
+    pickerArea.addEventListener('drop', (e) => {
+        if (!hasFiles(e)) return;
+        e.preventDefault();
+        pickerArea.classList.remove('is-dragging');
         const files = e.dataTransfer.files;
         if (files.length > 0) {
             handleDroppedFiles(files);
         }
     });
+}
+
+/**
+ * Whether a drag carries files (not, say, selected text).
+ * @param {DragEvent} e
+ * @returns {boolean}
+ */
+function hasFiles(e) {
+    return Boolean(e.dataTransfer?.types?.includes('Files'));
 }
 
 /**
@@ -1170,12 +1203,19 @@ async function handleLibraryImportDeepLink() {
             return;
         }
 
+        // Was an older copy of this library deck imported before? Then this is
+        // an update (progress is kept for unchanged questions) — say so.
+        let previousVersion = null;
         if (!isPreview) {
             // Persist library metadata so the detail page can show "imported" /
             // "update available" pills. Failure here is non-fatal.
             try {
                 let libMeta = JSON.parse(localStorage.getItem('flashcardLibraryMeta') || '{}');
                 libMeta = sanitizeParsedJSON(libMeta) || {};
+                const previous = Object.values(libMeta).find(
+                    (m) => m && m.libraryId === deckMeta.id
+                );
+                if (previous) previousVersion = previous.libraryVersion ?? null;
                 for (const deckName of importedDeckNames) {
                     libMeta[deckName] = {
                         libraryId: deckMeta.id,
@@ -1195,12 +1235,24 @@ async function handleLibraryImportDeepLink() {
             // Render the linear view directly — no deck-picker refresh,
             // because the deck was never saved and shouldn't appear there.
             openBookView(allCards, `Vorschau — ${deckMeta.title}`);
+            // The preview used to be a dead end (only the ← led back): offer
+            // the obvious next step right in the toolbar.
+            const importLink = document.querySelector('#book-view-import');
+            if (importLink) {
+                importLink.href = `cards.html?import=${encodeURIComponent(deckMeta.id)}`;
+                importLink.classList.remove('hidden');
+            }
         } else {
             history.replaceState({}, '', 'cards.html');
             displaySavedDecks('', importedDeckNames);
-            showMessage(
-                `„${deckMeta.title}“ importiert (${allCards.length} Karten). Wähle Decks oder Kategorien für die nächste Runde.`
-            );
+            let verb = 'importiert';
+            if (previousVersion !== null) {
+                verb =
+                    previousVersion === deckMeta.version
+                        ? 'ist bereit'
+                        : 'aktualisiert – dein Fortschritt bleibt erhalten';
+            }
+            showMessage(`„${deckMeta.title}“ ${verb} (${allCards.length} Karten).`);
         }
     } catch (error) {
         console.error('Library deep-link failed:', error);
@@ -1238,9 +1290,9 @@ function processJsonData(data, fileName) {
     const deckName = fileName.replace('.json', '');
     activeDecks = [deckName];
 
-    updateAppTitle([deckName]);
     const meta = data && typeof data.meta === 'object' ? data.meta : null;
     saveToLocalStorage(deckName, validCards, meta);
+    updateAppTitle([deckName]);
     displaySavedDecks('', [deckName]);
     initializeQuiz(validCards.map((card) => ({ ...card, sourceDeck: deckName })));
     fileInput.value = '';
@@ -1591,12 +1643,44 @@ function validateCards(cards) {
  * @param {Array<string>} deckNames - Names of active decks
  */
 function updateAppTitle(deckNames) {
-    appTitle.textContent =
-        deckNames.length === 1
-            ? `Lernkarten - ${deckNames[0]}`
-            : `Lernkarten - ${deckNames.length} Decks kombiniert`;
+    let title;
+    if (deckNames.length === 1 && deckNames[0] === 'SR Buckets') {
+        title = 'Wiederholung';
+    } else {
+        // Show what the student chose — the topic title (meta.name), not the
+        // JSON file names inside a ZIP ("Lernkarten - beispiel-allgemeinwissen").
+        const titles = [...new Set(deckNames.map((d) => deckDisplayTitle(d)))];
+        title = titles.length === 1 ? titles[0] : `${titles.length} Decks kombiniert`;
+    }
+    appTitle.textContent = title;
     // Hide the subtitle when a deck is active
     appSubtitle.style.display = 'none';
+}
+
+/**
+ * Human-facing title of a saved deck: its topic name (meta.name) when present,
+ * otherwise the deck (file) name.
+ * @param {string} deckName
+ * @returns {string}
+ */
+function deckDisplayTitle(deckName) {
+    const meta = savedDecks[deckName]?.meta;
+    const name = meta && typeof meta.name === 'string' ? meta.name.trim() : '';
+    return name || deckName;
+}
+
+/**
+ * Label for a single deck (one JSON file) in per-deck lists: the topic title,
+ * plus the file name only when several files share that title (a ZIP with
+ * parts) — so students see "WLAN Grundlagen", not "FU-IT10_LS4_WLAN_1".
+ * @param {string} deckName
+ * @returns {string}
+ */
+function deckLabel(deckName) {
+    const title = deckDisplayTitle(deckName);
+    if (title === deckName) return deckName;
+    const siblings = Object.keys(savedDecks).filter((d) => deckDisplayTitle(d) === title);
+    return siblings.length > 1 ? `${title} – ${deckName}` : title;
 }
 
 /**
@@ -2092,13 +2176,17 @@ function displaySavedDecks(searchTerm = '', preselectDeckNames = []) {
     savedDecksDiv.innerHTML = '';
 
     const topics = buildTopics();
+    // Drives the first-visit layout (empty state + big drop zone) versus the
+    // returning layout (deck list first, importing as a side action).
+    document.body.classList.toggle('has-decks', topics.size > 0);
     if (topics.size === 0) {
-        const noDecksMessage = document.createElement('p');
-        noDecksMessage.textContent = 'Keine gespeicherten Decks gefunden.';
-        savedDecksDiv.append(noDecksMessage);
-        startSelectedDecksBtn.disabled = true;
+        updateStartButtonState();
         return;
     }
+
+    // The search box only earns its space once the list gets long.
+    const searchContainer = document.querySelector('.deck-search-container');
+    if (searchContainer) searchContainer.hidden = topics.size < 4 && !searchTerm;
 
     const preselectSet = new Set(preselectDeckNames);
     const lowerSearch = (searchTerm || '').trim().toLowerCase();
@@ -2119,181 +2207,226 @@ function displaySavedDecks(searchTerm = '', preselectDeckNames = []) {
 
     if (matching.length === 0 && lowerSearch) {
         const noResultsMessage = document.createElement('p');
-        noResultsMessage.textContent = 'Keine Decks gefunden.';
+        noResultsMessage.className = 'deck-list-empty';
+        noResultsMessage.textContent = `Keine Decks zu „${searchTerm.trim()}“ gefunden.`;
         savedDecksDiv.append(noResultsMessage);
-        startSelectedDecksBtn.disabled = true;
+        updateStartButtonState();
         return;
     }
 
     matching.sort((a, b) => a.title.localeCompare(b.title, 'de'));
 
     // Seed the selection model for any just-imported topics so their checkboxes
-    // render checked (the model, not the DOM, is the source of truth).
+    // render checked (the model, not the DOM, is the source of truth). The new
+    // deck replaces the remembered selection — right after an import that is
+    // what the student wants to study, not a mix with yesterday's deck.
+    if (
+        preselectSet.size > 0 &&
+        [...topics.values()].some((t) => t.decks.some((d) => preselectSet.has(d)))
+    ) {
+        selectedCategories.clear();
+    }
     for (const topic of topics.values()) {
         if (topic.decks.some((d) => preselectSet.has(d))) {
             for (const catName of topic.categories.keys()) {
                 selectedCategories.add(catKey(topic.key, catName));
             }
+            // Just-imported topics start expanded.
+            expandedTopics.add(topic.key);
         }
     }
 
+    let firstPreselected = null;
     for (const topic of matching) {
-        const folder = document.createElement('div');
-        folder.className = 'topic-folder';
-        folder.dataset.topicKey = topic.key;
-
-        const header = document.createElement('div');
-        header.className = 'topic-header';
-
-        const checkbox = document.createElement('input');
-        checkbox.type = 'checkbox';
-        checkbox.className = 'topic-checkbox';
-        checkbox.dataset.topicKey = topic.key;
-        // Derive the tri-state from how many of the topic's categories are selected.
-        const catNames = [...topic.categories.keys()];
-        const selCatCount = catNames.filter((c) =>
-            selectedCategories.has(catKey(topic.key, c))
-        ).length;
-        checkbox.checked = selCatCount > 0 && selCatCount === catNames.length;
-        checkbox.indeterminate = selCatCount > 0 && selCatCount < catNames.length;
-        checkbox.addEventListener('click', (e) => e.stopPropagation());
-        checkbox.addEventListener('change', () => {
-            onTopicCheckboxChange(topic.key, checkbox.checked);
-            updateStartButtonState();
-        });
-
-        const chevron = document.createElement('span');
-        chevron.className = 'deck-chevron';
-        chevron.textContent = '▶';
-
-        const folderIcon = document.createElement('span');
-        folderIcon.className = 'deck-folder-icon';
-        folderIcon.textContent = '📚';
-
-        const titleBlock = document.createElement('span');
-        titleBlock.className = 'topic-title-block';
-        const titleEl = document.createElement('span');
-        titleEl.className = 'topic-title';
-        titleEl.textContent = topic.title;
-        titleBlock.append(titleEl);
-        if (topic.subtitle) {
-            const subtitleEl = document.createElement('span');
-            subtitleEl.className = 'topic-subtitle';
-            subtitleEl.textContent = topic.subtitle;
-            titleBlock.append(subtitleEl);
+        const folder = buildTopicFolder(topic);
+        if (!firstPreselected && topic.decks.some((d) => preselectSet.has(d))) {
+            firstPreselected = folder;
         }
-
-        const cardCount = document.createElement('span');
-        cardCount.className = 'topic-card-count';
-        cardCount.textContent = `${topic.totalCards} Karten`;
-
-        const deleteButton = document.createElement('button');
-        deleteButton.className = 'delete-deck';
-        deleteButton.textContent = '×';
-        deleteButton.title =
-            topic.decks.length > 1 ? 'Topic löschen (alle Quellen)' : 'Deck löschen';
-        deleteButton.addEventListener('click', (e) => {
-            e.stopPropagation();
-            deleteSavedTopic(topic);
-        });
-
-        header.append(checkbox, chevron, folderIcon, titleBlock, cardCount);
-        const knowledgeBadge = buildKnowledgeBadge(topic.decks);
-        if (knowledgeBadge) header.append(knowledgeBadge);
-        header.append(deleteButton);
-        folder.append(header);
-
-        const catsContainer = document.createElement('div');
-        catsContainer.className = 'topic-categories';
-
-        const sortedCategories = [...topic.categories.entries()].toSorted((a, b) => {
-            if (a[0] === '__uncategorized__') return 1;
-            if (b[0] === '__uncategorized__') return -1;
-            return a[0].localeCompare(b[0], 'de');
-        });
-
-        for (const [catName, counts] of sortedCategories) {
-            const row = document.createElement('div');
-            row.className = 'category-row';
-            row.dataset.topicKey = topic.key;
-            row.dataset.category = catName;
-
-            const catCheckbox = document.createElement('input');
-            catCheckbox.type = 'checkbox';
-            catCheckbox.className = 'category-checkbox';
-            catCheckbox.dataset.topicKey = topic.key;
-            catCheckbox.dataset.category = catName;
-            catCheckbox.checked = selectedCategories.has(catKey(topic.key, catName));
-            catCheckbox.addEventListener('change', () => {
-                const key = catKey(topic.key, catName);
-                if (catCheckbox.checked) selectedCategories.add(key);
-                else selectedCategories.delete(key);
-                onCategoryCheckboxChange(topic.key);
-                updateStartButtonState();
-            });
-
-            const labelEl = document.createElement('label');
-            labelEl.className = 'category-label';
-            const catIcon = document.createElement('span');
-            catIcon.className = 'category-icon';
-            catIcon.textContent = '🏷️';
-            labelEl.append(catIcon);
-            labelEl.append(
-                document.createTextNode(
-                    catName === '__uncategorized__' ? ' Allgemein' : ` ${catName}`
-                )
-            );
-            // Sibling <label> (no `for=`) doesn't natively toggle the checkbox.
-            // CSS gives it a pointer cursor, so wire up the click manually.
-            labelEl.addEventListener('click', (e) => {
-                e.preventDefault();
-                catCheckbox.checked = !catCheckbox.checked;
-                catCheckbox.dispatchEvent(new Event('change', { bubbles: true }));
-            });
-
-            const chips = document.createElement('span');
-            chips.className = 'type-chips';
-            if ((counts.mc || 0) > 0) {
-                chips.append(makeTypeChip('mc', counts.mc, topic.key, catName));
-            }
-            if ((counts.text || 0) > 0) {
-                chips.append(makeTypeChip('text', counts.text, topic.key, catName));
-            }
-            if ((counts.matching || 0) > 0) {
-                chips.append(makeTypeChip('matching', counts.matching, topic.key, catName));
-            }
-            if ((counts.identify || 0) > 0) {
-                chips.append(makeTypeChip('identify', counts.identify, topic.key, catName));
-            }
-
-            row.append(catCheckbox, labelEl, chips);
-            catsContainer.append(row);
-        }
-
-        folder.append(catsContainer);
-
-        header.addEventListener('click', (e) => {
-            if (e.target === checkbox || e.target === deleteButton) return;
-            folder.classList.toggle('expanded');
-        });
-
         savedDecksDiv.append(folder);
     }
 
-    // Topics whose decks were just imported start expanded (their categories are
-    // already selected in the model above).
-    for (const topic of matching) {
-        if (topic.decks.some((d) => preselectSet.has(d))) {
-            const folder = savedDecksDiv.querySelector(
-                `.topic-folder[data-topic-key="${CSS.escape(topic.key)}"]`
-            );
-            if (folder) folder.classList.add('expanded');
-        }
+    // After an import the new topic can sit anywhere in the alphabetical list —
+    // on a phone usually below the fold. Bring it into view.
+    if (firstPreselected) {
+        requestAnimationFrame(() =>
+            firstPreselected.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
+        );
     }
 
     // Type chips render selected by default (all types included); per-category
     // toggling happens in the expanded deck view.
     updateStartButtonState();
+}
+
+/**
+ * The card types present in a topic (across all its categories).
+ * @param {{categories: Map<string, object>}} topic
+ * @returns {Set<'mc'|'text'|'matching'|'identify'>}
+ */
+function topicCardTypes(topic) {
+    const types = new Set();
+    for (const counts of topic.categories.values()) {
+        for (const t of ['mc', 'text', 'matching', 'identify']) {
+            if ((counts[t] || 0) > 0) types.add(t);
+        }
+    }
+    return types;
+}
+
+/**
+ * One topic accordion: a header row (select-all checkbox + a disclosure button
+ * carrying title, meta line and Lernstand) and the category panel.
+ * @param {{key: string, title: string, subtitle: string, decks: string[],
+ *   totalCards: number, categories: Map<string, object>}} topic
+ * @returns {HTMLElement}
+ */
+function buildTopicFolder(topic) {
+    const folder = document.createElement('div');
+    folder.className = 'topic-folder';
+    folder.dataset.topicKey = topic.key;
+    const isExpanded = expandedTopics.has(topic.key);
+    folder.classList.toggle('expanded', isExpanded);
+
+    const header = document.createElement('div');
+    header.className = 'topic-header';
+
+    // The label gives the small checkbox a full-height tap target.
+    const checkWrap = document.createElement('label');
+    checkWrap.className = 'topic-check';
+    const checkbox = document.createElement('input');
+    checkbox.type = 'checkbox';
+    checkbox.className = 'topic-checkbox';
+    checkbox.dataset.topicKey = topic.key;
+    checkbox.setAttribute('aria-label', `${topic.title} auswählen`);
+    // Derive the tri-state from how many of the topic's categories are selected.
+    const catNames = [...topic.categories.keys()];
+    const selCatCount = catNames.filter((c) => selectedCategories.has(catKey(topic.key, c))).length;
+    checkbox.checked = selCatCount > 0 && selCatCount === catNames.length;
+    checkbox.indeterminate = selCatCount > 0 && selCatCount < catNames.length;
+    checkbox.addEventListener('change', () => {
+        onTopicCheckboxChange(topic.key, checkbox.checked);
+        updateStartButtonState();
+    });
+    checkWrap.append(checkbox);
+
+    const panelId = `topic-panel-${++topicPanelSeq}`;
+    const toggle = document.createElement('button');
+    toggle.type = 'button';
+    toggle.className = 'topic-toggle';
+    toggle.setAttribute('aria-expanded', String(isExpanded));
+    toggle.setAttribute('aria-controls', panelId);
+
+    const titleBlock = document.createElement('span');
+    titleBlock.className = 'topic-title-block';
+    const titleEl = document.createElement('span');
+    titleEl.className = 'topic-title';
+    titleEl.textContent = topic.title;
+    const metaEl = document.createElement('span');
+    metaEl.className = 'topic-subtitle';
+    const cardWord = topic.totalCards === 1 ? 'Karte' : 'Karten';
+    metaEl.textContent = [topic.subtitle, `${topic.totalCards} ${cardWord}`]
+        .filter(Boolean)
+        .join(' · ');
+    titleBlock.append(titleEl, metaEl);
+    toggle.append(titleBlock);
+
+    const knowledgeBadge = buildKnowledgeBadge(topic.decks);
+    if (knowledgeBadge) toggle.append(knowledgeBadge);
+
+    const chevron = document.createElement('span');
+    chevron.className = 'deck-chevron';
+    chevron.setAttribute('aria-hidden', 'true');
+    chevron.textContent = '▾';
+    toggle.append(chevron);
+
+    toggle.addEventListener('click', () => {
+        const open = folder.classList.toggle('expanded');
+        toggle.setAttribute('aria-expanded', String(open));
+        if (open) expandedTopics.add(topic.key);
+        else expandedTopics.delete(topic.key);
+    });
+
+    header.append(checkWrap, toggle);
+    folder.append(header);
+
+    const catsContainer = document.createElement('div');
+    catsContainer.className = 'topic-categories';
+    catsContainer.id = panelId;
+
+    const sortedCategories = [...topic.categories.entries()].toSorted((a, b) => {
+        if (a[0] === '__uncategorized__') return 1;
+        if (b[0] === '__uncategorized__') return -1;
+        return a[0].localeCompare(b[0], 'de');
+    });
+
+    // Per-type chips only help when the deck mixes card types; with a single
+    // type they would just duplicate the category checkbox.
+    const hasChips = topicCardTypes(topic).size > 1;
+    if (hasChips) {
+        // The chips are toggles, which isn't obvious from "MC 2" alone.
+        const hint = document.createElement('p');
+        hint.className = 'topic-hint';
+        hint.textContent =
+            'Tipp: MC, Text oder ZO (Zuordnung) antippen, um den Kartentyp auszublenden.';
+        catsContainer.append(hint);
+    }
+
+    for (const [catName, counts] of sortedCategories) {
+        const row = document.createElement('div');
+        row.className = 'category-row';
+        row.dataset.topicKey = topic.key;
+        row.dataset.category = catName;
+
+        const catCheckbox = document.createElement('input');
+        catCheckbox.type = 'checkbox';
+        catCheckbox.className = 'category-checkbox';
+        catCheckbox.dataset.topicKey = topic.key;
+        catCheckbox.dataset.category = catName;
+        catCheckbox.checked = selectedCategories.has(catKey(topic.key, catName));
+        catCheckbox.addEventListener('change', () => {
+            const key = catKey(topic.key, catName);
+            if (catCheckbox.checked) selectedCategories.add(key);
+            else selectedCategories.delete(key);
+            onCategoryCheckboxChange(topic.key);
+            updateStartButtonState();
+        });
+
+        // Wrapping <label>: the whole name toggles the checkbox natively.
+        const labelEl = document.createElement('label');
+        labelEl.className = 'category-label';
+        const nameEl = document.createElement('span');
+        nameEl.className = 'category-name';
+        nameEl.textContent = catName === '__uncategorized__' ? 'Allgemein' : catName;
+        labelEl.append(catCheckbox, nameEl);
+
+        row.append(labelEl);
+        if (hasChips) {
+            const chips = document.createElement('span');
+            chips.className = 'type-chips';
+            for (const type of ['mc', 'text', 'matching', 'identify']) {
+                if ((counts[type] || 0) > 0) {
+                    chips.append(makeTypeChip(type, counts[type], topic.key, catName));
+                }
+            }
+            row.append(chips);
+        }
+        catsContainer.append(row);
+    }
+
+    // Deleting is rare and destructive — it lives in the opened panel instead
+    // of as a small × right next to the tap target that opens the deck.
+    const tools = document.createElement('div');
+    tools.className = 'topic-tools';
+    const deleteButton = document.createElement('button');
+    deleteButton.type = 'button';
+    deleteButton.className = 'link-btn link-btn-danger';
+    deleteButton.textContent = topic.decks.length > 1 ? '🗑 Thema löschen' : '🗑 Deck löschen';
+    deleteButton.addEventListener('click', () => deleteSavedTopic(topic));
+    tools.append(deleteButton);
+    catsContainer.append(tools);
+
+    folder.append(catsContainer);
+    return folder;
 }
 
 /**
@@ -2344,21 +2477,47 @@ function onCategoryCheckboxChange(topicKey) {
 }
 
 /**
- * Whether at least one (category, type) pair is selected anywhere. Reads the
- * selection model, so it stays correct even for topics filtered out of the DOM.
- * @returns {boolean}
- */
-function hasAnyActiveSelection() {
-    return getSelectedFilters().size > 0;
-}
-
-/**
  * Update the enabled state of the start button based on the topic/category/type tree.
  */
 function updateStartButtonState() {
-    const noSelection = !hasAnyActiveSelection();
-    startSelectedDecksBtn.disabled = noSelection;
-    readModeBtn.disabled = noSelection;
+    // Every selection change ends here, so this is also where it is remembered.
+    saveDeckSelection();
+    let count = 0;
+    for (const [deckName, perCategory] of getSelectedFilters()) {
+        count += filterCards(savedDecks[deckName]?.cards || [], perCategory).length;
+    }
+    startSelectedDecksBtn.disabled = count === 0;
+    readModeBtn.disabled = count === 0;
+    // Say what will happen: "▶ 28 Karten lernen" — or what is missing.
+    const cardWord = count === 1 ? 'Karte' : 'Karten';
+    startSelectedDecksBtn.textContent =
+        count === 0 ? 'Deck auswählen' : `▶ ${count} ${cardWord} lernen`;
+}
+
+const DECK_SELECTION_KEY = 'deckSelection';
+
+/**
+ * Remember the deck/category/type selection, so a returning student finds the
+ * start bar ready ("▶ 28 Karten lernen") instead of an empty selection.
+ */
+function saveDeckSelection() {
+    persistToStorage(
+        DECK_SELECTION_KEY,
+        JSON.stringify({ categories: [...selectedCategories], chipsOff: [...deselectedChips] })
+    );
+}
+
+/** Restore the remembered selection (unknown keys are harmless and ignored). */
+function loadDeckSelection() {
+    try {
+        const raw = JSON.parse(localStorage.getItem(DECK_SELECTION_KEY) || 'null');
+        if (!isPlainObject(raw)) return;
+        const strings = (v) => (Array.isArray(v) ? v.filter((x) => typeof x === 'string') : []);
+        selectedCategories = new Set(strings(raw.categories));
+        deselectedChips = new Set(strings(raw.chipsOff));
+    } catch {
+        // Corrupt entry: start with an empty selection.
+    }
 }
 
 /**
@@ -2373,13 +2532,16 @@ function getSelectedFilters() {
     const topics = buildTopics();
     for (const topic of topics.values()) {
         const perCategory = new Map();
+        // Chips are only shown for mixed-type topics; elsewhere a remembered
+        // "off" chip must not keep filtering invisibly.
+        const chipsShown = topicCardTypes(topic).size > 1;
         for (const [catName, counts] of topic.categories.entries()) {
             if (!selectedCategories.has(catKey(topic.key, catName))) continue;
             const types = new Set();
             for (const ty of ['mc', 'text', 'matching', 'identify']) {
                 if (
                     (counts[ty] || 0) > 0 &&
-                    !deselectedChips.has(chipKey(topic.key, catName, ty))
+                    (!chipsShown || !deselectedChips.has(chipKey(topic.key, catName, ty)))
                 ) {
                     types.add(ty);
                 }
@@ -2589,8 +2751,12 @@ function initializeQuiz(loadedCards) {
     document.querySelector('#file-input-container').style.display = 'none';
     appContent.classList.remove('hidden');
 
-    // Auto-show keyboard hints on first ever quiz
-    if (!localStorage.getItem('keyboardHintsShown')) {
+    // Auto-show keyboard hints on the first quiz — only where there is a
+    // keyboard-and-mouse setup to use them (hidden on touch devices anyway).
+    const hasFinePointer = Boolean(
+        globalThis.matchMedia?.('(hover: hover) and (pointer: fine)').matches
+    );
+    if (hasFinePointer && !localStorage.getItem('keyboardHintsShown')) {
         const hintsPanel = document.querySelector('.keyboard-hints-panel');
         const hintsToggle = document.querySelector('.keyboard-hints-toggle');
         if (hintsPanel) {
@@ -3518,10 +3684,12 @@ function evaluateIdentifyCard(card) {
                 : acceptedAnswers(card, cfg);
         const ok = userAnswer.length > 0 && accepted.has(normalizeAnswer(userAnswer));
         if (ok) {
+            flipCard.dataset.outcome = 'correct';
             markAnswer(true);
             recallRating.classList.add('hidden');
             nextCardBtn.style.display = 'inline-block';
         } else {
+            updateRatingIntervals(card);
             recallRating.classList.remove('hidden');
             nextCardBtn.style.display = 'none';
         }
@@ -3538,6 +3706,7 @@ function evaluateIdentifyCard(card) {
     }
     const picked = sel >= 0 ? choices[sel] : null;
     const correct = !!(picked && picked.isCorrect);
+    flipCard.dataset.outcome = correct ? 'correct' : 'incorrect';
 
     const status = document.createElement('div');
     status.className = `identify-reveal-status ${correct ? 'correct' : 'incorrect'}`;
@@ -3562,9 +3731,16 @@ function updateCardContent(card) {
     // Set question on both sides
     questionText.textContent = card.question;
     questionBack.textContent = card.question;
+    // Category as a small label above the question (context while mixing topics).
+    const eyebrow = (card.categories || []).join(' · ');
+    for (const id of ['#card-eyebrow', '#card-eyebrow-back']) {
+        const el = document.querySelector(id);
+        if (el) el.textContent = eyebrow;
+    }
 
-    // Show source deck info
-    sourceDeckDisplay.textContent = `Quelle: ${card.sourceDeck}`;
+    // Source deck: only informative when several decks are mixed in a session.
+    sourceDeckDisplay.textContent =
+        new Set(cards.map((c) => c.sourceDeck)).size > 1 ? `Quelle: ${card.sourceDeck}` : '';
 
     // Check if current card is identify, multiple choice, matching, or standard
     const isIdentify = cardType(card) === 'identify';
@@ -3808,14 +3984,26 @@ function updateCardContent(card) {
 
             const label = document.createElement('label');
             label.htmlFor = `option-${index}`;
-            label.textContent = `${index + 1}. ${option}`;
+            // The number is only a keyboard shortcut hint; as a separate badge
+            // it can't be misread as part of a numeric answer ("1. 2"), and
+            // touch-only devices hide it.
+            const keyHint = document.createElement('span');
+            keyHint.className = 'option-key';
+            keyHint.setAttribute('aria-hidden', 'true');
+            keyHint.textContent = String(index + 1);
+            const optionText = document.createElement('span');
+            optionText.className = 'option-text';
+            optionText.textContent = option;
+            label.append(keyHint, optionText);
 
             optionItem.append(checkbox);
             optionItem.append(label);
 
             // Add click handler to toggle selection
             optionItem.addEventListener('click', (e) => {
-                if (e.target !== checkbox && e.target !== label) {
+                // Clicks inside the <label> (incl. its spans) toggle the checkbox
+                // natively; only clicks elsewhere on the row need a manual toggle.
+                if (e.target !== checkbox && !label.contains(e.target)) {
                     toggleOption(checkbox, optionItem, selectedOptionIndices, originalIndex);
                 } else {
                     // Checkbox/label toggled natively, sync state
@@ -3882,7 +4070,6 @@ function updateCardContent(card) {
     selectedOptionsContainer.classList.add('hidden');
     optionsContainerBack.classList.add('hidden');
     textExplanationContainer.classList.add('hidden');
-    textExplanationContent.classList.add('hidden');
     matchingResultContainer.classList.add('hidden');
     if (!isMatching) matchingContainer.classList.add('hidden');
     // Identify media/choices are (re)built by renderIdentifyCard; only hide them
@@ -3893,26 +4080,10 @@ function updateCardContent(card) {
     }
     identifyResultContainer.classList.add('hidden');
 
-    // Reset explanation label and animation
-    const explanationLabel = document.querySelector('.explanation-label');
-    const explanationIcon = document.querySelector('.explanation-icon');
-    if (explanationLabel) {
-        explanationLabel.style.display = 'inline';
-    }
-    if (explanationIcon) {
-        explanationIcon.style.animation = '';
-    }
-
-    // Clean up any existing tooltips from previous cards
-    for (const indicator of document.querySelectorAll('.option-explanation-indicator')) {
-        if (indicator._tooltip) {
-            indicator._tooltip.remove();
-            indicator._tooltip = null;
-        }
-    }
-    for (const tooltip of document.querySelectorAll('.option-explanation-tooltip')) {
-        tooltip.remove();
-    }
+    // The explanation is open by default on the answer side; the verdict is
+    // filled in by showAnswer.
+    toggleTextExplanation(true);
+    setAnswerVerdict(null);
 
     // Reset buttons + calibration UI for the fresh card
     recallRating.classList.add('hidden');
@@ -3960,125 +4131,102 @@ function updateCardContent(card) {
 }
 
 /**
- * Add explanation indicator to a multiple choice option
+ * Show a multiple-choice option's explanation inline, under the option. (It was
+ * a hover/focus tooltip behind a 24px "i" — unreliable on touch screens.)
  * @param {HTMLElement} optionItem - The option element
  * @param {number} index - The option index
  * @param {object} card - The card object
  */
 function addExplanationToOption(optionItem, index, card) {
-    // Check if explanations exist for this card and this specific option
-    if (card.explanations && card.explanations[index.toString()]) {
-        const explanation = card.explanations[index.toString()];
-
-        // Create explanation indicator
-        const indicator = document.createElement('span');
-        indicator.className = 'option-explanation-indicator';
-        indicator.setAttribute('tabindex', '0');
-        indicator.setAttribute('role', 'button');
-        indicator.setAttribute('aria-label', 'Erklärung anzeigen');
-
-        // Create tooltip
-        const tooltip = document.createElement('span');
-        tooltip.className = 'option-explanation-tooltip';
-        tooltip.textContent = explanation;
-
-        // Append tooltip to body instead of indicator for better positioning
-        document.body.append(tooltip);
-
-        // Store reference to tooltip on indicator for cleanup
-        indicator._tooltip = tooltip;
-
-        optionItem.append(indicator);
-
-        // Re-enable pointer events for the indicator only
-        indicator.style.pointerEvents = 'auto';
-
-        // Add event listeners for tooltip positioning
-        let isHovering = false;
-
-        const showTooltip = () => {
-            isHovering = true;
-            const rect = indicator.getBoundingClientRect();
-            const viewportWidth = window.innerWidth;
-            const viewportHeight = window.innerHeight;
-
-            // Calculate available space
-            const spaceAbove = rect.top;
-            const spaceBelow = viewportHeight - rect.bottom;
-
-            // Position vertically (prefer above, but use below if not enough space)
-            if (spaceAbove > 120 || spaceAbove > spaceBelow) {
-                // Position above
-                tooltip.style.bottom = viewportHeight - rect.top + 8 + 'px';
-                tooltip.style.top = 'auto';
-                tooltip.dataset.arrow = 'down';
-            } else {
-                // Position below
-                tooltip.style.top = rect.bottom + 8 + 'px';
-                tooltip.style.bottom = 'auto';
-                tooltip.dataset.arrow = 'up';
-            }
-
-            // Position horizontally (ensure it stays in viewport)
-            const tooltipWidth = 250; // Approximate max-width
-            if (rect.left + tooltipWidth > viewportWidth - 16) {
-                // Align to right edge
-                tooltip.style.right = '1rem';
-                tooltip.style.left = 'auto';
-            } else {
-                // Align to left of indicator
-                tooltip.style.left = Math.max(rect.left, 16) + 'px';
-                tooltip.style.right = 'auto';
-            }
-
-            tooltip.style.display = 'block';
-        };
-
-        const hideTooltip = () => {
-            isHovering = false;
-            // Delay hiding to allow mouse to move to tooltip
-            setTimeout(() => {
-                if (!isHovering) {
-                    tooltip.style.display = 'none';
-                }
-            }, 100);
-        };
-
-        // Allow hovering over the tooltip itself
-        tooltip.addEventListener('mouseenter', () => {
-            isHovering = true;
-        });
-
-        tooltip.addEventListener('mouseleave', () => {
-            isHovering = false;
-            hideTooltip();
-        });
-
-        indicator.addEventListener('mouseenter', showTooltip);
-        indicator.addEventListener('mouseleave', hideTooltip);
-        indicator.addEventListener('focus', showTooltip);
-        indicator.addEventListener('blur', hideTooltip);
-    }
+    const explanation = card.explanations && card.explanations[String(index)];
+    if (!explanation) return;
+    const box = document.createElement('div');
+    box.className = 'option-explanation';
+    box.textContent = explanation;
+    optionItem.append(box);
 }
 
 /**
- * Toggle the visibility of text explanation content
+ * Tag a revealed MC option with its outcome in words, so the colour coding
+ * isn't the only signal.
+ * @param {HTMLElement} optionItem
+ * @param {string} text
  */
-function toggleTextExplanation() {
-    const isHidden = textExplanationContent.classList.contains('hidden');
-    textExplanationContent.classList.toggle('hidden');
+function addOptionStatus(optionItem, text) {
+    const tag = document.createElement('span');
+    tag.className = 'option-status';
+    tag.textContent = text;
+    optionItem.querySelector('label')?.after(tag);
+}
 
-    // Stop pulsating animation after first click
-    const icon = textExplanationContainer.querySelector('.explanation-icon');
-    const label = textExplanationContainer.querySelector('.explanation-label');
+/**
+ * Open/close the text-card explanation. It starts open on the answer side —
+ * the student already flipped the card, so hiding it behind one more tap (per
+ * card, while cramming) cost more than it helped.
+ * @param {boolean} [open] - force a state; toggles when omitted
+ */
+function toggleTextExplanation(open) {
+    const next =
+        typeof open === 'boolean' ? open : textExplanationContent.classList.contains('hidden');
+    textExplanationContent.classList.toggle('hidden', !next);
+    textExplanationContainer
+        .querySelector('.explanation-toggle')
+        ?.setAttribute('aria-expanded', String(next));
+}
 
-    if (icon) {
-        icon.style.animation = 'none';
-    }
+/**
+ * One-line outcome under the question on the answer side, so the result reads
+ * at a glance instead of only through colour. `null` hides it.
+ * @param {'correct'|'partial'|'incorrect'|'neutral'|null} kind
+ * @param {string} [text]
+ */
+function setAnswerVerdict(kind, text = '') {
+    // Drives the coloured top edge of the answer side (cards.css).
+    if (kind && kind !== 'neutral') flipCard.dataset.outcome = kind;
+    else delete flipCard.dataset.outcome;
+    if (!answerVerdictEl) return;
+    answerVerdictEl.className = kind
+        ? `answer-verdict answer-verdict-${kind}`
+        : 'answer-verdict hidden';
+    answerVerdictEl.textContent = kind ? text : '';
+}
 
-    // Toggle label visibility based on explanation visibility
-    if (label) {
-        label.style.display = isHidden ? 'none' : 'inline';
+/**
+ * Verdict for an auto-graded score (MC, matching).
+ * @param {number} score - 0..1
+ * @param {string} [partialDetail] - e.g. "2 von 3 Zuordnungen"
+ */
+function setScoreVerdict(score, partialDetail) {
+    if (score >= 0.999) setAnswerVerdict('correct', '✓ Richtig');
+    else if (score > 0) {
+        const detail = partialDetail || `${Math.round(score * 100)} %`;
+        setAnswerVerdict('partial', `Teilweise richtig · ${detail}`);
+    } else setAnswerVerdict('incorrect', '✗ Leider falsch');
+}
+
+/**
+ * Human wait time for the SR ladder ("10 Min", "8 Std", "3 Tage").
+ * @param {number} minutes
+ * @returns {string}
+ */
+function formatWait(minutes) {
+    if (minutes < 60) return `${Math.round(minutes)} Min`;
+    if (minutes < 1440) return `${Math.round(minutes / 60)} Std`;
+    const days = Math.round(minutes / 1440);
+    return days === 1 ? '1 Tag' : `${days} Tage`;
+}
+
+/**
+ * Show under each self-rating button when the card would come back — the
+ * consequence of the choice, so "Gut" vs "Einfach" is no longer a guess.
+ * @param {object} card
+ */
+function updateRatingIntervals(card) {
+    const step = spacedRepetitionData[getCardKey(card)]?.step ?? 0;
+    for (const btn of recallRating.querySelectorAll('.recall-rating-btn')) {
+        const out = btn.querySelector('.rating-interval');
+        if (out)
+            out.textContent = formatWait(projectSR(step, Number(btn.dataset.score)).waitMinutes);
     }
 }
 
@@ -4086,6 +4234,8 @@ function toggleTextExplanation() {
  * Flip the card to show the answer
  */
 function showAnswer() {
+    // Idempotent: a double tap (or Enter + click) must not grade twice.
+    if (flipCard.classList.contains('flipped')) return;
     flipCard.classList.add('flipped');
     // Enable "Zurück" so the user can flip back to the question even before grading.
     undoBtn.disabled = false;
@@ -4188,6 +4338,7 @@ function showAnswer() {
         matchingResultContainer.classList.remove('hidden');
 
         const score = matchingRequiredCount > 0 ? correctPairCount / matchingRequiredCount : 0;
+        setScoreVerdict(score, `${correctPairCount} von ${matchingRequiredCount} Zuordnungen`);
         markAnswer(score);
 
         nextCardBtn.style.display = 'inline-block';
@@ -4215,15 +4366,16 @@ function showAnswer() {
             if (wasSelected && isCorrectOption) {
                 // Correctly selected
                 optionItem.classList.add('mc-correct-selected');
+                addOptionStatus(optionItem, '✓ richtig');
             } else if (wasSelected && !isCorrectOption) {
                 // Incorrectly selected (should not have been ticked)
                 optionItem.classList.add('mc-incorrect-selected');
-                // Add explanation indicator if available
+                addOptionStatus(optionItem, '✗ falsch gewählt');
                 addExplanationToOption(optionItem, originalIndex, card);
             } else if (!wasSelected && isCorrectOption) {
                 // Should have been selected but wasn't
                 optionItem.classList.add('mc-missed');
-                // Add explanation indicator if available
+                addOptionStatus(optionItem, '! fehlte');
                 addExplanationToOption(optionItem, originalIndex, card);
             } else {
                 // Correctly not selected
@@ -4238,7 +4390,9 @@ function showAnswer() {
         // Auto-score with a set-based (Jaccard) overlap of correct vs. selected
         // options — far more discriminating than the old per-option scheme, where
         // a near-miss on a many-distractor question still cleared the pass mark.
-        markAnswer(scoreMultipleChoice(card.correct, selectedOptionIndices));
+        const mcScore = scoreMultipleChoice(card.correct, selectedOptionIndices);
+        setScoreVerdict(mcScore);
+        markAnswer(mcScore);
 
         // Multiple choice is auto-scored — no self-rating, just advance.
         nextCardBtn.style.display = 'inline-block';
@@ -4265,12 +4419,20 @@ function showAnswer() {
 
         if (isExactMatch) {
             // Exact text match is a fair correctness proxy: auto-grade as perfect.
+            setAnswerVerdict('correct', '✓ Richtig – genau die Antwort');
             markAnswer(true);
             recallRating.classList.add('hidden');
             nextCardBtn.style.display = 'inline-block';
         } else {
             // Otherwise let the student grade their own recall (4-level scale),
             // which feeds the spaced-repetition ladder a finer signal than yes/no.
+            setAnswerVerdict(
+                'neutral',
+                userAnswer
+                    ? 'Vergleiche mit der richtigen Antwort – wie gut wusstest du es?'
+                    : 'Wie gut wusstest du die Antwort?'
+            );
+            updateRatingIntervals(card);
             recallRating.classList.remove('hidden');
             nextCardBtn.style.display = 'none';
         }
@@ -4300,7 +4462,9 @@ function showAnswer() {
  * @returns {string} Formatted score
  */
 function formatScore(value) {
-    return Number.isInteger(value) ? String(value) : value.toFixed(1);
+    return Number.isInteger(value)
+        ? String(value)
+        : value.toLocaleString('de-DE', { maximumFractionDigits: 1 });
 }
 
 /**
@@ -4497,7 +4661,7 @@ function showFeedback() {
     const percentageCorrect =
         totalAnswered > 0 ? Math.round((correctCount / totalAnswered) * 100) : 0;
 
-    finalScoreElement.textContent = `${percentageCorrect}% (${formatScore(correctCount)} von ${formatScore(totalAnswered)})`;
+    finalScoreElement.textContent = `${percentageCorrect} % (${formatScore(correctCount)} von ${formatScore(totalAnswered)})`;
     feedbackElement.classList.remove('hidden');
     cardContainer.classList.add('hidden');
 
@@ -4516,7 +4680,7 @@ function showFeedback() {
     if (knowledge.total > 0) {
         const level = levelClass(knowledge.percent, masteryTargetPercent(realDecks));
         knowledgeLine.className = `feedback-knowledge feedback-knowledge-${level}`;
-        knowledgeLine.textContent = `📈 Lernstand: ${knowledge.percent} % (${knowledge.attempted} von ${knowledge.total} Karten geübt)`;
+        knowledgeLine.textContent = `Lernstand ${knowledge.percent} % · ${knowledge.attempted} von ${knowledge.total} Karten geübt`;
         knowledgeLine.classList.remove('hidden');
     } else {
         knowledgeLine.classList.add('hidden');
@@ -4569,13 +4733,16 @@ function showFeedback() {
 
     // Show/hide buttons based on whether we're in SR bucket mode
     const isFromSRBuckets = activeDecks.length === 1 && activeDecks[0] === 'SR Buckets';
+    const progressBtn = document.querySelector('#feedback-progress-btn');
     if (isFromSRBuckets) {
         restartBtn.style.display = 'none';
         uploadNewBtn.style.display = 'none';
-        returnToSrBtn.style.display = 'inline-block';
+        if (progressBtn) progressBtn.style.display = 'none';
+        returnToSrBtn.style.display = '';
     } else {
-        restartBtn.style.display = 'inline-block';
-        uploadNewBtn.style.display = 'inline-block';
+        restartBtn.style.display = '';
+        uploadNewBtn.style.display = '';
+        if (progressBtn) progressBtn.style.display = '';
         returnToSrBtn.style.display = 'none';
     }
 
@@ -4606,7 +4773,7 @@ function showFeedback() {
             const deckStatItem = document.createElement('div');
             deckStatItem.className = 'deck-stat-item';
             deckStatItem.innerHTML = `
-                <strong>${sanitizeHTML(deckName)}:</strong>
+                <strong>${sanitizeHTML(savedDecks[deckName] ? deckLabel(deckName) : deckName)}:</strong>
                 ${formatScore(stats.correct)} richtig,
                 ${formatScore(stats.incorrect)} falsch,
                 ${deckAccuracy}% Genauigkeit${knowledgeSuffix}
@@ -4676,7 +4843,7 @@ function returnToSRManager() {
     appContent.classList.add('hidden');
     feedbackElement.classList.add('hidden');
     document.querySelector('#file-input-container').style.display = 'block';
-    appTitle.textContent = 'Lernkarten App';
+    appTitle.textContent = 'Lernkarten';
     activeDecks = [];
     openProgressView('manage');
 }
@@ -4701,7 +4868,7 @@ function resetAndUpload() {
 
     // Reset the app title
     appTitle.textContent = 'Lernkarten';
-    appSubtitle.style.display = 'block';
+    appSubtitle.style.display = '';
 
     // Clear any error messages
     errorMessageElement.classList.add('hidden');
@@ -4720,11 +4887,10 @@ function resetAndUpload() {
  * @param {string} message - Error message to display
  */
 function showError(message) {
-    errorMessageElement.textContent = message;
-    errorMessageElement.classList.remove('hidden');
-    setTimeout(() => {
-        errorMessageElement.classList.add('hidden');
-    }, 5000);
+    // A toast, not the inline #error-message: that element lives inside the
+    // quiz view, so errors raised on the deck picker (bad file, full storage,
+    // failed library import) used to be written into a hidden element.
+    showMessage(message, 'error');
 }
 
 // ============================================================================
@@ -5002,27 +5168,42 @@ function handleDeckSearch(event) {
 }
 
 /**
- * Show a temporary success/info message to the user
+ * Show a temporary toast. Toasts stack in a shared bottom region (styled in
+ * theme.css) so a quick burst — e.g. an import message followed by a
+ * calibration cue — stays readable instead of piling up on top of each other.
  * @param {string} message - Message to display
+ * @param {'info'|'error'} [type]
  */
-function showMessage(message) {
+function showMessage(message, type = 'info') {
+    let region = document.querySelector('#toast-region');
+    if (!region) {
+        region = document.createElement('div');
+        region.id = 'toast-region';
+        region.className = 'toast-region';
+        document.body.append(region);
+    }
     const messageEl = document.createElement('div');
-    messageEl.className = 'message-popup';
-    // Announce to assistive tech without stealing focus.
-    messageEl.setAttribute('role', 'status');
+    messageEl.className = type === 'error' ? 'message-popup message-popup--error' : 'message-popup';
+    // Announce to assistive tech without stealing focus; errors assertively.
+    messageEl.setAttribute('role', type === 'error' ? 'alert' : 'status');
     messageEl.textContent = message;
-    document.body.append(messageEl);
+    region.append(messageEl);
+    // Keep at most three on screen; the oldest yields.
+    while (region.children.length > 3) region.firstElementChild.remove();
 
     setTimeout(() => {
         messageEl.classList.add('show');
     }, 10);
 
-    setTimeout(() => {
-        messageEl.classList.remove('show');
-        setTimeout(() => {
-            messageEl.remove();
-        }, 300);
-    }, 3000);
+    setTimeout(
+        () => {
+            messageEl.classList.remove('show');
+            setTimeout(() => {
+                messageEl.remove();
+            }, 300);
+        },
+        type === 'error' ? 5000 : 3200
+    );
 }
 
 // ============================================================================
@@ -5276,6 +5457,10 @@ function hasAnswerHistory(e) {
 function openBookView(cardsToShow, title) {
     bookViewCurrentCards = cardsToShow;
     bookViewTitle.textContent = title;
+    // Picker-only chrome: the subtitle ("Importiere …") and the preview CTA,
+    // which the library preview re-enables right after this call.
+    appSubtitle.style.display = 'none';
+    document.querySelector('#book-view-import')?.classList.add('hidden');
     bookViewCards.innerHTML = '';
 
     // Enrich cards with SR data and sort: wrong/partial first, then correct, then unanswered
@@ -6400,14 +6585,15 @@ function renderMenuSummary() {
     const { mastered, total } = countMastered(allDecks);
     const cal = computeCalibration();
     const calStr = cal.percent === null ? '–' : `${cal.percent} %`;
+    const level = overall.attempted > 0 ? levelClass(overall.percent) : 'none';
     el.innerHTML = `
         <div class="menu-summary-stats">
-            <span class="menu-stat"><strong>${overall.percent} %</strong> Lernstand</span>
-            <span class="menu-stat"><strong>${countDueCards()}</strong> fällig</span>
-            <span class="menu-stat"><strong>${mastered}/${total}</strong> gemeistert</span>
-            <span class="menu-stat"><strong>${calStr}</strong> Treffsicherheit</span>
+            <span class="menu-stat menu-stat-${level}"><strong>${overall.percent} %</strong><span>Lernstand</span></span>
+            <span class="menu-stat"><strong>${countDueCards()}</strong><span>fällig</span></span>
+            <span class="menu-stat"><strong>${mastered}/${total}</strong><span>gemeistert</span></span>
+            <span class="menu-stat"><strong>${calStr}</strong><span>Treffsicherheit</span></span>
         </div>
-        <button class="btn btn-soft" id="open-progress">Fortschritt ansehen →</button>
+        <button class="btn btn-soft" id="open-progress">📈 Fortschritt</button>
     `;
     el.classList.remove('hidden');
     const btn = el.querySelector('#open-progress');
@@ -6671,7 +6857,9 @@ function progressTrend(points) {
  */
 function progressReliability(cal) {
     if (cal.pairs === 0) {
-        return '<p class="progress-empty">Aktiviere „Selbsteinschätzung“ und schätze vor dem Aufdecken ein – dann erscheint hier, wie gut du dich selbst kennst.</p>';
+        return calibrationMode
+            ? '<p class="progress-empty">Tippe vor dem Aufdecken auf „Unsicher“, „Mittel“ oder „Sicher“ – dann erscheint hier, wie gut du dich selbst kennst.</p>'
+            : '<p class="progress-empty">Aktiviere „Selbsteinschätzung“ in der Deck-Auswahl und schätze vor dem Aufdecken ein – dann erscheint hier, wie gut du dich selbst kennst.</p>';
     }
     const labels = { 1: 'Unsicher', 2: 'Mittel', 3: 'Sicher' };
     const rows = cal.byLevel
@@ -6729,7 +6917,7 @@ function progressWeakSpots(allDecks) {
     const rows = arr
         .map(
             (x) => `<div class="weakspot-row">
-            <span class="weakspot-name">${sanitizeHTML(x.d)}</span>
+            <span class="weakspot-name">${sanitizeHTML(deckLabel(x.d))}</span>
             <span class="weakspot-bar"><span class="weakspot-fill weakspot-${levelClass(x.k.percent, masteryTargetPercent([x.d]))}" style="width:${x.k.percent}%"></span></span>
             <span class="weakspot-val">${x.k.percent} %</span>
         </div>`
@@ -6783,8 +6971,7 @@ function progressAchievements(cal, deckNames) {
     for (const d of Object.keys(achievements.deckMastered || {})) {
         if (!savedDecks[d]) continue;
         if (scoped && !scoped.has(d)) continue;
-        const cats = deckCategoriesLabel(d);
-        const label = cats ? `${d} · ${cats}` : d;
+        const label = [deckLabel(d), deckCategoriesLabel(d)].filter(Boolean).join(' · ');
         badges.push(`<span class="achv achv-master">Gemeistert: ${sanitizeHTML(label)}</span>`);
     }
     if (!scoped) {
@@ -6832,7 +7019,7 @@ function progressSessions(deckNames) {
                     : '';
             return `<div class="session-row">
                 <span class="session-date">${when}</span>
-                <span class="session-decks">${sanitizeHTML((s.deckNames || []).join(', '))}</span>
+                <span class="session-decks">${sanitizeHTML([...new Set((s.deckNames || []).map((d) => (savedDecks[d] ? deckDisplayTitle(d) : d)))].join(', '))}</span>
                 <span class="session-meta">${Number(s.cardsAnswered) || 0} Karten · ${Number(s.avgScore) || 0} %${conf}</span>
             </div>`;
         })

@@ -6,6 +6,12 @@
     --success: #28a745;
     --danger: #dc3545;
     --warning: #ffc107;
+    /* Yellow is fine for bars/borders but unreadable as text on white
+       (~1.6:1); text in the "mid" level uses this darker amber instead. */
+    --warning-text: #8a5a00;
+    /* Text on primary-filled controls: white here, dark in dark mode where the
+       primary turns light (white on #6b9fd4 was 2.8:1). */
+    --on-primary: #ffffff;
 
     --cards-highlight-bg: #e9f2ff;
     --cards-highlight-border: #92b5e3;
@@ -14,7 +20,7 @@
     --danger-bg: #f8d7da;
     --warning-bg: #fff3cd;
     --disabled-bg: #ccc;
-    --progress-track: #e9ecef;
+    --progress-track: #e3e7ee;
     --explanation-bg: #e7f3ff;
     --explanation-hover-bg: #d0e9ff;
     --explanation-border: #2196f3;
@@ -33,9 +39,10 @@
 }
 
 body {
-    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-    line-height: 1.6;
-    color: var(--dark);
+    font-family: var(--font-sans);
+    line-height: 1.55;
+    color: var(--text-color);
+    -webkit-font-smoothing: antialiased;
     background-color: var(--surface-secondary);
     margin: 0;
     padding: 0;
@@ -59,33 +66,50 @@ body {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    gap: 1rem;
-    margin-bottom: 0;
-    padding: 0.75rem 1rem;
+    gap: 0.75rem;
+    margin-bottom: 0.75rem;
+    padding: 0.5rem 0.6rem;
+    min-height: 56px;
+    box-sizing: border-box;
     background-color: var(--surface-color);
-    border-radius: 8px 8px 0 0;
-    box-shadow: 0 2px 4px var(--shadow-color);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-sm);
 }
 
 .header-content {
-    flex: 2;
+    flex: 1 1 0;
+    min-width: 0;
     text-align: center;
 }
 
 .header h1 {
-    color: var(--primary);
-    margin: 0.5rem 0 0 0;
-    font-size: 1.2rem;
+    color: var(--text-color);
+    margin: 0;
+    font-size: 1.15rem;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+    line-height: 1.3;
+    /* Long deck titles: two lines max instead of pushing the card down. */
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
 }
 
 .header p {
-    margin: 0.25rem 0;
-    font-size: 1.05rem;
+    margin: 0.15rem 0 0;
+    font-size: 0.95rem;
+    color: var(--text-muted);
+}
+
+/* Once decks exist the "import or choose" instruction is noise. */
+body.has-decks #app-subtitle {
+    display: none;
 }
 
 #file-input-container {
     margin-bottom: 1rem;
-    text-align: center;
 }
 
 #file-input {
@@ -94,7 +118,13 @@ body {
 
 /* Saved Decks Styles */
 #saved-decks {
+    margin: 0.5rem 0 0.75rem;
+}
+
+.deck-list-empty {
     margin: 1rem 0;
+    text-align: center;
+    color: var(--text-muted);
 }
 
 .saved-deck {
@@ -108,22 +138,9 @@ body {
     box-shadow: 0 1px 3px var(--shadow-color);
 }
 
-.delete-deck {
-    color: var(--danger);
-    background: none;
-    border: none;
-    cursor: pointer;
-    font-size: 1.05rem;
-    /* Destructive control on a touch-first UI: keep a ≥44px hit area. */
-    min-width: 44px;
-    min-height: 44px;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-}
-
 .topic-checkbox,
 .category-checkbox {
+    accent-color: var(--primary);
     /* Enlarged from 18px for easier tapping on phones. */
     width: 24px;
     height: 24px;
@@ -133,42 +150,74 @@ body {
 
 /* Topic Folder Structure */
 .topic-folder {
+    /* Scrolled into view after an import: keep its title clear of the edge. */
+    scroll-margin: 4.5rem 0 5.5rem;
     background-color: var(--surface-color);
-    margin-bottom: 0.5rem;
-    border-radius: 6px;
-    box-shadow: 0 1px 3px var(--shadow-color);
+    margin-bottom: 0.6rem;
+    border: 1px solid transparent;
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-sm);
     overflow: hidden;
+    transition: border-color 0.15s ease;
+}
+
+/* A selected deck is visible at a glance, even when collapsed. */
+.topic-folder:has(.topic-checkbox:checked),
+.topic-folder:has(.topic-checkbox:indeterminate) {
+    border-color: color-mix(in srgb, var(--primary) 45%, transparent);
 }
 
 .topic-header {
     display: flex;
-    align-items: center;
-    padding: 0.6rem 0.5rem;
-    gap: 0.4rem;
-    cursor: pointer;
+    align-items: stretch;
     user-select: none;
 }
 
-.topic-header:hover {
-    background-color: var(--hover-bg, rgba(0, 0, 0, 0.04));
+/* Full-height tap target for the topic's select-all checkbox. */
+.topic-check {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 auto;
+    min-width: 48px;
+    min-height: 56px;
+    cursor: pointer;
+}
+
+/* The rest of the row opens/closes the category panel. */
+.topic-toggle {
+    flex: 1 1 auto;
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.55rem 0.75rem 0.55rem 0;
+    border: 0;
+    background: none;
+    color: inherit;
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+    border-radius: 0 var(--radius-lg) var(--radius-lg) 0;
+}
+
+@media (hover: hover) {
+    .topic-toggle:hover {
+        background-color: var(--cards-hover-bg);
+    }
 }
 
 .deck-chevron {
-    font-size: 0.7rem;
+    font-size: 0.9rem;
     transition: transform 0.2s ease;
     color: var(--text-muted, #888);
     flex-shrink: 0;
-    width: 1rem;
+    width: 1.25rem;
     text-align: center;
 }
 
 .topic-folder.expanded .deck-chevron {
-    transform: rotate(90deg);
-}
-
-.deck-folder-icon {
-    font-size: 1.05rem;
-    flex-shrink: 0;
+    transform: rotate(180deg);
 }
 
 .topic-title-block {
@@ -179,22 +228,16 @@ body {
 }
 
 .topic-title {
-    font-weight: 500;
-    color: var(--primary);
+    font-weight: 600;
+    color: var(--text-color);
+    line-height: 1.3;
     word-break: break-word;
 }
 
 .topic-subtitle {
-    font-size: 0.8rem;
+    font-size: 0.82rem;
     color: var(--text-muted, #888);
-    margin-top: 0.1rem;
-}
-
-.topic-card-count {
-    font-size: 0.85rem;
-    color: var(--text-muted, #888);
-    margin-left: 0.25rem;
-    white-space: nowrap;
+    margin-top: 0.15rem;
 }
 
 /* "Lernstand" badge: mini progress bar + percent in the topic header */
@@ -239,7 +282,7 @@ body {
 }
 
 .topic-knowledge-mid .topic-knowledge-text {
-    color: var(--warning, #e67e22);
+    color: var(--warning-text);
 }
 
 .topic-knowledge-high .topic-knowledge-fill {
@@ -251,42 +294,76 @@ body {
 }
 
 /* Knowledge estimate line on the session feedback screen */
+/* Calm stat lines on the results screen. The level shows as a coloured dot —
+   a big red headline right after an early round read like a failure. */
 .feedback-knowledge {
-    margin: 0.4rem 0 0.6rem;
-    font-size: 1.05rem;
-    font-weight: 600;
+    margin: 0.35rem 0 0.5rem;
+    font-size: 0.98rem;
+    font-weight: 500;
+    color: var(--text-color);
 }
 
-.feedback-knowledge-low {
-    color: var(--danger, #dc3545);
+.feedback-knowledge-low::before,
+.feedback-knowledge-mid::before,
+.feedback-knowledge-high::before {
+    content: '';
+    display: inline-block;
+    width: 0.6em;
+    height: 0.6em;
+    margin-right: 0.45em;
+    border-radius: 50%;
+    vertical-align: 0.05em;
 }
 
-.feedback-knowledge-mid {
-    color: var(--warning, #e67e22);
+.feedback-knowledge-low::before {
+    background-color: var(--danger);
 }
 
-.feedback-knowledge-high {
-    color: var(--success, #28a745);
+.feedback-knowledge-mid::before {
+    background-color: var(--warning);
+}
+
+.feedback-knowledge-high::before {
+    background-color: var(--success);
 }
 
 .topic-categories {
     display: none;
-    padding: 0.25rem 0.5rem 0.5rem 2.4rem;
-    border-top: 1px solid var(--input-border);
-    background-color: var(--bg-color);
+    padding: 0.25rem 0.75rem 0.5rem 0.75rem;
+    border-top: 1px solid var(--border-color);
+}
+
+.topic-hint {
+    margin: 0.35rem 0 0.25rem;
+    font-size: 0.8rem;
+    line-height: 1.4;
+    color: var(--text-muted);
+}
+
+.topic-tools {
+    display: flex;
+    justify-content: flex-end;
+    padding-top: 0.25rem;
+    border-top: 1px dashed var(--border-color);
+    margin-top: 0.25rem;
 }
 
 .topic-folder.expanded .topic-categories {
     display: block;
 }
 
+/* Name on the left, chips right-aligned in their own column (wrapping inside
+   it) — flex-wrap used to drop the chips under the checkbox on a phone. */
 .category-row {
-    display: flex;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
     align-items: center;
-    padding: 0.35rem 0;
-    gap: 0.4rem;
+    gap: 0.5rem;
     font-size: 1rem;
-    flex-wrap: wrap;
+}
+
+.category-row + .category-row {
+    border-top: 1px solid var(--border-color);
 }
 
 .category-label {
@@ -294,67 +371,107 @@ body {
     color: var(--text-color);
     display: flex;
     align-items: center;
-    gap: 0.3rem;
-    flex: 1;
+    gap: 0.6rem;
     min-width: 0;
+    min-height: 48px;
 }
 
-.category-row .category-icon {
-    font-size: 0.85rem;
+.category-name {
+    min-width: 0;
+    overflow-wrap: break-word;
+    hyphens: auto;
+    line-height: 1.3;
+}
+
+/* Phones: chips get their own line, aligned with the category name, instead
+   of squeezing long names ("Risiken und Schutzmaßnahmen") into 3–4 lines. */
+@media (max-width: 480px) {
+    .category-row {
+        grid-template-columns: minmax(0, 1fr);
+        gap: 0;
+    }
+
+    .category-row .type-chips {
+        justify-content: flex-start;
+        max-width: none;
+        margin: -0.35rem 0 0.5rem calc(24px + 0.6rem);
+    }
 }
 
 /* Type chips (MC / Text per category) */
 .type-chips {
-    display: inline-flex;
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
     gap: 0.3rem;
-    flex-shrink: 0;
+    max-width: 13.5rem;
 }
 
+/* Toggle chips per card type. Calm when on (tinted, with a check), clearly
+   "off" when deselected (dashed, struck count) — the saturated fills used to
+   dominate the list and made "off" hard to tell from "different colour". */
 .type-chip {
+    --chip-color: var(--primary);
     font: inherit;
     font-size: 0.8rem;
+    font-weight: 600;
     line-height: 1;
-    /* ≥44px tap target on a touch-first UI; stays pill-shaped via the radius. */
-    min-height: 44px;
-    padding: 0.25rem 0.85rem;
+    /* Compact pill; the ::after below stretches the tap target to 44px so
+       the rows don't have to be 44px-chip tall. */
+    position: relative;
+    min-height: 32px;
+    padding: 0.2rem 0.65rem;
     display: inline-flex;
     align-items: center;
+    gap: 0.3rem;
     border-radius: 999px;
-    border: 1px solid var(--input-border);
-    background-color: var(--surface-color);
+    border: 1px dashed var(--input-border);
+    background-color: transparent;
     color: var(--text-muted, #888);
     cursor: pointer;
     user-select: none;
     transition:
         background-color 0.15s ease,
         color 0.15s ease,
-        border-color 0.15s ease,
-        opacity 0.15s ease;
+        border-color 0.15s ease;
 }
 
-.type-chip:hover {
-    border-color: var(--primary);
+.type-chip-text {
+    --chip-color: var(--success);
+}
+
+.type-chip-matching {
+    --chip-color: #8e44ad;
+}
+
+.type-chip-identify {
+    --chip-color: #d9822b;
+}
+
+@media (hover: hover) {
+    .type-chip:hover {
+        border-color: var(--chip-color);
+    }
+}
+
+.type-chip:not(.selected) {
+    text-decoration: line-through;
 }
 
 .type-chip.selected {
-    color: #fff;
-    border-color: transparent;
+    border: 1px solid var(--chip-color);
+    color: var(--chip-color);
+    background-color: color-mix(in srgb, var(--chip-color) 12%, transparent);
 }
 
-.type-chip-mc.selected {
-    background-color: var(--primary);
+.type-chip.selected::before {
+    content: '✓';
 }
 
-.type-chip-text.selected {
-    background-color: var(--success, #2ecc71);
-}
-
-.type-chip-matching.selected {
-    background-color: #8e44ad;
-}
-
-.type-chip-identify.selected {
-    background-color: #d9822b;
+.type-chip::after {
+    content: '';
+    position: absolute;
+    inset: -6px -2px;
 }
 
 /* ============================================================
@@ -397,7 +514,7 @@ body {
     color: var(--text-color);
     background: var(--surface-color);
     border: 2px solid var(--border-color);
-    border-radius: 10px;
+    border-radius: var(--radius-md);
     cursor: pointer;
     transition:
         border-color 0.15s ease,
@@ -545,9 +662,9 @@ body {
        flex-computed, unlike height:100%). */
     inset: 0;
     backface-visibility: hidden;
-    border-radius: 8px;
-    box-shadow: 0 2px 4px var(--shadow-color);
-    padding: 1rem;
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-md);
+    padding: 1.25rem 1.25rem 1rem;
     box-sizing: border-box;
     background-color: var(--surface-color);
     display: flex;
@@ -587,6 +704,39 @@ body {
     z-index: 2;
 }
 
+/* The answer side carries the outcome as a coloured top edge. */
+.card[data-outcome='correct'] .card-back {
+    box-shadow:
+        inset 0 4px 0 var(--success),
+        var(--shadow-md);
+}
+
+.card[data-outcome='partial'] .card-back {
+    box-shadow:
+        inset 0 4px 0 var(--warning),
+        var(--shadow-md);
+}
+
+.card[data-outcome='incorrect'] .card-back {
+    box-shadow:
+        inset 0 4px 0 var(--danger),
+        var(--shadow-md);
+}
+
+/* Category above the question: context at a glance ("Geografie"). */
+.card-eyebrow {
+    margin: 0 0 0.35rem;
+    font-size: 0.75rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--primary);
+}
+
+.card-eyebrow:empty {
+    display: none;
+}
+
 .card-content {
     /* Fill the space above the action buttons (pushing them to the bottom) and
        scroll internally when the content is taller than the card. */
@@ -599,28 +749,78 @@ body {
 }
 
 .question {
-    font-weight: bold;
-    font-size: 1.2rem;
-    color: var(--primary);
-    margin-bottom: 0.75rem;
+    font-weight: 700;
+    font-size: 1.3rem;
+    line-height: 1.35;
+    letter-spacing: -0.01em;
+    color: var(--text-color);
+    margin-bottom: 0.85rem;
+    overflow-wrap: break-word;
+    hyphens: auto;
 }
 
 .answer {
     padding: 0.75rem;
-    background-color: var(--light);
-    border-left: 4px solid var(--primary);
+    background-color: var(--success-bg);
+    border-left: 4px solid var(--success);
+    border-radius: var(--radius-md);
     margin-top: 0.5rem;
     text-align: left;
+}
+
+.answer-label,
+.user-answer-display strong {
+    display: block;
+    font-size: 0.8rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--text-muted);
+    margin-bottom: 0.15rem;
+}
+
+/* One-line outcome on the answer side ("✓ Richtig", "◐ Teilweise …"). */
+.answer-verdict {
+    display: inline-block;
+    margin: 0 0 0.6rem;
+    padding: 0.3rem 0.8rem;
+    border-radius: 999px;
+    font-size: 0.95rem;
+    font-weight: 600;
+}
+
+.answer-verdict-correct {
+    color: var(--success);
+    background: var(--success-bg);
+}
+
+.answer-verdict-partial {
+    color: var(--warning-text);
+    background: var(--warning-bg);
+}
+
+.answer-verdict-incorrect {
+    color: var(--danger);
+    background: var(--danger-bg);
+}
+
+.answer-verdict-neutral {
+    display: block;
+    border-radius: var(--radius-md);
+    font-weight: 500;
+    color: var(--text-muted);
+    background: var(--surface-secondary);
 }
 
 /* User answer input styling */
 .user-answer-input {
     width: 90%;
-    padding: 0.75rem;
+    padding: 0.75rem 0.9rem;
     margin: 1rem 0;
-    border: 1px solid var(--input-border);
-    border-radius: 4px;
-    font-size: 1.05rem;
+    border: 2px solid var(--border-color);
+    border-radius: var(--radius-md);
+    /* ≥16px so iOS Safari doesn't zoom the page on focus. */
+    font-size: max(16px, 1.05rem);
     background-color: var(--input-bg);
     color: var(--text-color);
     transition: border-color 0.15s ease-in-out;
@@ -629,7 +829,7 @@ body {
 .user-answer-input:focus {
     border-color: var(--primary);
     outline: 0;
-    box-shadow: 0 0 0 0.2rem rgba(74, 111, 165, 0.25);
+    box-shadow: 0 0 0 4px color-mix(in srgb, var(--primary) 20%, transparent);
 }
 
 .user-answer-display {
@@ -638,7 +838,7 @@ body {
     background-color: var(--cards-highlight-bg);
     border-left: 4px solid var(--cards-highlight-border);
     text-align: left;
-    border-radius: 4px;
+    border-radius: var(--radius-md);
 }
 
 /* Multiple Choice Options Styling */
@@ -646,20 +846,95 @@ body {
     display: flex;
     flex-direction: column;
     width: 90%;
-    margin: 1rem auto;
-    gap: 0.3rem;
+    margin: 0.75rem auto;
+    gap: 0.45rem;
 }
 
 .option-item {
     position: relative;
-    padding: 0.3rem;
-    border: 2px solid var(--input-border);
-    border-radius: 6px;
+    min-height: 48px;
+    padding: 0.35rem 0.6rem;
+    box-sizing: border-box;
+    border: 2px solid var(--border-color);
+    border-radius: var(--radius-md);
+    background-color: var(--surface-color);
     cursor: pointer;
-    transition: all 0.2s ease;
+    transition:
+        border-color 0.15s ease,
+        background-color 0.15s ease;
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
     text-align: left;
+}
+
+.option-item label {
+    flex: 1 1 0;
+    min-width: 0;
+    display: flex;
+    align-items: baseline;
+    gap: 0.5rem;
+    cursor: pointer;
+    line-height: 1.4;
+}
+
+/* Keyboard shortcut number: a quiet badge, hidden on touch-only devices. */
+.option-key {
+    flex: 0 0 auto;
+    min-width: 1.4em;
+    padding: 0 0.3em;
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    font-size: 0.75rem;
+    line-height: 1.5;
+    text-align: center;
+    color: var(--text-muted);
+}
+
+@media (hover: none) and (pointer: coarse) {
+    .option-key {
+        display: none;
+    }
+}
+
+.option-text {
+    min-width: 0;
+    word-break: break-word;
+}
+
+/* Outcome tag on the revealed option ("✓ richtig", "! fehlte"). */
+.option-status {
+    flex: 0 0 auto;
+    margin-left: 0.5rem;
+    font-size: 0.8rem;
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.mc-correct-selected .option-status {
+    color: var(--success);
+}
+
+.mc-incorrect-selected .option-status {
+    color: var(--danger);
+}
+
+.mc-missed .option-status {
+    color: var(--warning-text);
+}
+
+/* Per-option explanation, inline under the option (was a hover tooltip). */
+.option-explanation {
+    flex: 1 0 100%;
+    box-sizing: border-box;
+    margin: 0.35rem 0 0.1rem;
+    padding: 0.35rem 0.6rem;
+    border-left: 3px solid var(--explanation-border);
+    border-radius: 0 4px 4px 0;
+    background: var(--explanation-bg);
+    color: var(--explanation-content-text);
+    font-size: 0.9rem;
+    line-height: 1.45;
 }
 
 @media (hover: hover) {
@@ -671,7 +946,7 @@ body {
 
 .option-item.selected {
     border-color: var(--primary);
-    background-color: rgba(74, 111, 165, 0.1);
+    background-color: var(--cards-highlight-bg);
 }
 
 .option-item.correct {
@@ -721,10 +996,19 @@ body {
     opacity: 0.7;
 }
 
+/* The back is an innerHTML clone, which doesn't carry the checked state —
+   an empty box next to "✗ falsch gewählt" read as a contradiction. The status
+   tags say it all. */
+#options-container-back .option-checkbox {
+    display: none;
+}
+
 .option-checkbox {
-    margin-right: 0.75rem;
-    width: 18px;
-    height: 18px;
+    flex: 0 0 auto;
+    margin: 0 0.6rem 0 0.1rem;
+    width: 20px;
+    height: 20px;
+    accent-color: var(--primary);
 }
 
 .selected-options-display {
@@ -733,7 +1017,7 @@ body {
     background-color: var(--cards-highlight-bg);
     border-left: 4px solid var(--cards-highlight-border);
     text-align: left;
-    border-radius: 4px;
+    border-radius: var(--radius-md);
 }
 
 .controls {
@@ -745,12 +1029,17 @@ body {
 }
 
 .btn {
-    padding: 0.4rem 0.8rem;
+    padding: 0.45rem 0.9rem;
     border: none;
-    border-radius: 4px;
+    border-radius: var(--radius-md);
     cursor: pointer;
-    font-weight: 500;
-    transition: all 0.3s;
+    font-weight: 600;
+    transition:
+        background-color 0.15s ease,
+        border-color 0.15s ease,
+        color 0.15s ease,
+        box-shadow 0.15s ease,
+        transform 0.1s ease;
     flex: 1;
     min-width: 80px;
     /* >=44px tap target (WCAG 2.5.5 / mobile guidelines). */
@@ -758,9 +1047,14 @@ body {
     font-size: 1rem;
 }
 
+.btn:not(:disabled):active {
+    transform: translateY(1px);
+}
+
 .btn-primary {
     background-color: var(--primary);
-    color: white;
+    color: var(--on-primary);
+    box-shadow: 0 1px 2px rgba(16, 24, 40, 0.12);
 }
 
 .btn-primary:hover {
@@ -826,63 +1120,179 @@ body {
     opacity: 0.55;
 }
 
-/* Utility button in the summary strip keeps its natural width. */
-.menu-summary .btn {
-    flex: 0 0 auto;
+/* Text-style button for secondary list actions (Alle/Keine, Backup, …):
+   still a ≥44px target, but reads as a link instead of competing with the
+   primary "Lernen" button. */
+.link-btn {
+    display: inline-flex;
+    align-items: center;
+    min-height: 44px;
+    padding: 0 0.5rem;
+    border: 0;
+    background: none;
+    color: var(--primary);
+    font: inherit;
+    font-size: 0.92rem;
+    font-weight: 500;
+    cursor: pointer;
+    border-radius: 6px;
 }
 
-/* ── Deck action bar ─────────────────────────────────────────────────────── */
-/* Two groups that wrap as whole units: start actions and deck options. On a
-   phone they stack onto two clean rows; on wider screens they share one line. */
-#deck-selection-controls {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    justify-content: space-between;
-    gap: 0.5rem 0.75rem;
-    margin-bottom: 0.75rem;
+.link-btn:hover {
+    text-decoration: underline;
+}
+
+.link-btn:disabled {
+    color: var(--text-muted);
+    cursor: not-allowed;
+    text-decoration: none;
+}
+
+.link-btn-danger {
+    color: var(--danger);
+}
+
+/* ── First visit: empty state + drop zone ────────────────────────────────── */
+.empty-state {
+    margin: 0.5rem 0 0.75rem;
+    padding: 1.5rem 1rem;
+    text-align: center;
+    background: var(--surface-color);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-sm);
+}
+
+.empty-state-icon {
+    font-size: 2.5rem;
+    line-height: 1;
+}
+
+.empty-state-title {
+    margin: 0.6rem 0 0.3rem;
+    font-size: 1.2rem;
+    color: var(--text-color);
+}
+
+.empty-state-text {
+    margin: 0 auto 1rem;
+    max-width: 30rem;
+    color: var(--text-muted);
+}
+
+body.has-decks .empty-state,
+body.has-decks .drop-zone {
+    display: none;
+}
+
+body:not(.has-decks) .saved-decks-header,
+body:not(.has-decks) .deck-search-container,
+body:not(.has-decks) #calibration-option,
+body:not(.has-decks) #deck-selection-controls,
+body:not(.has-decks) #export-backup-btn {
+    display: none;
+}
+
+/* Files dragged over the picker (desktop): highlight whichever import
+   control is visible. */
+#file-input-container.is-dragging .drop-zone,
+#file-input-container.is-dragging #saved-decks {
+    outline: 3px dashed var(--primary);
+    outline-offset: 4px;
+    border-radius: 8px;
+}
+
+#saved-decks-container,
+#progress-view {
+    text-align: left;
+}
+
+/* ── Sticky action bar (start / read) ─────────────────────────────────────── */
+/* Sits after the list and sticks to the bottom edge while the list is
+   scrolled, so "▶ 28 Karten lernen" is always one thumb-reach away. */
+.deck-action-bar {
+    position: sticky;
+    bottom: 0;
+    z-index: 5;
+    margin: 0 -0.25rem;
+    padding: 0.6rem 0.25rem calc(0.6rem + env(safe-area-inset-bottom));
+    background: color-mix(in srgb, var(--surface-secondary) 88%, transparent);
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+    border-top: 1px solid var(--border-color);
 }
 
 .start-actions {
     display: flex;
     gap: 0.5rem;
-    flex: 1 1 16rem;
 }
 
 .start-actions #start-selected-decks {
     flex: 1 1 auto;
+    min-height: 50px;
+    font-size: 1.05rem;
+    font-weight: 600;
 }
 
-.deck-options {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem 0.9rem;
-    flex-wrap: wrap;
+.start-actions #read-mode-btn {
+    flex: 0 0 auto;
+    min-height: 50px;
 }
 
+/* Self-assessment option: a proper labelled row with its explanation (the
+   old tooltip-only description was unreachable on a phone). */
 .study-option {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.35rem;
-    font-size: 0.85rem;
+    display: flex;
+    align-items: flex-start;
+    gap: 0.6rem;
+    margin: 0 0 0.5rem;
+    padding: 0.6rem 0.75rem;
+    background: var(--surface-color);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-sm);
     color: var(--text-color);
     cursor: pointer;
 }
 
 .study-option input {
-    width: 1rem;
-    height: 1rem;
+    flex: 0 0 auto;
+    width: 22px;
+    height: 22px;
+    margin: 0.1rem 0 0;
     accent-color: var(--primary);
     cursor: pointer;
 }
 
-.select-actions {
-    display: inline-flex;
-    gap: 0.4rem;
+.study-option-title {
+    display: block;
+    font-weight: 600;
+    font-size: 0.95rem;
 }
 
-.select-actions .btn {
-    white-space: nowrap;
+.study-option-hint {
+    display: block;
+    font-size: 0.82rem;
+    line-height: 1.4;
+    color: var(--text-muted);
+}
+
+.select-actions {
+    display: inline-flex;
+    gap: 0.1rem;
+}
+
+.picker-footer {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 0 0.75rem;
+    margin-top: 1.25rem;
+    padding-top: 0.5rem;
+    border-top: 1px solid var(--border-color);
+}
+
+.picker-footer .link-btn {
+    font-size: 0.85rem;
+    color: var(--text-muted);
 }
 
 /* ── Graded recall self-rating (text cards) ──────────────────────────────── */
@@ -895,13 +1305,20 @@ body {
 
 .recall-rating-btn {
     flex: 1;
+    min-width: 0;
     /* >=44px tap target (WCAG 2.5.5 / mobile guidelines). */
-    min-height: 44px;
-    padding: 0.35rem 0.3rem;
+    min-height: 52px;
+    padding: 0.3rem 0.2rem;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0.05rem;
+    line-height: 1.2;
     border: 1px solid var(--input-border);
     /* Semantic colour lives only on the bottom edge — present but quiet. */
     border-bottom-width: 3px;
-    border-radius: 4px;
+    border-radius: var(--radius-md);
     cursor: pointer;
     background: var(--surface-color);
     color: var(--text-color);
@@ -912,9 +1329,26 @@ body {
         border-color 0.15s ease;
 }
 
-.recall-rating-btn:hover,
+@media (hover: hover) {
+    .recall-rating-btn:hover {
+        background: var(--surface-secondary);
+    }
+}
+
 .recall-rating-btn:active {
     background: var(--surface-secondary);
+}
+
+/* When the card comes back for this rating — the consequence of the choice. */
+.rating-interval {
+    font-size: 0.72rem;
+    font-weight: 400;
+    color: var(--text-muted);
+    white-space: nowrap;
+}
+
+.rating-interval:empty {
+    display: none;
 }
 
 .recall-rating-btn:focus-visible {
@@ -943,7 +1377,7 @@ body {
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: 0.4rem;
+    gap: 0;
     margin: 0.5rem 0 0.25rem;
     flex-wrap: wrap;
 }
@@ -958,16 +1392,34 @@ body {
     color: var(--text-muted);
 }
 
+/* Segmented control: three joined buttons read as one question. */
 .confidence-btn {
+    flex: 0 1 6.5rem;
     min-height: 44px;
     padding: 0.3rem 0.7rem;
     font-size: 0.9rem;
+    font-weight: 500;
     border: 1px solid var(--input-border);
-    border-radius: 6px;
+    border-radius: 0;
     background: var(--surface-color);
     color: var(--text-color);
     cursor: pointer;
-    transition: all 0.15s ease;
+    transition:
+        background-color 0.15s ease,
+        border-color 0.15s ease,
+        color 0.15s ease;
+}
+
+.confidence-btn + .confidence-btn {
+    margin-left: -1px;
+}
+
+.confidence-prompt-label + .confidence-btn {
+    border-radius: var(--radius-md) 0 0 var(--radius-md);
+}
+
+.confidence-btn:last-child {
+    border-radius: 0 var(--radius-md) var(--radius-md) 0;
 }
 
 .confidence-btn:hover {
@@ -975,9 +1427,12 @@ body {
 }
 
 .confidence-btn.selected {
+    position: relative;
+    z-index: 1;
     border-color: var(--primary);
-    background: var(--surface-secondary);
-    font-weight: 600;
+    background: var(--cards-highlight-bg);
+    color: var(--primary);
+    font-weight: 700;
 }
 
 .confidence-btn:focus-visible {
@@ -985,45 +1440,54 @@ body {
     outline-offset: 2px;
 }
 
-/* ── Menu summary strip (quick progress on the deck picker) ───────────────── */
-/* Mobile-first: stats + button stack vertically so the button never wraps
-   awkwardly onto its own half-width line. On wider screens we switch back to
-   the side-by-side row layout. */
+/* ── Menu summary card (quick progress on the deck picker) ────────────────── */
 .menu-summary {
     display: flex;
-    flex-direction: column;
-    gap: 0.5rem;
-    margin-bottom: 0.75rem;
-    padding-bottom: 0.75rem;
-    border-bottom: 1px solid var(--input-border);
+    align-items: center;
+    gap: 0.75rem;
+    margin: 0.75rem 0 1rem;
+    padding: 0.6rem 0.75rem;
+    background: var(--surface-color);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-sm);
 }
 
 .menu-summary-stats {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 0.15rem 1rem;
-    font-size: 0.85rem;
+    flex: 1 1 auto;
+    display: flex;
+    gap: 0.25rem 1.25rem;
+    min-width: 0;
+}
+
+.menu-stat {
+    display: flex;
+    flex-direction: column;
+    line-height: 1.2;
+    font-size: 0.78rem;
     color: var(--text-muted);
 }
 
 .menu-stat strong {
-    color: var(--primary);
+    font-size: 1.15rem;
+    color: var(--text-color);
+    font-variant-numeric: tabular-nums;
 }
 
-/* Wider screens: single-row layout with button right-aligned */
-@media (min-width: 480px) {
-    .menu-summary {
-        flex-direction: row;
-        flex-wrap: wrap;
-        align-items: center;
-        justify-content: space-between;
-    }
+.menu-stat-high strong {
+    color: var(--success);
+}
 
-    .menu-summary-stats {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 0.3rem 1rem;
-    }
+.menu-stat-mid strong {
+    color: var(--warning-text);
+}
+
+.menu-stat-low strong {
+    color: var(--danger);
+}
+
+.menu-summary .btn {
+    flex: 0 0 auto;
+    white-space: nowrap;
 }
 
 /* ── Per-deck trend sparkline (in the Lernstand badge) ───────────────────── */
@@ -1057,9 +1521,14 @@ body {
     width: 100%;
     padding: 0.25rem;
     margin-bottom: 1rem;
-    background: var(--surface-secondary);
-    border-radius: 10px;
+    /* A visible track on the page background (it used to be the same grey). */
+    background: var(--border-color);
+    border-radius: var(--radius-md);
     box-sizing: border-box;
+}
+
+[data-theme='dark'] .hub-tab.active {
+    background: color-mix(in srgb, var(--text-color) 12%, var(--surface-color));
 }
 
 .hub-tab {
@@ -1135,7 +1604,7 @@ body {
 .scope-chip.active {
     background-color: var(--primary);
     border-color: transparent;
-    color: #fff;
+    color: var(--on-primary);
 }
 
 .scope-chip:focus-visible {
@@ -1192,15 +1661,18 @@ body {
     margin-bottom: 1rem;
     padding: 0.75rem 0.9rem;
     background: var(--surface-color);
-    border: 1px solid var(--input-border);
-    border-radius: 8px;
-    box-shadow: 0 1px 2px var(--shadow-color);
+    border: 1px solid transparent;
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-sm);
 }
 
 .progress-section h4 {
     margin: 0 0 0.6rem;
-    font-size: 1rem;
-    color: var(--text-color);
+    font-size: 0.8rem;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--text-muted);
 }
 
 .progress-empty {
@@ -1561,7 +2033,7 @@ body {
     margin-left: 0.4rem;
     padding: 0.2rem 0.4rem;
     border: 1px solid var(--input-border);
-    border-radius: 4px;
+    border-radius: var(--radius-sm);
     background: var(--surface-color);
     color: var(--text-color);
 }
@@ -1598,36 +2070,57 @@ body {
     color: var(--text-color);
 }
 
+/* ── Session bar: progress + counters in one slim row ────────────────────── */
+/* Was four big stat blocks (~70px) plus a separate bar; on a phone every
+   pixel above the card is taken from the answer area. */
+.session-bar {
+    margin: 0 0 0.6rem;
+    padding: 0.5rem 0.75rem 0.4rem;
+    background-color: var(--surface-color);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-sm);
+}
+
 .stats {
     display: flex;
-    justify-content: space-around;
-    margin: 0 0 0.5rem 0;
-    padding: 0 0 0.5rem 0;
-    background-color: var(--surface-color);
-    border-radius: 0 0 8px 8px;
-    box-shadow: 0 2px 4px var(--shadow-color);
-}
-
-.stat-item {
-    text-align: center;
-}
-
-.stat-value {
-    font-size: 1.15rem;
-    font-weight: bold;
-    color: var(--primary);
-}
-
-.stat-label {
-    font-size: 1.05rem;
+    align-items: center;
+    gap: 0.75rem;
+    margin-top: 0.35rem;
+    font-size: 0.85rem;
     color: var(--text-muted);
 }
 
+.stat-item {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 0.25rem;
+    white-space: nowrap;
+}
+
+.stat-progress {
+    margin-right: auto;
+}
+
+.stat-value {
+    font-weight: 700;
+    color: var(--text-color);
+    font-variant-numeric: tabular-nums;
+}
+
+.stat-correct .stat-icon,
+.stat-correct .stat-value {
+    color: var(--success);
+}
+
+.stat-incorrect .stat-icon,
+.stat-incorrect .stat-value {
+    color: var(--danger);
+}
+
 .progress-bar {
-    height: 6px;
+    height: 8px;
     background-color: var(--progress-track);
-    border-radius: 4px;
-    margin: 0.5rem 0;
+    border-radius: var(--radius-pill);
     overflow: hidden;
 }
 
@@ -1641,8 +2134,70 @@ body {
 .feedback {
     font-size: 1.05rem;
     text-align: center;
-    margin-top: 1rem;
+    margin-top: 0.25rem;
+    padding: 1.5rem 1rem 1.25rem;
+    color: var(--text-color);
+    background: var(--surface-color);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-sm);
+}
+
+.feedback h2 {
+    margin: 0.25rem 0 0.5rem;
+    color: var(--text-color);
+}
+
+.feedback-icon {
+    font-size: 2.5rem;
+    line-height: 1;
+}
+
+#overall-stats p {
+    margin: 0.25rem 0;
     color: var(--text-muted);
+}
+
+#final-score {
+    font-weight: 700;
+    color: var(--text-color);
+}
+
+.deck-stats-list {
+    display: grid;
+    gap: 0.35rem;
+    margin: 0.5rem auto 0;
+    max-width: 34rem;
+    text-align: left;
+    font-size: 0.9rem;
+}
+
+.deck-stat-item {
+    padding: 0.4rem 0.6rem;
+    border-radius: var(--radius-sm);
+    background: var(--surface-secondary);
+}
+
+/* Full-width stacked actions on phones; a row on wider screens. */
+.feedback-actions {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    margin: 1.25rem auto 0;
+    max-width: 24rem;
+}
+
+@media (min-width: 600px) {
+    .feedback-actions {
+        flex-direction: row;
+        flex-wrap: wrap;
+        justify-content: center;
+        max-width: none;
+    }
+
+    .feedback-actions .btn {
+        flex: 0 1 auto;
+        padding-inline: 1.1rem;
+    }
 }
 
 .error-message {
@@ -1659,7 +2214,7 @@ body {
     margin-top: 1rem;
     padding: 0.75rem;
     background-color: var(--surface-secondary);
-    border-radius: 4px;
+    border-radius: var(--radius-md);
     border: 1px solid var(--border-color);
     font-family: monospace;
     font-size: 0.9rem;
@@ -1679,14 +2234,6 @@ body {
     font-size: 0.9rem;
 }
 
-.json-toggle {
-    margin-top: 0.5rem;
-    font-size: 1.05rem;
-    color: var(--primary);
-    cursor: pointer;
-    text-decoration: underline;
-}
-
 @media (max-width: 600px) {
     .container {
         width: 95%;
@@ -1699,7 +2246,6 @@ body {
 
     .btn {
         padding: 0.3rem 0.6rem;
-        font-size: 1.05rem;
     }
 
     .card-container {
@@ -1710,16 +2256,9 @@ body {
         min-height: 330px;
     }
 
-    .stats {
-        padding: 0.4rem 0.2rem;
-    }
-
-    .stat-value {
-        font-size: 1.1rem;
-    }
-
-    .stat-label {
-        font-size: 1.05rem;
+    .card-front,
+    .card-back {
+        padding: 0.75rem;
     }
 }
 
@@ -1730,8 +2269,8 @@ body {
 /* Drop Zone */
 .drop-zone {
     margin-top: 0.75rem;
-    border: 2px dashed var(--text-muted, #aaa);
-    border-radius: 8px;
+    border: 2px dashed var(--input-border);
+    border-radius: var(--radius-lg);
     padding: 1.5rem 1rem;
     text-align: center;
     cursor: pointer;
@@ -1775,29 +2314,19 @@ body {
     color: var(--text-muted, #888);
 }
 
-/* Upload Actions (JSON sample link) */
-.upload-actions {
-    text-align: center;
-    margin: 0.3rem 0 0;
-}
-
 /* Saved Decks Header */
 .saved-decks-header {
     display: flex;
     align-items: center;
     justify-content: space-between;
     gap: 0.5rem;
+    margin-top: 0.25rem;
 }
 
-.saved-decks-header h3 {
+.section-title {
     margin: 0;
-}
-
-.saved-decks-header .btn {
-    flex: none;
-    font-size: 0.85rem;
-    padding: 0.3rem 0.65rem;
-    white-space: nowrap;
+    font-size: 1.1rem;
+    color: var(--text-color);
 }
 
 /* Ladder distribution bar (progress overview "Wiederholungs-Stufen") */
@@ -1836,14 +2365,23 @@ body {
     background-color: var(--legend-color);
 }
 
-/* Undo Button — leftmost on the answer-side controls row, natural width so it
-   reads as the secondary action beside the rating/next buttons. */
+/* Undo Button — leftmost on the answer-side controls row: a compact icon so
+   the four rating buttons get the width on a phone. */
 #undo-btn {
     flex: 0 0 auto;
 }
 
+.btn.btn-icon {
+    min-width: 44px;
+    width: 44px;
+    padding: 0;
+    font-size: 1.2rem;
+    line-height: 1;
+}
+
 #next-card {
     flex: 2;
+    font-weight: 600;
 }
 
 #undo-btn:disabled {
@@ -1859,25 +2397,30 @@ body {
 }
 
 /* Back link in page header */
+/* Round icon button, matching the theme toggle on the other side. */
 .back-link {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 40px;
     color: var(--primary);
     text-decoration: none;
-    font-size: 1.5rem;
+    font-size: 1.35rem;
     font-weight: 500;
     line-height: 1;
-    padding: 0.25rem 0.5rem;
-    border-radius: 4px;
+    border-radius: 50%;
     transition: background-color 0.2s;
     flex-shrink: 0;
 }
 
 .back-link:hover {
-    background-color: var(--light);
+    background-color: var(--cards-hover-bg);
 }
 
 /* Deck Search */
 .deck-search-container {
-    margin-bottom: 1rem;
+    margin: 0.25rem 0 0.5rem;
 }
 
 .deck-search-input {
@@ -1887,7 +2430,7 @@ body {
     border: 2px solid var(--input-border);
     background-color: var(--input-bg);
     color: var(--text-color);
-    border-radius: 6px;
+    border-radius: var(--radius-md);
     box-sizing: border-box;
     transition: border-color 0.3s;
 }
@@ -1963,10 +2506,6 @@ body {
         font-size: 1.1rem;
     }
 
-    .header p {
-        font-size: 1.05rem;
-    }
-
     .options-container {
         width: 100%;
         margin: 0.75rem 0;
@@ -1978,39 +2517,9 @@ body {
         margin: 0.75rem 0;
     }
 
-    .keyboard-hints {
-        display: none;
-    }
-
-    .topic-header {
-        padding: 0.7rem 0.5rem;
-        gap: 0.35rem;
-    }
-
-    .topic-title {
-        font-size: 1.05rem;
-    }
-
-    .topic-card-count {
-        font-size: 0.8rem;
-    }
-
     /* Narrow screens: keep only the percent, drop the mini bar */
     .topic-knowledge-bar {
         display: none;
-    }
-
-    .topic-categories {
-        padding-left: 1.6rem;
-        padding-right: 0.3rem;
-    }
-
-    .category-row {
-        padding: 0.5rem 0;
-    }
-
-    .category-label {
-        font-size: 1.02rem;
     }
 }
 
@@ -2025,144 +2534,44 @@ body {
 
 .explanation-box {
     background-color: var(--explanation-bg);
-    border: 2px solid var(--explanation-border);
-    border-radius: 8px;
-    padding: 0.75rem;
-    cursor: pointer;
-    transition: all 0.3s ease;
+    border: 1px solid var(--explanation-border-light);
+    border-left: 4px solid var(--explanation-border);
+    border-radius: var(--radius-md);
+    text-align: left;
+}
+
+.explanation-toggle {
     display: flex;
     align-items: center;
     gap: 0.5rem;
-}
-
-.explanation-box:hover {
-    background-color: var(--explanation-hover-bg);
-    border-color: #1976d2;
-    transform: translateY(-1px);
-    box-shadow: 0 2px 8px rgba(33, 150, 243, 0.2);
-}
-
-.explanation-icon {
-    font-size: 1.5rem;
-    flex-shrink: 0;
-    animation: pulse 2s infinite;
-}
-
-@keyframes pulse {
-    0%,
-    100% {
-        transform: scale(1);
-    }
-    50% {
-        transform: scale(1.1);
-    }
+    width: 100%;
+    min-height: 44px;
+    padding: 0.35rem 0.75rem;
+    border: 0;
+    background: none;
+    color: var(--explanation-text);
+    font: inherit;
+    font-weight: 600;
+    text-align: left;
+    cursor: pointer;
 }
 
 .explanation-label {
-    font-weight: 600;
-    color: var(--explanation-text);
-    flex-grow: 1;
+    flex: 1 1 auto;
+}
+
+.explanation-chevron {
+    transition: transform 0.2s ease;
+}
+
+.explanation-toggle[aria-expanded='false'] .explanation-chevron {
+    transform: rotate(-90deg);
 }
 
 .explanation-content {
-    width: 100%;
-    margin-top: 0.75rem;
-    padding-top: 0.75rem;
-    border-top: 1px solid var(--explanation-border-light);
+    padding: 0 0.75rem 0.75rem;
     color: var(--explanation-content-text);
     line-height: 1.5;
-    animation: slideDown 0.3s ease;
-}
-
-@keyframes slideDown {
-    from {
-        opacity: 0;
-        transform: translateY(-10px);
-    }
-    to {
-        opacity: 1;
-        transform: translateY(0);
-    }
-}
-
-/* MC option explanation indicator */
-.option-explanation-indicator {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 24px;
-    height: 24px;
-    margin-left: 0.5rem;
-    background-color: var(--explanation-border);
-    color: white;
-    border-radius: 50%;
-    cursor: pointer;
-    font-size: 0.85rem;
-    font-weight: bold;
-    transition: all 0.2s ease;
-    position: relative;
-}
-
-.option-explanation-indicator:hover {
-    background-color: var(--explanation-text);
-    transform: scale(1.15);
-}
-
-.option-explanation-indicator::before {
-    content: 'ℹ';
-}
-
-/* Tooltip for option explanations */
-.option-explanation-tooltip {
-    display: none;
-    position: fixed;
-    padding: 0.75rem;
-    background-color: var(--tooltip-bg);
-    color: white;
-    border-radius: 6px;
-    font-size: 1.05rem;
-    line-height: 1.4;
-    white-space: normal;
-    min-width: 200px;
-    max-width: min(300px, calc(100vw - 2rem));
-    z-index: 10000;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
-    animation: fadeIn 0.2s ease;
-    pointer-events: auto;
-}
-
-/* Arrow pointing down (tooltip is above) */
-.option-explanation-tooltip[data-arrow='down']::after {
-    content: '';
-    position: absolute;
-    top: 100%;
-    left: 12px;
-    border: 6px solid transparent;
-    border-top-color: var(--tooltip-bg);
-}
-
-/* Arrow pointing up (tooltip is below) */
-.option-explanation-tooltip[data-arrow='up']::after {
-    content: '';
-    position: absolute;
-    bottom: 100%;
-    left: 12px;
-    border: 6px solid transparent;
-    border-bottom-color: var(--tooltip-bg);
-}
-
-@keyframes fadeIn {
-    from {
-        opacity: 0;
-    }
-    to {
-        opacity: 1;
-    }
-}
-
-/* Ensure option items have relative positioning for tooltip positioning */
-.option-item {
-    position: relative;
 }
 
 /* ============================================================================
@@ -2171,15 +2580,26 @@ body {
 
 .sr-info {
     color: var(--text-muted);
-    font-size: 1.05rem;
-    margin-bottom: 1rem;
+    font-size: 0.95rem;
+    margin: 0 0 0.75rem;
 }
 
 #sr-bucket-selection-controls {
     display: flex;
-    gap: 0.5rem;
+    flex-direction: column;
+    gap: 0.25rem;
+    margin-bottom: 1rem;
+}
+
+#sr-bucket-selection-controls #start-selected-buckets {
+    flex: none;
+    width: 100%;
+}
+
+.sr-bucket-utility {
+    display: flex;
     flex-wrap: wrap;
-    margin-bottom: 1.5rem;
+    gap: 0 0.5rem;
 }
 
 #sr-buckets-display {
@@ -2191,7 +2611,7 @@ body {
 .sr-bucket {
     background: var(--surface-secondary);
     border: 2px solid var(--border-color);
-    border-radius: 8px;
+    border-radius: var(--radius-lg);
     overflow: hidden;
 }
 
@@ -2342,7 +2762,7 @@ body {
     background: linear-gradient(135deg, var(--sr-gradient-start) 0%, var(--sr-gradient-end) 100%);
     color: white;
     padding: 0.75rem 1.25rem;
-    border-radius: 8px;
+    border-radius: var(--radius-md);
     box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
     display: flex;
     align-items: center;
@@ -2449,30 +2869,16 @@ body {
     outline-offset: 2px;
 }
 
-/* Explanation box */
-.explanation-box:focus-visible {
+/* Explanation disclosure */
+.explanation-toggle:focus-visible {
     outline: 3px solid var(--explanation-border);
-    outline-offset: 2px;
+    outline-offset: -3px;
 }
 
-/* Upload label (acts as button) */
-#upload-label:focus-visible {
+/* Drop zone (acts as button) */
+.drop-zone:focus-visible {
     outline: 3px solid var(--primary);
     outline-offset: 2px;
-    box-shadow: 0 0 0 4px rgba(74, 111, 165, 0.3);
-}
-
-/* Delete deck button */
-.delete-deck:focus-visible {
-    outline: 2px solid var(--danger);
-    outline-offset: 2px;
-}
-
-/* JSON toggle link */
-.json-toggle:focus-visible {
-    outline: 2px solid var(--primary);
-    outline-offset: 2px;
-    border-radius: 2px;
 }
 
 /* Keyboard shortcut hint kbd styling */
@@ -2487,32 +2893,37 @@ body {
     margin-right: 0.25rem;
 }
 
-/* Keyboard hints floating panel */
+/* Keyboard hints: a small toggle at the end of the session bar (it used to
+   float over the card and covered the rightmost rating button on tablets). */
+.session-row {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-top: 0.35rem;
+}
+
+.session-row .stats {
+    flex: 1 1 auto;
+    margin-top: 0;
+}
+
 .keyboard-hints {
-    position: fixed;
-    bottom: calc(1rem + 44px + 0.75rem);
-    right: 1rem;
-    z-index: 100;
+    position: relative;
+    flex: 0 0 auto;
 }
 
 .keyboard-hints-toggle {
-    width: 44px;
-    height: 44px;
-    border-radius: 50%;
-    border: 2px solid rgba(128, 128, 128, 0.3);
-    background-color: rgba(255, 255, 255, 0.9);
+    width: 32px;
+    height: 28px;
+    border-radius: 6px;
+    border: 1px solid var(--border-color);
+    background-color: transparent;
     cursor: pointer;
-    font-size: 1.3rem;
+    font-size: 1.05rem;
     display: flex;
     align-items: center;
     justify-content: center;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
-    transition:
-        background-color 0.3s,
-        transform 0.2s,
-        opacity 0.2s;
-    opacity: 0.75;
-    color: var(--text-color);
+    color: var(--text-muted);
     padding: 0;
     line-height: 1;
 }
@@ -2525,33 +2936,34 @@ body {
     0%,
     100% {
         transform: scale(1);
-        opacity: 0.75;
     }
     50% {
         transform: scale(1.15);
-        opacity: 1;
         box-shadow: 0 2px 12px rgba(74, 111, 165, 0.4);
     }
 }
 
 .keyboard-hints-toggle:hover,
 .keyboard-hints-toggle:focus-visible {
-    opacity: 1;
-    transform: scale(1.1);
+    color: var(--primary);
+    border-color: var(--primary);
 }
 
-[data-theme='dark'] .keyboard-hints-toggle {
-    background-color: rgba(50, 50, 50, 0.9);
-    border-color: rgba(128, 128, 128, 0.4);
+/* Shortcuts are for keyboards: not on phones or touch tablets. */
+@media (max-width: 768px), (hover: none) and (pointer: coarse) {
+    .keyboard-hints {
+        display: none;
+    }
 }
 
 .keyboard-hints-panel {
     position: absolute;
-    bottom: 3.25rem;
+    top: calc(100% + 0.5rem);
     right: 0;
+    z-index: 20;
     background: var(--surface-color);
     border: 1px solid var(--border-color);
-    border-radius: 8px;
+    border-radius: var(--radius-md);
     padding: 0.75rem;
     box-shadow: 0 4px 12px var(--shadow-color);
     min-width: 240px;
@@ -2575,11 +2987,13 @@ body {
 [data-theme='dark'] {
     --primary: #6b9fd4;
     --secondary: #4a8ab8;
-    --light: #2a2a3c;
-    --dark: #e0e0e0;
+    --light: #232734;
+    --dark: #e6e8ee;
     --success: #4caf50;
     --danger: #ef5350;
     --warning: #ffca28;
+    --warning-text: #ffca28;
+    --on-primary: #0f1b2b;
 
     --cards-highlight-bg: rgba(107, 159, 212, 0.15);
     --cards-highlight-border: rgba(107, 159, 212, 0.5);
@@ -2587,8 +3001,8 @@ body {
     --success-bg: rgba(76, 175, 80, 0.2);
     --danger-bg: rgba(239, 83, 80, 0.2);
     --warning-bg: rgba(255, 202, 40, 0.2);
-    --disabled-bg: #3a3a4c;
-    --progress-track: #3a3a4c;
+    --disabled-bg: #2c3140;
+    --progress-track: #2c3140;
     --explanation-bg: rgba(107, 159, 212, 0.15);
     --explanation-hover-bg: rgba(107, 159, 212, 0.25);
     --explanation-border: #6b9fd4;
@@ -2604,6 +3018,14 @@ body {
     --sr-gradient-hover-end: #3a6a98;
     --sr-info-color: #20b2cc;
     --sr-info-hover: #18a2bc;
+}
+
+[data-theme='dark'] .type-chip-matching {
+    --chip-color: #c79be0;
+}
+
+[data-theme='dark'] .type-chip-identify {
+    --chip-color: #f0a95b;
 }
 
 [data-theme='dark'] .btn-success:hover {
@@ -2666,9 +3088,24 @@ body {
     flex-shrink: 0;
 }
 
+.book-view-export-btns .btn {
+    flex: 1 1 auto;
+    font-size: 0.9rem;
+    white-space: nowrap;
+}
+
+#book-view-import {
+    flex: 0 0 auto;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    text-decoration: none;
+    font-weight: 600;
+}
+
 .book-card {
     background-color: var(--surface-color);
-    border-radius: 8px;
+    border-radius: var(--radius-lg);
     padding: 1.25rem;
     margin-bottom: 1rem;
     box-shadow: 0 1px 4px var(--shadow-color);
@@ -2914,7 +3351,7 @@ body {
 
 .matching-item {
     padding: 0.55rem 0.75rem;
-    border-radius: 8px;
+    border-radius: var(--radius-md);
     border: 2px solid var(--input-border);
     background-color: var(--surface-color);
     color: var(--text-color);
@@ -3037,7 +3474,7 @@ body {
     align-items: baseline;
     gap: 0.5rem;
     padding: 0.4rem 0.6rem;
-    border-radius: 6px;
+    border-radius: var(--radius-sm);
     font-size: 0.92rem;
     text-align: left;
 }
@@ -3132,6 +3569,11 @@ body {
         flex-basis: 100%;
         white-space: normal;
         margin-bottom: 0.5rem;
+    }
+
+    #book-view-import,
+    .book-view-export-btns {
+        flex-basis: 100%;
     }
 
     .book-card {
