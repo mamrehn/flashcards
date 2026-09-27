@@ -1,75 +1,42 @@
 /**
- * Index Page - Confetti Animation and Navigation
- * Provides confetti effects when navigating to different sections
+ * Index page: starting to learn is worth celebrating. Choosing a mode fires
+ * confetti from the chosen card, then navigates once the burst has peaked.
  */
 
+const CELEBRATION_MS = 1250;
+
 /**
- * Trigger confetti animation and navigate to URL
- * @param {string} url - The URL to navigate to after confetti animation
+ * Celebrate the choice, then navigate to `url`.
+ * @param {HTMLElement} origin - the tapped card (the burst starts there)
+ * @param {string} url
  */
-function triggerConfettiTo(url) {
-    const confettiContainer = document.querySelector('#confetti-container');
-    const prefersReducedMotion =
-        globalThis.matchMedia && globalThis.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    // Skip the celebratory confetti (and its 1.25 s navigation delay) when the
-    // container is missing or the user asked for reduced motion — go straight
-    // to the destination instead of making them wait for an animation.
-    if (!confettiContainer || prefersReducedMotion) {
-        if (!confettiContainer) console.warn('Confetti-Container nicht gefunden.');
+function celebrateAndGo(origin, url) {
+    const prefersReducedMotion = Boolean(
+        globalThis.matchMedia?.('(prefers-reduced-motion: reduce)').matches
+    );
+    // No confetti engine or reduced motion: go straight there, no waiting.
+    if (!globalThis.confetti || prefersReducedMotion) {
         globalThis.location.href = url;
         return;
     }
-
-    const colors = [
-        '#f44336',
-        '#e91e63',
-        '#9c27b0',
-        '#673ab7',
-        '#3f51b5',
-        '#2196f3',
-        '#03a9f4',
-        '#00bcd4',
-        '#009688',
-        '#4CAF50',
-        '#8bc34a',
-        '#cddc39',
-        '#ffeb3b',
-        '#ffc107',
-        '#ff9800',
-        '#ff5722',
-    ];
-
-    const numConfetti = 50;
-
-    for (let i = 0; i < numConfetti; i++) {
-        const piece = document.createElement('div');
-        piece.className = 'confetti-piece';
-        piece.style.left = `${Math.random() * 100}vw`;
-        piece.style.top = `${-20 - Math.random() * 100}px`;
-        piece.style.backgroundColor = colors[Math.floor(Math.random() * colors.length)];
-        piece.style.animationDelay = `${Math.random() * 0.5}s`;
-        piece.style.animationDuration = `${2 + Math.random() * 2}s`;
-
-        confettiContainer.append(piece);
-
-        piece.addEventListener('animationend', () => {
-            piece.remove();
-        });
-    }
-
-    setTimeout(function () {
+    globalThis.confetti.pop(origin);
+    setTimeout(() => globalThis.confetti.pop(origin), 180);
+    setTimeout(() => {
         globalThis.location.href = url;
-    }, 1250);
+    }, CELEBRATION_MS);
 }
 
-// Set up event listeners when DOM is ready
 document.addEventListener('DOMContentLoaded', () => {
-    document.querySelector('#study-btn').addEventListener('click', (e) => {
-        e.preventDefault();
-        triggerConfettiTo('cards.html');
-    });
-    document.querySelector('#quiz-btn').addEventListener('click', (e) => {
-        e.preventDefault();
-        triggerConfettiTo('quiz.html');
-    });
+    for (const [id, url] of [
+        ['#study-btn', 'cards.html'],
+        ['#quiz-btn', 'quiz.html'],
+    ]) {
+        const link = document.querySelector(id);
+        link.addEventListener('click', (e) => {
+            // Let modified clicks (new tab/window) behave like normal links.
+            if (e.ctrlKey || e.metaKey || e.shiftKey || e.button !== 0) return;
+            e.preventDefault();
+            celebrateAndGo(link, url);
+        });
+    }
 });

@@ -160,7 +160,7 @@ test('a library import shows up as imported and stays selected after a reload', 
 
     const start = page.locator('#start-selected-decks');
     await expect(start).toBeEnabled();
-    await expect(start).toHaveText(/▶ \d+ Karten lernen/);
+    await expect(start).toHaveText(/^\d+ Karten lernen$/);
     const label = await start.textContent();
 
     // Returning later: the remembered selection makes "start" one tap away.

@@ -56,11 +56,10 @@
                          deep link to their deck (library.html?deck=…), so there is
                          deliberately no library link here — only a file import. -->
                     <div id="empty-state" class="empty-state">
-                        <div class="empty-state-icon" aria-hidden="true">🗂️</div>
                         <h2 class="empty-state-title">Noch keine Lernkarten gespeichert</h2>
                         <p class="empty-state-text">
-                            Öffne den Link zu deinem Deck, den du bekommen hast – oder importiere
-                            eine eigene Datei.
+                            Öffne den Deck-Link, den du bekommen hast, oder importiere eine eigene
+                            Datei.
                         </p>
                     </div>
                     <div
@@ -72,9 +71,9 @@
                     >
                         <div class="drop-zone-content">
                             <span class="drop-zone-icon" aria-hidden="true">📂</span>
-                            <span class="drop-zone-text">Eigene Datei importieren</span>
+                            <span class="drop-zone-text">Lernkarten oder Backup importieren</span>
                             <span class="drop-zone-hint"
-                                >Tippen oder Datei hierher ziehen — .json, .zip oder Backup</span
+                                >Datei hierher ziehen oder klicken — .json, .zip oder Backup</span
                             >
                         </div>
                     </div>
@@ -85,12 +84,12 @@
                         <!-- Quick progress summary rendered dynamically -->
                     </div>
                     <div class="saved-decks-header">
-                        <h2 class="section-title">Meine Decks</h2>
+                        <h3 class="section-title">Meine Decks</h3>
                         <span class="select-actions">
                             <button
                                 type="button"
                                 id="select-all-decks"
-                                class="link-btn"
+                                class="btn btn-soft btn-sm"
                                 title="Alle Decks auswählen"
                             >
                                 Alle
@@ -98,7 +97,7 @@
                             <button
                                 type="button"
                                 id="deselect-all-decks"
-                                class="link-btn"
+                                class="btn btn-soft btn-sm"
                                 title="Auswahl aufheben"
                             >
                                 Keine
@@ -111,7 +110,7 @@
                             type="search"
                             id="deck-search"
                             class="deck-search-input"
-                            placeholder="🔍 Decks durchsuchen …"
+                            placeholder="🔍 Decks durchsuchen..."
                             enterkeyhint="search"
                             autocomplete="off"
                         />
@@ -120,17 +119,6 @@
                     <div id="saved-decks">
                         <!-- Saved decks will be dynamically inserted here -->
                     </div>
-
-                    <label class="study-option" id="calibration-option">
-                        <input type="checkbox" id="calibration-mode" />
-                        <span>
-                            <span class="study-option-title">Selbsteinschätzung</span>
-                            <span class="study-option-hint"
-                                >Vor dem Aufdecken angeben, wie sicher du bist — die App zeigt dir,
-                                wie gut du dich einschätzt.</span
-                            >
-                        </span>
-                    </label>
 
                     <!-- Act on the selection. Sticky at the bottom of the screen so
                          the start button stays in reach while scrolling a long list. -->
@@ -143,15 +131,25 @@
                                 📖 Lesen
                             </button>
                         </div>
+                        <!-- A setting for the session about to start, so it lives with
+                             the start button rather than among the decks. -->
+                        <label
+                            class="study-option"
+                            id="calibration-option"
+                            title="Schätze vor dem Aufdecken ein, wie sicher du dir bist. Die App zeigt dir danach, wie gut deine Einschätzung mit dem Ergebnis übereinstimmt."
+                        >
+                            <input type="checkbox" id="calibration-mode" />
+                            Selbsteinschätzung vor dem Aufdecken
+                        </label>
                     </div>
 
                     <div class="picker-footer">
-                        <button type="button" class="link-btn" id="import-file-btn">
+                        <button type="button" class="btn btn-soft btn-sm" id="import-file-btn">
                             📂 Datei importieren
                         </button>
                         <button
                             type="button"
-                            class="link-btn"
+                            class="btn btn-soft btn-sm"
                             id="export-backup-btn"
                             title="Alle Decks, Lernfortschritt und Einstellungen als Backup-Datei speichern"
                         >
@@ -159,7 +157,7 @@
                         </button>
                         <button
                             type="button"
-                            class="link-btn"
+                            class="btn btn-soft btn-sm"
                             id="import-backup-btn"
                             title="Backup-Datei wiederherstellen"
                         >
@@ -167,12 +165,12 @@
                         </button>
                         <button
                             type="button"
-                            class="link-btn json-toggle"
+                            class="json-toggle"
                             aria-expanded="false"
                             aria-controls="sample-json"
                             onclick="toggleJsonSample()"
                         >
-                            Eigene Decks erstellen (JSON-Format)
+                            JSON-Format Beispiel
                         </button>
                     </div>
                     <div id="sample-json" class="hidden">
@@ -471,7 +469,7 @@
                                             aria-controls="text-explanation-content"
                                         >
                                             <span class="explanation-icon" aria-hidden="true"
-                                                >💡</span
+                                                >ℹ️</span
                                             >
                                             <span class="explanation-label">Erklärung</span>
                                             <span class="explanation-chevron" aria-hidden="true"
@@ -504,7 +502,7 @@
                             </div>
                             <div class="controls">
                                 <button
-                                    class="btn btn-soft btn-icon"
+                                    class="btn btn-secondary btn-icon"
                                     id="undo-btn"
                                     disabled
                                     title="Letzte Antwort rückgängig (Backspace)"
@@ -562,7 +560,6 @@
                 </div>
 
                 <div class="feedback hidden" id="feedback">
-                    <div class="feedback-icon" aria-hidden="true">🎉</div>
                     <h2>Runde geschafft!</h2>
                     <div id="overall-stats">
                         <p>Ergebnis dieser Runde: <span id="final-score">0%</span></p>
@@ -571,10 +568,10 @@
                         <!-- Individual deck statistics will appear here -->
                     </div>
                     <div class="feedback-actions">
-                        <button class="btn btn-primary" id="restart-btn">🔁 Nochmal üben</button>
+                        <button class="btn btn-primary" id="restart-btn">Nochmal üben</button>
                         <button class="btn btn-soft" id="upload-new-btn">Zur Deck-Auswahl</button>
                         <button class="btn btn-soft" id="feedback-progress-btn">
-                            📈 Fortschritt ansehen
+                            Fortschritt ansehen
                         </button>
                         <button class="btn btn-soft" id="return-to-sr-btn" style="display: none">
                             Zurück zur Kartenverwaltung
@@ -592,23 +589,25 @@
                         >⬇ Importieren &amp; lernen</a
                     >
                     <div class="book-view-export-btns">
-                        <button class="btn btn-soft" id="book-view-print" onclick="window.print()">
+                        <button
+                            class="btn btn-secondary"
+                            id="book-view-print"
+                            onclick="window.print()"
+                        >
                             🖨️ Drucken
                         </button>
-                        <button class="btn btn-soft" id="book-view-csv">📥 Kahoot/CSV</button>
-                        <button class="btn btn-soft" id="book-view-anki">📥 Anki</button>
+                        <button class="btn btn-secondary" id="book-view-csv">📥 Kahoot/CSV</button>
+                        <button class="btn btn-secondary" id="book-view-anki">📥 Anki</button>
                     </div>
                 </div>
                 <div id="book-view-cards"></div>
             </div>
         </div>
 
-        <!-- Confetti Container -->
-        <div id="confetti-container"></div>
-
         <!-- External Dependencies (loaded with defer for better performance) -->
         <script defer src="vendor/jszip-3.10.1.min.js"></script>
         <!-- Main Application Script -->
+        <script defer src="confetti.js"></script>
         <script defer src="cards.js"></script>
 
         <!-- Service Worker Registration -->

@@ -195,7 +195,7 @@ function routeFromURL() {
 function showGrid() {
     els.detail.classList.add('hidden');
     els.gridContainer.classList.remove('hidden');
-    els.title.textContent = 'Bibliothek';
+    els.title.textContent = '📚 Bibliothek';
     els.backLink.href = 'index.html';
     els.backLink.title = 'Zur Startseite';
     els.subtitle.textContent =
@@ -689,7 +689,7 @@ function showDetail(deckId) {
 
     els.gridContainer.classList.add('hidden');
     els.detail.classList.remove('hidden');
-    els.title.textContent = 'Deck-Details';
+    els.title.textContent = '📚 Deck-Details';
     els.subtitle.textContent = '';
 
     renderDetail(deck, importStatus(deck, readLibraryMeta(), readSavedDeckIndex()));
@@ -745,7 +745,7 @@ function renderDetail(deck, status) {
         importBtn.textContent = '🔄 Aktualisieren & lernen';
     } else {
         importBtn.className = 'btn btn-primary';
-        importBtn.textContent = status ? '▶ Lernen' : '⬇ Importieren & lernen';
+        importBtn.textContent = status ? '▶ Lernen starten' : '⬇ Importieren & lernen';
     }
     actions.append(importBtn);
 

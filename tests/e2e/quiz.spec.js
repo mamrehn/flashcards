@@ -97,7 +97,7 @@ test('a relay restart mid-question resumes the round; double click and reload ar
 
     await test.step('the server restarts after Mia answered', async () => {
         await answer(mia);
-        await expect(mia.locator('#submit-answer-btn')).toContainText('Antwort gesendet');
+        await expect(mia.locator('#submit-answer-btn')).toContainText('Gesendet');
         await expect(host.locator('#answers-count')).toHaveText('1');
         // Mark the current buttons so we can tell the resumed question apart.
         for (const page of [mia, ben]) {

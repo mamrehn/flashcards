@@ -31,7 +31,7 @@
         updateToggleIcon(theme);
         var meta = document.querySelector('meta[name="theme-color"]');
         if (meta) {
-            meta.setAttribute('content', theme === DARK ? '#12141a' : '#f2f4f7');
+            meta.setAttribute('content', theme === DARK ? '#1e1e2e' : '#3498db');
         }
     }
 

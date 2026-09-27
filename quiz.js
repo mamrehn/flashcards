@@ -3471,10 +3471,10 @@ async function initializeHostFeatures(reconnectInfo) {
                 // so each place gets its own clap, building to the winner.
                 if (hostMusicEngine) hostMusicEngine.playStinger('final');
                 // Confetti stays on the winner alone, for the climax.
-                if (rankIdx === 0) triggerConfetti(winnerAvatar);
+                if (rankIdx === 0) triggerConfetti(winnerAvatar, 'grand');
             }, delay);
         }
-        schedule(() => triggerConfetti(winnerAvatar), winnerDelay + 500);
+        schedule(() => triggerConfetti(winnerAvatar, 'grand'), winnerDelay + 500);
         if (restList) schedule(() => revealPodiumElement(restList), winnerDelay + 750);
     }
 }
@@ -3674,52 +3674,17 @@ const CONFETTI_AVATAR_VARIANTS = [
 let lastConfettiAvatarVariant = null;
 
 /**
- * Triggers confetti animation for correct answers.
+ * Celebrate: confetti from the shared engine (confetti.js) plus the player's
+ * avatar popping up with a random animation.
  * @param {string} [avatarOverride] - Emoji to pop alongside the burst. Defaults
  *   to the local player's avatar; the host podium passes the winner's avatar.
+ * @param {'celebrate'|'grand'} [intensity] - cannons for a correct answer, the
+ *   full show for the winner.
  */
-function triggerConfetti(avatarOverride) {
+function triggerConfetti(avatarOverride, intensity = 'celebrate') {
+    globalThis.confetti?.[intensity]();
     const confettiContainer = document.querySelector('#confetti-container');
-    if (!confettiContainer) {
-        console.warn('Confetti-Container nicht gefunden.');
-        return;
-    }
-
-    const colors = [
-        '#f44336',
-        '#e91e63',
-        '#9c27b0',
-        '#673ab7',
-        '#3f51b5',
-        '#2196f3',
-        '#03a9f4',
-        '#00bcd4',
-        '#009688',
-        '#4CAF50',
-        '#8bc34a',
-        '#cddc39',
-        '#ffeb3b',
-        '#ffc107',
-        '#ff9800',
-        '#ff5722',
-    ];
-    const numConfetti = 50;
-
-    for (let i = 0; i < numConfetti; i++) {
-        const piece = document.createElement('div');
-        piece.className = 'confetti-piece';
-        piece.style.left = `${Math.random() * 100}vw`;
-        piece.style.top = `${-20 - Math.random() * 100}px`;
-        piece.style.backgroundColor = colors[Math.floor(Math.random() * colors.length)];
-        piece.style.animationDelay = `${Math.random() * 0.5}s`;
-        piece.style.animationDuration = `${2 + Math.random() * 2}s`;
-
-        confettiContainer.append(piece);
-
-        piece.addEventListener('animationend', () => {
-            piece.remove();
-        });
-    }
+    if (!confettiContainer) return;
 
     const avatar = avatarOverride ?? playerAvatar;
     if (avatar) {
@@ -4136,7 +4101,7 @@ function initializePlayerFeatures(reconnectInfo) {
             submitAnswerBtn.disabled = true;
             // Say that it worked — a merely greyed-out button left players
             // unsure whether their tap had registered.
-            submitAnswerBtn.textContent = '✓ Antwort gesendet – warte auf die anderen';
+            submitAnswerBtn.textContent = '✓ Gesendet';
             submitAnswerBtn.classList.add('is-sent');
             submitAnswerBtn.classList.remove('pulse-cta');
             for (const btn of optionsContainer.querySelectorAll('button.option-btn')) {

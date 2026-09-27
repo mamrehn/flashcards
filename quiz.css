@@ -40,7 +40,6 @@ body {
     color: var(--text-color);
     font-size: 18px;
     line-height: 1.5;
-    -webkit-font-smoothing: antialiased;
 }
 
 /* The `* { padding: 0 }` reset above strips the indentation browsers normally
@@ -102,38 +101,30 @@ h4 {
 header {
     background-color: var(--surface-color);
     color: var(--primary-color);
-    min-height: 56px;
-    padding: 0.5rem 0.6rem;
+    padding: 0.5rem 1rem;
     text-align: center;
-    border-radius: var(--radius-lg);
+    border-radius: 8px;
     margin-bottom: 0.75rem;
-    box-shadow: var(--shadow-sm);
+    box-shadow: 0 2px 4px var(--shadow-color);
     display: flex;
     align-items: center;
     gap: 1rem;
 }
 
 header h1 {
-    color: var(--text-color);
+    color: var(--primary-color);
     margin: 0;
     flex: 1;
-    font-size: 1.2rem;
-    font-weight: 700;
-    letter-spacing: -0.01em;
 }
 
 .back-link {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 40px;
-    height: 40px;
     color: var(--primary-color);
     text-decoration: none;
-    font-size: 1.35rem;
+    font-size: 1.5rem;
     font-weight: 500;
     line-height: 1;
-    border-radius: 50%;
+    padding: 0.25rem 0.5rem;
+    border-radius: 4px;
     transition: background-color 0.2s;
     flex-shrink: 0;
 }
@@ -157,10 +148,10 @@ header h1 {
     padding: 0.5rem 1rem;
     /* >=44px tap target (WCAG 2.5.5 / mobile guidelines). */
     min-height: 44px;
-    border-radius: var(--radius-md);
+    border-radius: 4px;
     cursor: pointer;
     font-size: 1.05rem;
-    font-weight: 600;
+    font-weight: 500;
     transition: background-color 0.2s;
     margin: 0.3rem 0.3rem 0.3rem 0;
 }
@@ -218,9 +209,9 @@ header h1 {
 
 .card {
     background-color: var(--surface-color);
-    border-radius: var(--radius-lg);
+    border-radius: 8px;
     padding: 0.75rem 1rem;
-    box-shadow: var(--shadow-sm);
+    box-shadow: 0 2px 4px var(--shadow-color);
     margin-bottom: 0.75rem;
 }
 
@@ -266,7 +257,7 @@ header h1 {
     margin: 0;
     min-height: 76px;
     padding: 0.75rem 1rem;
-    border-radius: var(--radius-lg);
+    border-radius: 12px;
     text-align: left;
 }
 
@@ -367,27 +358,12 @@ header h1 {
     margin: 0.75rem 0;
     padding: 0.85rem 1rem;
     border: 1px solid var(--cards-highlight-border);
-    border-radius: var(--radius-lg);
+    border-radius: 10px;
 }
 
 .setup-step-title {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
     margin: 0 0 0.5rem;
     font-size: 1.1rem;
-}
-
-.setup-step-num {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 1.6rem;
-    height: 1.6rem;
-    border-radius: 50%;
-    background-color: var(--primary-color);
-    color: var(--on-primary);
-    font-size: 0.9rem;
 }
 
 .setup-step .upload-section {
@@ -432,7 +408,7 @@ header h1 {
 .setup-details {
     margin: 0.75rem 0;
     border: 1px solid var(--input-border);
-    border-radius: var(--radius-lg);
+    border-radius: 10px;
     padding: 0 1rem;
 }
 
@@ -508,7 +484,7 @@ header h1 {
     margin: 0.5rem auto 0;
     padding: 0.5rem;
     background: #fff;
-    border-radius: var(--radius-md);
+    border-radius: 8px;
     cursor: zoom-in;
 }
 
@@ -537,7 +513,7 @@ header h1 {
 .room-code {
     display: inline-block;
     padding: 0.05em 0.45em;
-    border-radius: var(--radius-md);
+    border-radius: 8px;
     background-color: var(--quiz-surface);
     color: var(--primary-color);
     font-size: 1.8em;
@@ -574,7 +550,7 @@ select {
     padding: 0.5rem 0.75rem;
     margin: 0.3rem 0;
     border: 1px solid var(--input-border);
-    border-radius: var(--radius-md);
+    border-radius: 4px;
     font-size: 1em;
     background-color: var(--input-bg);
     color: var(--text-color);
@@ -621,7 +597,7 @@ select:focus {
 .drop-zone {
     margin-top: 0.5rem;
     border: 2px dashed var(--text-muted, #aaa);
-    border-radius: var(--radius-lg);
+    border-radius: 8px;
     padding: 1rem;
     text-align: center;
     cursor: pointer;
@@ -706,7 +682,7 @@ select:focus {
 .question-item {
     background-color: var(--quiz-surface);
     padding: 0.5rem 0.75rem;
-    border-radius: var(--radius-md);
+    border-radius: 4px;
     margin-bottom: 0.4rem;
     border-left: 3px solid var(--primary-color);
 }
@@ -819,7 +795,7 @@ select:focus {
     border-left: 4px solid var(--primary-color);
     padding: 0.6rem 0.9rem;
     margin-bottom: 0.4rem;
-    border-radius: var(--radius-md);
+    border-radius: 6px;
     font-size: 1.25em;
 }
 
@@ -1074,7 +1050,7 @@ select:focus {
 .qr-modal-content {
     background: var(--surface-color);
     padding: 1.5rem;
-    border-radius: var(--radius-lg);
+    border-radius: 12px;
     position: relative;
     text-align: center;
     box-shadow: 0 8px 16px rgba(0, 0, 0, 0.3);
@@ -1146,31 +1122,6 @@ select:focus {
     z-index: 999;
 }
 
-.confetti-piece {
-    position: absolute;
-    width: 10px;
-    height: 10px;
-    background-color: var(--confetti-color);
-    opacity: 0;
-    animation: confetti-fall 3s ease-out forwards;
-}
-
-@keyframes confetti-fall {
-    0% {
-        transform: translateY(-100px) rotateZ(0deg);
-        opacity: 0;
-    }
-    10% {
-        opacity: 1;
-    }
-    100% {
-        transform: translateY(100vh) rotateZ(720deg);
-        opacity: 0;
-    }
-}
-
-/* Avatar celebration — single emoji animation paired with the confetti burst.
-   The variant class is picked at random in triggerConfetti(). */
 .confetti-avatar {
     position: absolute;
     left: 50%;
@@ -1931,7 +1882,7 @@ select:focus {
     left: 50%;
     transform: translateX(-50%) translateY(20px);
     padding: 12px 24px;
-    border-radius: var(--radius-md);
+    border-radius: 8px;
     color: white;
     font-weight: 500;
     z-index: 10001;
@@ -2106,7 +2057,7 @@ body.player-in-game footer {
     margin: 1rem 0;
     padding: 0.75rem;
     background-color: var(--quiz-surface);
-    border-radius: var(--radius-lg);
+    border-radius: 8px;
 }
 
 .lobby-section h3 {
@@ -2229,7 +2180,7 @@ body.player-in-game footer {
     margin: 0.75rem 0;
     padding: 0.85rem 1rem;
     border: 1px solid var(--cards-highlight-border);
-    border-radius: var(--radius-lg);
+    border-radius: 10px;
     background-color: var(--surface-color);
 }
 
@@ -2346,7 +2297,7 @@ body.player-in-game footer {
     gap: 0.4rem;
     padding: 0.7rem 0.8rem;
     border: 2px solid var(--cards-highlight-border);
-    border-radius: var(--radius-lg);
+    border-radius: 12px;
     background-color: var(--surface-color, #fff);
     color: var(--text-color, #222);
     cursor: pointer;
@@ -2800,7 +2751,7 @@ body.player-in-game footer {
     margin: 0.75rem 0;
     padding: 0.5rem 0.75rem;
     background-color: var(--quiz-surface);
-    border-radius: var(--radius-md);
+    border-radius: 8px;
 }
 
 .host-lobby-music h4 {

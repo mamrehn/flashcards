@@ -34,13 +34,12 @@
     --lib-chip-bg: #232c27;
     --lib-chip-border: #38463d;
     --lib-chip-text: #c5d2cb;
-    /* White on the light dark-mode green was 2.7:1. */
+    /* The dark-mode green is light; white text on it would be 2.7:1. */
     --lib-on-primary: #0f1f17;
 }
 
 body {
     font-family: var(--font-sans);
-    -webkit-font-smoothing: antialiased;
     line-height: 1.5;
     color: var(--text-color, #2a2f2c);
     background-color: var(--surface-secondary, #fafbfa);
@@ -59,29 +58,22 @@ body {
     display: flex;
     align-items: center;
     gap: 0.75rem;
-    min-height: 56px;
-    box-sizing: border-box;
-    padding: 0.5rem 0.6rem;
+    padding: 0.75rem 1rem;
     background-color: var(--surface-color, #fff);
-    border-radius: var(--radius-lg);
-    box-shadow: var(--shadow-sm);
+    border-radius: 6px;
+    box-shadow: 0 1px 3px var(--shadow-color, rgba(0, 0, 0, 0.08));
     margin-bottom: 1rem;
+    border-left: 3px solid var(--lib-primary);
 }
 
-/* Round icon button, like the study app's header. */
 .back-link {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    flex: 0 0 auto;
-    width: 40px;
-    height: 40px;
     color: var(--lib-primary);
     text-decoration: none;
-    font-size: 1.35rem;
+    font-size: 1.5rem;
     font-weight: 500;
     line-height: 1;
-    border-radius: 50%;
+    padding: 0.25rem 0.5rem;
+    border-radius: 4px;
     transition: background-color 0.2s;
 }
 
@@ -120,11 +112,11 @@ body {
 }
 
 .library-header h1 {
-    color: var(--text-color);
+    color: var(--lib-primary);
     margin: 0;
-    font-size: 1.15rem;
-    font-weight: 700;
-    letter-spacing: -0.01em;
+    font-size: 1.3rem;
+    font-weight: 600;
+    letter-spacing: 0.01em;
 }
 
 .library-header p {
@@ -138,8 +130,8 @@ body {
     text-align: center;
     color: var(--text-muted, #6c7570);
     background-color: var(--surface-color, #fff);
-    border-radius: var(--radius-lg);
-    box-shadow: var(--shadow-sm);
+    border-radius: 6px;
+    box-shadow: 0 1px 3px var(--shadow-color, rgba(0, 0, 0, 0.08));
 }
 
 .search-row {
@@ -157,7 +149,7 @@ body {
     /* ≥16px so iOS Safari doesn't zoom on focus. */
     font-size: max(16px, 1rem);
     border: 1px solid var(--input-border, #ced4da);
-    border-radius: var(--radius-md);
+    border-radius: 5px;
     background-color: var(--input-bg, #fff);
     color: var(--text-color, #2a2f2c);
 }
@@ -188,7 +180,7 @@ button:focus-visible,
     padding: 0 1rem;
     background-color: var(--surface-color, #fff);
     border: 1px solid var(--input-border, #ced4da);
-    border-radius: var(--radius-md);
+    border-radius: 5px;
     cursor: pointer;
     font-family: inherit;
     font-size: 0.92rem;
@@ -216,9 +208,9 @@ button:focus-visible,
 
 .facets-panel {
     background-color: var(--surface-color, #fff);
-    border-radius: var(--radius-lg);
+    border-radius: 6px;
     padding: 0.75rem 1rem;
-    box-shadow: var(--shadow-sm);
+    box-shadow: 0 1px 3px var(--shadow-color, rgba(0, 0, 0, 0.08));
 }
 
 .facets-panel-header {
@@ -248,7 +240,7 @@ button:focus-visible,
     font-family: inherit;
     font-size: 0.82rem;
     padding: 0.15rem 0.4rem;
-    border-radius: var(--radius-sm);
+    border-radius: 3px;
 }
 
 .facets-clear-btn:hover {
@@ -308,7 +300,7 @@ button:focus-visible,
     gap: 0.5rem;
     min-height: 36px;
     padding: 0.18rem 0.35rem;
-    border-radius: var(--radius-sm);
+    border-radius: 3px;
     cursor: pointer;
     font-size: 0.88rem;
     line-height: 1.3;
@@ -354,14 +346,13 @@ button:focus-visible,
 
 .deck-card {
     background-color: var(--surface-color, #fff);
-    border: 1px solid transparent;
-    border-radius: var(--radius-lg);
-    padding: 1.1rem 1.2rem;
-    box-shadow: var(--shadow-sm);
+    border-radius: 6px;
+    padding: 1rem 1.1rem;
+    box-shadow: 0 1px 3px var(--shadow-color, rgba(0, 0, 0, 0.08));
+    border-top: 3px solid var(--lib-primary);
     cursor: pointer;
     transition:
         box-shadow 0.15s ease,
-        border-color 0.15s ease,
         transform 0.15s ease;
     display: flex;
     flex-direction: column;
@@ -370,16 +361,10 @@ button:focus-visible,
     color: inherit;
 }
 
-@media (hover: hover) {
-    .deck-card:hover {
-        transform: translateY(-2px);
-        box-shadow: var(--shadow-md);
-        border-color: color-mix(in srgb, var(--lib-primary) 40%, transparent);
-    }
-}
-
-.deck-card:active {
-    transform: translateY(0);
+.deck-card:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 3px 8px var(--shadow-color, rgba(0, 0, 0, 0.12));
+    background-color: var(--lib-hover-bg);
 }
 
 /* Small monospace-ish chips for subject/grade/learningUnit codes */
@@ -395,8 +380,8 @@ button:focus-visible,
     background-color: var(--lib-chip-bg);
     color: var(--lib-chip-text);
     border: 1px solid var(--lib-chip-border);
-    border-radius: var(--radius-sm);
-    font-family: var(--font-mono);
+    border-radius: 3px;
+    font-family: 'SFMono-Regular', Consolas, monospace;
     letter-spacing: 0.02em;
     line-height: 1.4;
 }
@@ -490,7 +475,7 @@ button:focus-visible,
     display: inline-block;
     font-size: 0.75rem;
     padding: 0.1rem 0.55rem;
-    border-radius: var(--radius-pill);
+    border-radius: 3px;
     font-weight: 500;
     border: 1px solid;
 }
@@ -510,9 +495,10 @@ button:focus-visible,
 /* Detail view */
 .detail-card {
     background-color: var(--surface-color, #fff);
-    border-radius: var(--radius-lg);
+    border-radius: 6px;
     padding: 1.5rem;
-    box-shadow: var(--shadow-sm);
+    box-shadow: 0 1px 3px var(--shadow-color, rgba(0, 0, 0, 0.08));
+    border-top: 3px solid var(--lib-primary);
 }
 
 .detail-title {
@@ -535,7 +521,7 @@ button:focus-visible,
     padding: 0.75rem 0.9rem;
     background-color: var(--surface-secondary, #fafbfa);
     border: 1px solid var(--border-color, #e4e7e5);
-    border-radius: var(--radius-md);
+    border-radius: 5px;
     display: grid;
     grid-template-columns: max-content 1fr;
     column-gap: 1rem;
@@ -559,7 +545,7 @@ button:focus-visible,
 }
 
 .detail-meta-row:nth-last-child(-n + 3) dd {
-    font-family: var(--font-mono);
+    font-family: 'SFMono-Regular', Consolas, monospace;
     font-size: 0.85rem;
     color: var(--text-muted, #6c7570);
 }
@@ -572,7 +558,7 @@ button:focus-visible,
 .update-banner,
 .imported-banner {
     padding: 0.75rem 0.9rem;
-    border-radius: var(--radius-md);
+    border-radius: 4px;
     margin-bottom: 1rem;
     border-left: 3px solid;
     font-size: 0.92rem;
@@ -604,7 +590,7 @@ button:focus-visible,
 .detail-summary {
     background-color: var(--surface-secondary, #fafbfa);
     border: 1px solid var(--border-color, #e4e7e5);
-    border-radius: var(--radius-md);
+    border-radius: 5px;
     padding: 0.9rem 1rem;
     margin: 1rem 0 1.25rem 0;
 }
@@ -685,7 +671,7 @@ button:focus-visible,
 .detail-long-description-body pre {
     background-color: var(--lib-chip-bg, #f5f7f5);
     border: 1px solid var(--lib-chip-border, #cfd6d1);
-    border-radius: var(--radius-md);
+    border-radius: 4px;
     padding: 0.6rem 0.8rem;
     overflow-x: auto;
     font-size: 0.88em;
@@ -730,15 +716,16 @@ button:focus-visible,
 }
 
 .btn {
+    /* ≥44px tap target; centred label when stretched on phones. */
     min-height: 44px;
     box-sizing: border-box;
     justify-content: center;
     padding: 0.55rem 1.05rem;
     border: none;
-    border-radius: var(--radius-md);
+    border-radius: 5px;
     cursor: pointer;
     font-size: 0.95rem;
-    font-weight: 600;
+    font-weight: 500;
     transition:
         background-color 0.15s,
         transform 0.1s;

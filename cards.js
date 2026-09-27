@@ -291,6 +291,10 @@ let identifyMediaEl;
 let identifyChoicesEl;
 let identifyResultContainer;
 let answerVerdictEl;
+let explanationToggle;
+let cardEyebrows;
+let feedbackProgressBtn;
+let bookViewImportLink;
 let matchingPairedSection = null;
 let matchingUnpairedSection = null;
 let matchingUnpairedLeftCol = null;
@@ -374,6 +378,10 @@ function initializeApp() {
     identifyChoicesEl = document.querySelector('#identify-choices');
     identifyResultContainer = document.querySelector('#identify-result-container');
     answerVerdictEl = document.querySelector('#answer-verdict');
+    explanationToggle = document.querySelector('.explanation-toggle');
+    cardEyebrows = document.querySelectorAll('.card-eyebrow');
+    feedbackProgressBtn = document.querySelector('#feedback-progress-btn');
+    bookViewImportLink = document.querySelector('#book-view-import');
     matchingContainer.addEventListener('keydown', (e) => {
         if (matchingDrag) return; // never re-render mid-drag (would break pointer capture)
         if (e.key === 'Escape' && (selectedLeftIndex !== null || selectedRightIndex !== null)) {
@@ -398,7 +406,7 @@ function initializeApp() {
         markAnswer(Number(btn.dataset.score));
         showNextCard();
     });
-    nextCardBtn.addEventListener('click', throttle(showNextCard, 300));
+    nextCardBtn.addEventListener('click', showNextCard);
     restartBtn.addEventListener('click', throttle(restartQuiz, 500));
     uploadNewBtn.addEventListener('click', throttle(resetAndUpload, 500));
     returnToSrBtn.addEventListener('click', throttle(returnToSRManager, 500));
@@ -418,15 +426,15 @@ function initializeApp() {
             startSelectedDecks();
         }, 500)
     );
-    selectAllDecksBtn.addEventListener('click', debounce(selectAllDecks, 200));
-    deselectAllDecksBtn.addEventListener('click', debounce(deselectAllDecks, 200));
+    selectAllDecksBtn.addEventListener('click', selectAllDecks);
+    deselectAllDecksBtn.addEventListener('click', deselectAllDecks);
     deckSearchInput.addEventListener('input', debounce(handleDeckSearch, 250));
     for (const tab of document.querySelectorAll('.hub-tab')) {
         tab.addEventListener('click', () => switchHubTab(tab.dataset.tab));
     }
     startSelectedBucketsBtn.addEventListener('click', throttle(startSelectedBuckets, 500));
-    selectAllBucketsBtn.addEventListener('click', debounce(selectAllSRBuckets, 200));
-    deselectAllBucketsBtn.addEventListener('click', debounce(deselectAllSRBuckets, 200));
+    selectAllBucketsBtn.addEventListener('click', selectAllSRBuckets);
+    deselectAllBucketsBtn.addEventListener('click', deselectAllSRBuckets);
     cleanupOrphansBtn.addEventListener('click', throttle(cleanupOrphanedSRData, 500));
     setupSrBucketDelegation();
     document.querySelector('#book-view-csv').addEventListener('click', throttle(exportToCsv, 300));
@@ -437,9 +445,9 @@ function initializeApp() {
     exportBackupBtn.addEventListener('click', throttle(exportBackup, 500));
     // Both open the same picker: handleFileUpload tells decks and backups apart.
     for (const id of ['#import-file-btn', '#import-backup-btn']) {
-        document.querySelector(id)?.addEventListener('click', () => fileInput.click());
+        document.querySelector(id).addEventListener('click', () => fileInput.click());
     }
-    document.querySelector('#feedback-progress-btn')?.addEventListener(
+    feedbackProgressBtn.addEventListener(
         'click',
         throttle(() => {
             resetAndUpload();
@@ -472,9 +480,7 @@ function initializeApp() {
     setupDropZone();
 
     // Explanation disclosure (a real <button>, so Enter/Space work natively)
-    textExplanationContainer
-        .querySelector('.explanation-toggle')
-        ?.addEventListener('click', () => toggleTextExplanation());
+    explanationToggle.addEventListener('click', () => toggleTextExplanation());
 
     // Add Enter key support for answer submission
     userAnswerInput.addEventListener('keydown', (e) => {
@@ -831,7 +837,7 @@ if (typeof document !== 'undefined' && globalThis.addEventListener) {
 function toggleJsonSample() {
     const sampleJson = document.querySelector('#sample-json');
     const open = sampleJson.classList.toggle('hidden') === false;
-    document.querySelector('.json-toggle')?.setAttribute('aria-expanded', String(open));
+    document.querySelector('.json-toggle').setAttribute('aria-expanded', String(open));
     if (open) sampleJson.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 }
 
@@ -1235,13 +1241,9 @@ async function handleLibraryImportDeepLink() {
             // Render the linear view directly — no deck-picker refresh,
             // because the deck was never saved and shouldn't appear there.
             openBookView(allCards, `Vorschau — ${deckMeta.title}`);
-            // The preview used to be a dead end (only the ← led back): offer
-            // the obvious next step right in the toolbar.
-            const importLink = document.querySelector('#book-view-import');
-            if (importLink) {
-                importLink.href = `cards.html?import=${encodeURIComponent(deckMeta.id)}`;
-                importLink.classList.remove('hidden');
-            }
+            // Offer the obvious next step right in the preview toolbar.
+            bookViewImportLink.href = `cards.html?import=${encodeURIComponent(deckMeta.id)}`;
+            bookViewImportLink.classList.remove('hidden');
         } else {
             history.replaceState({}, '', 'cards.html');
             displaySavedDecks('', importedDeckNames);
@@ -1250,7 +1252,7 @@ async function handleLibraryImportDeepLink() {
                 verb =
                     previousVersion === deckMeta.version
                         ? 'ist bereit'
-                        : 'aktualisiert – dein Fortschritt bleibt erhalten';
+                        : 'aktualisiert, dein Fortschritt bleibt erhalten';
             }
             showMessage(`„${deckMeta.title}“ ${verb} (${allCards.length} Karten).`);
         }
@@ -2130,13 +2132,13 @@ function makeTypeChip(type, count, topicKey, catName) {
             break;
         }
         case 'matching': {
-            chipLabel = 'ZO';
+            chipLabel = 'Zuordnung';
             chipTitle = 'Zuordnungsaufgaben in dieser Kategorie ein-/ausblenden';
 
             break;
         }
         case 'identify': {
-            chipLabel = 'Erk';
+            chipLabel = 'Erkennen';
             chipTitle = 'Erkennen-Karten (Bild ↔ Name) in dieser Kategorie ein-/ausblenden';
 
             break;
@@ -2185,8 +2187,7 @@ function displaySavedDecks(searchTerm = '', preselectDeckNames = []) {
     }
 
     // The search box only earns its space once the list gets long.
-    const searchContainer = document.querySelector('.deck-search-container');
-    if (searchContainer) searchContainer.hidden = topics.size < 4 && !searchTerm;
+    document.querySelector('.deck-search-container').hidden = topics.size < 4 && !searchTerm;
 
     const preselectSet = new Set(preselectDeckNames);
     const lowerSearch = (searchTerm || '').trim().toLowerCase();
@@ -2362,14 +2363,6 @@ function buildTopicFolder(topic) {
     // Per-type chips only help when the deck mixes card types; with a single
     // type they would just duplicate the category checkbox.
     const hasChips = topicCardTypes(topic).size > 1;
-    if (hasChips) {
-        // The chips are toggles, which isn't obvious from "MC 2" alone.
-        const hint = document.createElement('p');
-        hint.className = 'topic-hint';
-        hint.textContent =
-            'Tipp: MC, Text oder ZO (Zuordnung) antippen, um den Kartentyp auszublenden.';
-        catsContainer.append(hint);
-    }
 
     for (const [catName, counts] of sortedCategories) {
         const row = document.createElement('div');
@@ -2420,7 +2413,7 @@ function buildTopicFolder(topic) {
     const deleteButton = document.createElement('button');
     deleteButton.type = 'button';
     deleteButton.className = 'link-btn link-btn-danger';
-    deleteButton.textContent = topic.decks.length > 1 ? '🗑 Thema löschen' : '🗑 Deck löschen';
+    deleteButton.textContent = topic.decks.length > 1 ? 'Thema löschen' : 'Deck löschen';
     deleteButton.addEventListener('click', () => deleteSavedTopic(topic));
     tools.append(deleteButton);
     catsContainer.append(tools);
@@ -2491,7 +2484,7 @@ function updateStartButtonState() {
     // Say what will happen: "▶ 28 Karten lernen" — or what is missing.
     const cardWord = count === 1 ? 'Karte' : 'Karten';
     startSelectedDecksBtn.textContent =
-        count === 0 ? 'Deck auswählen' : `▶ ${count} ${cardWord} lernen`;
+        count === 0 ? 'Deck auswählen' : `${count} ${cardWord} lernen`;
 }
 
 const DECK_SELECTION_KEY = 'deckSelection';
@@ -3111,7 +3104,7 @@ function renderMatchingPairs() {
     if (matchingProgressEl) {
         matchingProgressEl.textContent =
             matchingPairs.length === 0
-                ? 'Tippe nacheinander zwei passende Begriffe an – oder ziehe sie aufeinander.'
+                ? 'Tippe zwei passende Begriffe nacheinander an oder ziehe sie aufeinander.'
                 : `${matchingPairs.length} von ${matchingRequiredCount} Zuordnungen`;
     }
 }
@@ -3684,7 +3677,6 @@ function evaluateIdentifyCard(card) {
                 : acceptedAnswers(card, cfg);
         const ok = userAnswer.length > 0 && accepted.has(normalizeAnswer(userAnswer));
         if (ok) {
-            flipCard.dataset.outcome = 'correct';
             markAnswer(true);
             recallRating.classList.add('hidden');
             nextCardBtn.style.display = 'inline-block';
@@ -3706,7 +3698,6 @@ function evaluateIdentifyCard(card) {
     }
     const picked = sel >= 0 ? choices[sel] : null;
     const correct = !!(picked && picked.isCorrect);
-    flipCard.dataset.outcome = correct ? 'correct' : 'incorrect';
 
     const status = document.createElement('div');
     status.className = `identify-reveal-status ${correct ? 'correct' : 'incorrect'}`;
@@ -3733,10 +3724,7 @@ function updateCardContent(card) {
     questionBack.textContent = card.question;
     // Category as a small label above the question (context while mixing topics).
     const eyebrow = (card.categories || []).join(' · ');
-    for (const id of ['#card-eyebrow', '#card-eyebrow-back']) {
-        const el = document.querySelector(id);
-        if (el) el.textContent = eyebrow;
-    }
+    for (const el of cardEyebrows) el.textContent = eyebrow;
 
     // Source deck: only informative when several decks are mixed in a session.
     sourceDeckDisplay.textContent =
@@ -4169,22 +4157,16 @@ function toggleTextExplanation(open) {
     const next =
         typeof open === 'boolean' ? open : textExplanationContent.classList.contains('hidden');
     textExplanationContent.classList.toggle('hidden', !next);
-    textExplanationContainer
-        .querySelector('.explanation-toggle')
-        ?.setAttribute('aria-expanded', String(next));
+    explanationToggle.setAttribute('aria-expanded', String(next));
 }
 
 /**
  * One-line outcome under the question on the answer side, so the result reads
  * at a glance instead of only through colour. `null` hides it.
- * @param {'correct'|'partial'|'incorrect'|'neutral'|null} kind
+ * @param {'correct'|'partial'|'incorrect'|null} kind
  * @param {string} [text]
  */
 function setAnswerVerdict(kind, text = '') {
-    // Drives the coloured top edge of the answer side (cards.css).
-    if (kind && kind !== 'neutral') flipCard.dataset.outcome = kind;
-    else delete flipCard.dataset.outcome;
-    if (!answerVerdictEl) return;
     answerVerdictEl.className = kind
         ? `answer-verdict answer-verdict-${kind}`
         : 'answer-verdict hidden';
@@ -4201,7 +4183,7 @@ function setScoreVerdict(score, partialDetail) {
     else if (score > 0) {
         const detail = partialDetail || `${Math.round(score * 100)} %`;
         setAnswerVerdict('partial', `Teilweise richtig · ${detail}`);
-    } else setAnswerVerdict('incorrect', '✗ Leider falsch');
+    } else setAnswerVerdict('incorrect', '✗ Falsch');
 }
 
 /**
@@ -4217,8 +4199,8 @@ function formatWait(minutes) {
 }
 
 /**
- * Show under each self-rating button when the card would come back — the
- * consequence of the choice, so "Gut" vs "Einfach" is no longer a guess.
+ * Show under each self-rating button when the card would come back, so the
+ * choice between "Gut" and "Einfach" has a visible consequence.
  * @param {object} card
  */
 function updateRatingIntervals(card) {
@@ -4419,19 +4401,13 @@ function showAnswer() {
 
         if (isExactMatch) {
             // Exact text match is a fair correctness proxy: auto-grade as perfect.
-            setAnswerVerdict('correct', '✓ Richtig – genau die Antwort');
+            setAnswerVerdict('correct', '✓ Richtig');
             markAnswer(true);
             recallRating.classList.add('hidden');
             nextCardBtn.style.display = 'inline-block';
         } else {
             // Otherwise let the student grade their own recall (4-level scale),
             // which feeds the spaced-repetition ladder a finer signal than yes/no.
-            setAnswerVerdict(
-                'neutral',
-                userAnswer
-                    ? 'Vergleiche mit der richtigen Antwort – wie gut wusstest du es?'
-                    : 'Wie gut wusstest du die Antwort?'
-            );
             updateRatingIntervals(card);
             recallRating.classList.remove('hidden');
             nextCardBtn.style.display = 'none';
@@ -4609,9 +4585,9 @@ function markAnswer(scoreOrBool) {
 function showCalibrationCue(confidence, score) {
     const correct = score >= SR_PASS_SCORE;
     if (confidence === 3 && !correct) {
-        showMessage('Überschätzt – diese Karte kommt schneller wieder dran.');
+        showMessage('Überschätzt: Diese Karte kommt früher wieder.');
     } else if (confidence === 1 && correct) {
-        showMessage('Besser als gedacht – du kannst das schon.');
+        showMessage('Besser als gedacht!');
     }
 }
 
@@ -4619,6 +4595,9 @@ function showCalibrationCue(confidence, score) {
  * Move to the next card
  */
 function showNextCard() {
+    // Only an answered card can be left; this also absorbs a double tap on
+    // "Weiter" (the next card starts unanswered) without a time-based throttle.
+    if (!isAnswered) return;
     currentCardIndex++;
     showCurrentCard();
 }
@@ -4680,7 +4659,7 @@ function showFeedback() {
     if (knowledge.total > 0) {
         const level = levelClass(knowledge.percent, masteryTargetPercent(realDecks));
         knowledgeLine.className = `feedback-knowledge feedback-knowledge-${level}`;
-        knowledgeLine.textContent = `Lernstand ${knowledge.percent} % · ${knowledge.attempted} von ${knowledge.total} Karten geübt`;
+        knowledgeLine.textContent = `📈 Lernstand: ${knowledge.percent} % (${knowledge.attempted} von ${knowledge.total} Karten geübt)`;
         knowledgeLine.classList.remove('hidden');
     } else {
         knowledgeLine.classList.add('hidden');
@@ -4733,18 +4712,10 @@ function showFeedback() {
 
     // Show/hide buttons based on whether we're in SR bucket mode
     const isFromSRBuckets = activeDecks.length === 1 && activeDecks[0] === 'SR Buckets';
-    const progressBtn = document.querySelector('#feedback-progress-btn');
-    if (isFromSRBuckets) {
-        restartBtn.style.display = 'none';
-        uploadNewBtn.style.display = 'none';
-        if (progressBtn) progressBtn.style.display = 'none';
-        returnToSrBtn.style.display = '';
-    } else {
-        restartBtn.style.display = '';
-        uploadNewBtn.style.display = '';
-        if (progressBtn) progressBtn.style.display = '';
-        returnToSrBtn.style.display = 'none';
-    }
+    restartBtn.style.display = isFromSRBuckets ? 'none' : '';
+    uploadNewBtn.style.display = isFromSRBuckets ? 'none' : '';
+    feedbackProgressBtn.style.display = isFromSRBuckets ? 'none' : '';
+    returnToSrBtn.style.display = isFromSRBuckets ? '' : 'none';
 
     // Display per-deck statistics
     deckStatsContainer.innerHTML = '';
@@ -4888,8 +4859,8 @@ function resetAndUpload() {
  */
 function showError(message) {
     // A toast, not the inline #error-message: that element lives inside the
-    // quiz view, so errors raised on the deck picker (bad file, full storage,
-    // failed library import) used to be written into a hidden element.
+    // quiz view and is hidden while the deck picker (where most errors come
+    // from: bad file, full storage, failed library import) is shown.
     showMessage(message, 'error');
 }
 
@@ -5331,105 +5302,20 @@ function undoLastAnswer() {
 // Confetti Animation
 // ============================================================================
 
-/** Whether the user has asked the OS to minimize non-essential motion. */
-function prefersReducedMotion() {
-    return Boolean(globalThis.matchMedia?.('(prefers-reduced-motion: reduce)').matches);
-}
-
 /**
- * Trigger an improved confetti animation for correct answers
+ * Celebrate with the shared confetti engine (confetti.js). `pop` bursts from
+ * the upper part of the card — where the answer was just revealed — instead
+ * of raining over the whole screen on every correct card.
+ * @param {'pop'|'celebrate'|'grand'} [intensity]
  */
-function triggerConfetti() {
-    // Respect the OS "reduce motion" preference — confetti is purely decorative.
-    if (prefersReducedMotion()) return;
-
-    const confettiContainer = document.querySelector('#confetti-container');
-    if (!confettiContainer) {
-        console.error('Confetti container not found');
-        return;
-    }
-
-    // Vibrant color palette
-    const colors = [
-        '#FF6B6B',
-        '#4ECDC4',
-        '#45B7D1',
-        '#FFA07A',
-        '#98D8C8',
-        '#F7DC6F',
-        '#BB8FCE',
-        '#85C1E2',
-        '#F8B739',
-        '#52D17C',
-        '#FF8ED4',
-        '#6C5CE7',
-        '#FD79A8',
-        '#FDCB6E',
-        '#00B894',
-    ];
-
-    const numConfetti = 80;
-
-    for (let i = 0; i < numConfetti; i++) {
-        const piece = document.createElement('div');
-
-        // Random starting position (spread across top)
-        const startX = Math.random() * 100;
-        const startY = -20 - Math.random() * 50;
-
-        // Random color
-        const color = colors[Math.floor(Math.random() * colors.length)];
-
-        // Random size variation
-        const size = 10 + Math.random() * 6;
-
-        // Random shape
-        const shapeRand = Math.random();
-        let borderRadius = '0';
-        let clipPath = 'none';
-        if (shapeRand > 0.66) {
-            borderRadius = '50%';
-        } else if (shapeRand > 0.33) {
-            clipPath = 'polygon(50% 0%, 0% 100%, 100% 100%)';
-        }
-
-        // Animation properties
-        const duration = 1 + Math.random() * 0.5; // 1-1.5 seconds (very fast)
-        const delay = Math.random() * 0.15;
-        const horizontalDrift = (Math.random() - 0.5) * 200;
-        const rotation = 360 + Math.random() * 720;
-
-        // Set all styles inline
-        piece.style.cssText = `
-            position: absolute;
-            left: ${startX}vw;
-            top: ${startY}px;
-            width: ${size}px;
-            height: ${size}px;
-            background-color: ${color};
-            border-radius: ${borderRadius};
-            clip-path: ${clipPath};
-            opacity: 1;
-            z-index: 10000;
-            pointer-events: none;
-            --confetti-x: ${horizontalDrift}px;
-            --confetti-rotate: ${rotation}deg;
-            animation: confetti-fall ${duration}s ease-in forwards;
-            animation-delay: ${delay}s;
-        `;
-
-        // Add to DOM
-        confettiContainer.append(piece);
-
-        // Remove piece after animation completes
-        setTimeout(
-            () => {
-                if (piece.parentNode) {
-                    piece.remove();
-                }
-            },
-            (duration + delay) * 1000 + 100
-        );
+function triggerConfetti(intensity = 'pop') {
+    const engine = globalThis.confetti;
+    if (!engine) return;
+    if (intensity === 'pop') {
+        const r = cardContainer.getBoundingClientRect();
+        engine.pop({ x: r.left + r.width / 2, y: r.top + Math.min(r.height * 0.3, 160) });
+    } else {
+        engine[intensity]();
     }
 }
 
@@ -5460,7 +5346,7 @@ function openBookView(cardsToShow, title) {
     // Picker-only chrome: the subtitle ("Importiere …") and the preview CTA,
     // which the library preview re-enables right after this call.
     appSubtitle.style.display = 'none';
-    document.querySelector('#book-view-import')?.classList.add('hidden');
+    bookViewImportLink.classList.add('hidden');
     bookViewCards.innerHTML = '';
 
     // Enrich cards with SR data and sort: wrong/partial first, then correct, then unanswered
@@ -6555,10 +6441,13 @@ function renderFeedbackGamification(knowledge) {
         parts.push(`<span class="gam-badge gam-best">Neue Bestleistung: ${pct} %</span>`);
     }
 
+    // The bigger shows are for real milestones: a mastered deck, or a strong round.
+    if (earned.length > 0) triggerConfetti('grand');
+    else if (totalAnswered > 0 && pct >= 80) triggerConfetti('celebrate');
+
     if (parts.length > 0) {
         el.innerHTML = parts.join('');
         el.classList.remove('hidden');
-        if (earned.length > 0) triggerConfetti();
     } else {
         el.classList.add('hidden');
         el.innerHTML = '';
@@ -6585,15 +6474,14 @@ function renderMenuSummary() {
     const { mastered, total } = countMastered(allDecks);
     const cal = computeCalibration();
     const calStr = cal.percent === null ? '–' : `${cal.percent} %`;
-    const level = overall.attempted > 0 ? levelClass(overall.percent) : 'none';
     el.innerHTML = `
         <div class="menu-summary-stats">
-            <span class="menu-stat menu-stat-${level}"><strong>${overall.percent} %</strong><span>Lernstand</span></span>
-            <span class="menu-stat"><strong>${countDueCards()}</strong><span>fällig</span></span>
-            <span class="menu-stat"><strong>${mastered}/${total}</strong><span>gemeistert</span></span>
-            <span class="menu-stat"><strong>${calStr}</strong><span>Treffsicherheit</span></span>
+            <span class="menu-stat"><strong>${overall.percent} %</strong> Lernstand</span>
+            <span class="menu-stat"><strong>${countDueCards()}</strong> fällig</span>
+            <span class="menu-stat"><strong>${mastered}/${total}</strong> gemeistert</span>
+            <span class="menu-stat"><strong>${calStr}</strong> Treffsicherheit</span>
         </div>
-        <button class="btn btn-soft" id="open-progress">📈 Fortschritt</button>
+        <button class="btn btn-soft" id="open-progress">Fortschritt ansehen →</button>
     `;
     el.classList.remove('hidden');
     const btn = el.querySelector('#open-progress');

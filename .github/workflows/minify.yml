@@ -69,6 +69,7 @@ jobs:
                   terser theme.js --compress --mangle -o theme.js
                   terser ws-client.js --compress --mangle -o ws-client.js
                   terser ui-dialog.js --compress --mangle -o ui-dialog.js
+                  terser confetti.js --compress --mangle -o confetti.js
 
             - name: Minify CSS files
               run: |
@@ -84,6 +85,7 @@ jobs:
                   sed -i 's|<link rel="stylesheet" href="theme\.css" />|<link inline rel="stylesheet" href="theme.css" />|g' index.html
                   sed -i 's|<script src="theme\.js"></script>|<script inline src="theme.js"></script>|g' index.html
                   sed -i 's|<script src="logger\.js"></script>|<script inline src="logger.js"></script>|g' index.html
+                  sed -i 's|<script src="confetti\.js"></script>|<script inline src="confetti.js"></script>|g' index.html
                   sed -i 's|<script src="index\.js"></script>|<script inline src="index.js"></script>|g' index.html
 
                   # cards.html
@@ -96,6 +98,7 @@ jobs:
                   # cards.js / library.js carry `defer` in the source HTML (so they run
                   # after the deferred vendor scripts); inlined at the end of <body>
                   # they still run before DOMContentLoaded, which is all they need.
+                  sed -i 's|<script defer src="confetti\.js"></script>|<script inline src="confetti.js"></script>|g' cards.html
                   sed -i 's|<script defer src="cards\.js"></script>|<script inline src="cards.js"></script>|g' cards.html
 
                   # library.html
@@ -114,6 +117,7 @@ jobs:
                   sed -i 's|<script src="sanitize\.js"></script>|<script inline src="sanitize.js"></script>|g' quiz.html
                   sed -i 's|<script src="ui-dialog\.js"></script>|<script inline src="ui-dialog.js"></script>|g' quiz.html
                   sed -i 's|<script src="ws-client\.js"></script>|<script inline src="ws-client.js"></script>|g' quiz.html
+                  sed -i 's|<script src="confetti\.js"></script>|<script inline src="confetti.js"></script>|g' quiz.html
                   sed -i 's|<script src="quiz\.js"></script>|<script inline src="quiz.js"></script>|g' quiz.html
 
                   # poll.html - mirrors quiz.html
@@ -162,7 +166,7 @@ jobs:
                   # A sed pattern that silently stops matching (e.g. after adding
                   # `defer` to a tag) used to ship unminified, separately fetched
                   # files without anyone noticing. Fail the deploy instead.
-                  if grep -nE '<(script[^>]*src|link[^>]*href)="(index|cards|quiz|poll|library|sanitize|logger|theme|ws-client|ui-dialog)\.(js|css)"' *.html; then
+                  if grep -nE '<(script[^>]*src|link[^>]*href)="(index|cards|quiz|poll|library|sanitize|logger|theme|ws-client|ui-dialog|confetti)\.(js|css)"' *.html; then
                     echo "::error::The files above were not inlined — update the sed patterns."
                     exit 1
                   fi

@@ -72,9 +72,7 @@
 
                 <div id="host-setup">
                     <section class="setup-step">
-                        <h3 class="setup-step-title">
-                            <span class="setup-step-num" aria-hidden="true">1</span> Fragen laden
-                        </h3>
+                        <h3 class="setup-step-title">Fragen laden</h3>
                         <div id="library-picker" class="library-picker hidden">
                             <label for="library-deck-select" class="library-picker-label"
                                 >Aus der Bibliothek</label
@@ -107,8 +105,7 @@
                                     <span class="drop-zone-icon" aria-hidden="true">📂</span>
                                     <span class="drop-zone-text">Eigene Datei importieren</span>
                                     <span class="drop-zone-hint"
-                                        >Datei hierher ziehen oder klicken — .json oder .zip (nur
-                                        Multiple-Choice-Fragen)</span
+                                        >.json oder .zip, nur Multiple-Choice-Fragen</span
                                     >
                                 </div>
                             </div>
@@ -137,10 +134,7 @@
                     </div>
 
                     <section class="setup-step" id="setup-start">
-                        <h3 class="setup-step-title">
-                            <span class="setup-step-num" aria-hidden="true">2</span> Einstellen
-                            &amp; starten
-                        </h3>
+                        <h3 class="setup-step-title">Starten</h3>
                         <div class="duration-setting">
                             <span class="duration-setting-label" id="duration-label"
                                 >Zeit pro Frage (Sekunden)</span
@@ -343,9 +337,7 @@
                         maxlength="50"
                     />
                     <button id="join-btn" class="btn btn-block">Quiz beitreten</button>
-                    <p class="join-hint">
-                        Tipp: Scanne den QR-Code am Beamer – dann ist der Code schon ausgefüllt.
-                    </p>
+                    <p class="join-hint">Oder den QR-Code am Beamer scannen.</p>
                 </div>
 
                 <div id="waiting-room" class="hidden">
@@ -419,9 +411,7 @@
                     <div class="timer-bar-container">
                         <div class="timer-bar" id="player-timer-bar"></div>
                     </div>
-                    <p class="player-question-hint">
-                        Tippe alle richtigen Antworten an – es können mehrere sein.
-                    </p>
+                    <p class="player-question-hint">Mehrere Antworten möglich.</p>
                     <div id="options-container"></div>
                     <div class="submit-bar">
                         <button id="submit-answer-btn" class="btn btn-block hidden">
@@ -499,6 +489,7 @@
         </footer>
 
         <!-- Main Application Script -->
+        <script src="confetti.js"></script>
         <script src="quiz.js"></script>
 
         <!-- Service Worker Registration (offline shell + installability).

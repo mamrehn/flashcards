@@ -27,7 +27,7 @@
 }
 
 /* Violet used as *text* needs the light variant on dark surfaces (#6b42a6
-   on the dark card was ~2.5:1). Filled buttons keep the deeper violet. */
+   would be ~2.5:1). Filled buttons keep the deeper violet. */
 [data-theme='dark'] h2,
 [data-theme='dark'] h3,
 [data-theme='dark'] h4,
@@ -99,35 +99,28 @@ header {
     color: var(--primary-color);
     padding: 0.5rem 1rem;
     text-align: center;
-    border-radius: var(--radius-lg);
+    border-radius: 8px;
     margin-bottom: 0.75rem;
-    box-shadow: var(--shadow-sm);
+    box-shadow: 0 2px 4px var(--shadow-color);
     display: flex;
     align-items: center;
     gap: 1rem;
 }
 
 header h1 {
-    color: var(--text-color);
+    color: var(--primary-color);
     margin: 0;
     flex: 1;
-    font-size: 1.2rem;
-    font-weight: 700;
-    letter-spacing: -0.01em;
 }
 
 .back-link {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 40px;
-    height: 40px;
     color: var(--primary-color);
     text-decoration: none;
-    font-size: 1.35rem;
+    font-size: 1.5rem;
     font-weight: 500;
     line-height: 1;
-    border-radius: 50%;
+    padding: 0.25rem 0.5rem;
+    border-radius: 4px;
     transition: background-color 0.2s;
     flex-shrink: 0;
 }
@@ -160,9 +153,9 @@ body.player-in-game header {
 
 .card {
     background-color: var(--surface-color);
-    border-radius: var(--radius-lg);
+    border-radius: 8px;
     padding: 0.75rem 1rem;
-    box-shadow: var(--shadow-sm);
+    box-shadow: 0 2px 4px var(--shadow-color);
     margin-bottom: 0.75rem;
 }
 
@@ -173,7 +166,7 @@ textarea {
     padding: 0.5rem 0.75rem;
     margin: 0.3rem 0;
     border: 1px solid var(--input-border);
-    border-radius: var(--radius-md);
+    border-radius: 4px;
     font-size: 1em;
     background-color: var(--input-bg);
     color: var(--text-color);
@@ -200,7 +193,7 @@ textarea:focus {
     padding: 0.5rem 1rem;
     /* >=44px tap target (WCAG 2.5.5 / mobile guidelines). */
     min-height: 44px;
-    border-radius: var(--radius-md);
+    border-radius: 4px;
     cursor: pointer;
     font-size: 1.05rem;
     font-weight: 500;

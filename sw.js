@@ -37,6 +37,7 @@ const ASSETS_TO_CACHE = [
     './logger.js',
     './ws-client.js',
     './ui-dialog.js',
+    './confetti.js',
     './manifest.json',
     './icon.svg',
     // Self-hosted libraries (vendor/README.md) — cached so ZIP import, the
