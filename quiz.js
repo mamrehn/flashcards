@@ -409,6 +409,16 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         });
     }
+    document.addEventListener('keydown', (event) => {
+        if (
+            event.key === 'Escape' &&
+            qrModalOverlay &&
+            !qrModalOverlay.classList.contains('hidden')
+        ) {
+            qrModalOverlay.classList.add('hidden');
+            document.querySelector('#qrcode')?.focus();
+        }
+    });
 
     // Event listener for "Host a Quiz" button
     document.querySelector('#host-btn').addEventListener('click', () => {

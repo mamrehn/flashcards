@@ -18,22 +18,20 @@
     --quiz-surface: #f2e9ff;
     --quiz-surface-alt: #f5f0ff;
     --quiz-hover: #ece0ff;
-}
-
-[data-theme='dark'] {
-    --quiz-surface: #2a2238;
-    --quiz-surface-alt: #261f33;
-    --quiz-hover: #322747;
+    /* Violet as text (links, headings, room code, ranks); fills keep
+       --primary-color. */
+    --primary-text: #6b42a6;
+    --primary-text-hover: #46178f;
 }
 
 /* Violet used as *text* needs the light variant on dark surfaces (#6b42a6
    would be ~2.5:1). Filled buttons keep the deeper violet. */
-[data-theme='dark'] h1,
-[data-theme='dark'] h2,
-[data-theme='dark'] h3,
-[data-theme='dark'] h4,
-[data-theme='dark'] .back-link {
-    color: #c4a6ea;
+[data-theme='dark'] {
+    --quiz-surface: #2a2238;
+    --quiz-surface-alt: #261f33;
+    --quiz-hover: #322747;
+    --primary-text: #c4a6ea;
+    --primary-text-hover: #e2d1f7;
 }
 
 * {
@@ -51,7 +49,7 @@ body {
 }
 
 a {
-    color: var(--primary-color);
+    color: var(--primary-text);
     text-decoration: underline;
     text-decoration-thickness: 1px;
     text-underline-offset: 2px;
@@ -60,12 +58,12 @@ a {
 
 a:hover,
 a:focus-visible {
-    color: var(--secondary-color);
+    color: var(--primary-text-hover);
 }
 
 #join-link,
 #join-link-modal {
-    color: var(--primary-color);
+    color: var(--primary-text);
     word-break: break-all;
 }
 
@@ -74,17 +72,17 @@ h1 {
 }
 h2 {
     font-size: 1.5rem;
-    color: var(--primary-color);
+    color: var(--primary-text);
     margin-bottom: 0.5rem;
 }
 h3 {
     font-size: 1.25rem;
-    color: var(--primary-color);
+    color: var(--primary-text);
     margin: 0.5rem 0;
 }
 h4 {
     font-size: 1.05rem;
-    color: var(--primary-color);
+    color: var(--primary-text);
     margin: 0.5rem 0 0.25rem;
 }
 
@@ -97,7 +95,7 @@ h4 {
 
 header {
     background-color: var(--surface-color);
-    color: var(--primary-color);
+    color: var(--primary-text);
     padding: 0.5rem 1rem;
     text-align: center;
     border-radius: 8px;
@@ -109,13 +107,13 @@ header {
 }
 
 header h1 {
-    color: var(--primary-color);
+    color: var(--primary-text);
     margin: 0;
     flex: 1;
 }
 
 .back-link {
-    color: var(--primary-color);
+    color: var(--primary-text);
     text-decoration: none;
     font-size: 1.5rem;
     font-weight: 500;
@@ -217,6 +215,13 @@ textarea:focus {
     background-color: var(--accent-color);
 }
 
+/* White on the pink is 3.5:1, enough only for large text (≥ 18.66px bold),
+   so the CTA is set large and bold instead of changing its colour. */
+.btn.btn-accent {
+    font-size: 1.2rem;
+    font-weight: 700;
+}
+
 @media (hover: hover) {
     .btn-accent:hover:not(:disabled) {
         background-color: #e02858;
@@ -246,20 +251,91 @@ textarea:focus {
 
 /* -------- Lobby: QR + player list -------- */
 
+/* Mirrors the quiz lobby: the join block is read from the back of the room
+   on a projector, so the QR scales up and the code is a large pill. */
 #qr-container {
     margin: 0.5rem 0;
+}
+
+.lobby-join {
+    text-align: center;
 }
 
 #qrcode {
     display: inline-block;
     padding: 0.5rem;
     background: white;
-    border-radius: 6px;
-    margin: 0.5rem 0;
+    border-radius: 8px;
+    margin: 0.5rem auto 0;
+    cursor: zoom-in;
 }
 
-#qrcode img {
+#qrcode img,
+#qrcode canvas {
     display: block;
+    width: min(16rem, 70vw);
+    height: auto;
+}
+
+.qr-enlarge-hint {
+    margin: 0.2rem 0 0.5rem;
+    font-size: 0.8rem;
+    color: var(--text-muted);
+}
+
+.join-step {
+    margin: 0.35rem 0;
+}
+
+.join-link {
+    font-size: 1.4em;
+    font-weight: 700;
+}
+
+.room-code {
+    display: inline-block;
+    padding: 0.05em 0.45em;
+    border-radius: 8px;
+    background-color: var(--quiz-surface);
+    color: var(--primary-text);
+    font-size: 1.8em;
+    font-weight: 800;
+    letter-spacing: 0.12em;
+    font-variant-numeric: tabular-nums;
+}
+
+.player-count-line {
+    font-weight: 600;
+}
+
+.join-hint {
+    margin-top: 0.5rem;
+    font-size: 0.9rem;
+    color: var(--text-muted);
+}
+
+.btn-block {
+    display: block;
+    width: 100%;
+    margin-right: 0;
+}
+
+@media (min-width: 960px) {
+    #qr-container {
+        display: grid;
+        grid-template-columns: minmax(20rem, 2fr) 3fr;
+        gap: 2rem;
+        align-items: start;
+    }
+
+    #qrcode img,
+    #qrcode canvas {
+        width: min(22rem, 40vh);
+    }
+
+    .room-code {
+        font-size: 2.4em;
+    }
 }
 
 .players-list {
@@ -469,7 +545,7 @@ button.player-chip:focus-visible {
 .suggestion-link {
     background: transparent;
     border: none;
-    color: var(--primary-color);
+    color: var(--primary-text);
     font-size: 0.85em;
     padding: 0.15rem 0;
     cursor: pointer;
@@ -505,7 +581,7 @@ button.player-chip:focus-visible {
 .composer-fieldset legend {
     font-weight: 600;
     padding: 0 0.4rem;
-    color: var(--primary-color);
+    color: var(--primary-text);
 }
 
 .radio-label,
@@ -764,7 +840,7 @@ button.player-chip:focus-visible {
 .podium-rank {
     font-weight: 700;
     font-size: 1.4em;
-    color: var(--primary-color);
+    color: var(--primary-text);
     text-align: center;
 }
 
@@ -873,7 +949,7 @@ button.player-chip:focus-visible {
     font-weight: 700;
     line-height: 1;
     background-color: rgba(107, 66, 166, 0.18);
-    color: var(--primary-color);
+    color: var(--primary-text);
     box-shadow: 0 0 0 4px rgba(107, 66, 166, 0.08);
     animation: submitted-pop 500ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
 }
@@ -882,7 +958,7 @@ button.player-chip:focus-visible {
     font-size: 1.3rem;
     font-weight: 700;
     letter-spacing: 0.02em;
-    color: var(--primary-color);
+    color: var(--primary-text);
 }
 
 .submitted-wait {
@@ -1012,6 +1088,14 @@ button.player-chip:focus-visible {
     background: white;
     border-radius: 8px;
     margin: 0.75rem 0;
+}
+
+/* Larger than the lobby QR it enlarges, as big as the screen allows. */
+#large-qrcode img,
+#large-qrcode canvas {
+    display: block;
+    width: min(36rem, 80vw, 65vh);
+    height: auto;
 }
 
 /* -------- Responsive tweaks -------- */

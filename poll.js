@@ -541,8 +541,9 @@ function renderQrCode(url) {
     try {
         new QRCode(dom.qrcodeEl, {
             text: url,
-            width: 180,
-            height: 180,
+            // Drawn large and sized by CSS, so it stays sharp on a projector.
+            width: 480,
+            height: 480,
             correctLevel: QRCode.CorrectLevel.H,
         });
     } catch (error) {
@@ -560,8 +561,8 @@ function renderLargeQrCode(url) {
     try {
         new QRCode(dom.largeQrcode, {
             text: url,
-            width: 360,
-            height: 360,
+            width: 600,
+            height: 600,
             correctLevel: QRCode.CorrectLevel.H,
         });
     } catch (error) {
@@ -2749,9 +2750,17 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // QR modal: clicking the small QR enlarges it for the room.
     if (dom.qrcodeEl) {
-        dom.qrcodeEl.addEventListener('click', () => {
+        const openQrModal = () => {
             if (!hostRoomId) return;
             dom.qrModalOverlay.classList.remove('hidden');
+            dom.qrModalClose?.focus();
+        };
+        dom.qrcodeEl.addEventListener('click', openQrModal);
+        dom.qrcodeEl.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                openQrModal();
+            }
         });
     }
     if (dom.qrModalClose) {
@@ -2766,6 +2775,16 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         });
     }
+    document.addEventListener('keydown', (e) => {
+        if (
+            e.key === 'Escape' &&
+            dom.qrModalOverlay &&
+            !dom.qrModalOverlay.classList.contains('hidden')
+        ) {
+            dom.qrModalOverlay.classList.add('hidden');
+            dom.qrcodeEl?.focus();
+        }
+    });
 
     renderComposerOptionsList();
     refreshReconnectButtons();

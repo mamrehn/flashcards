@@ -103,8 +103,9 @@ body {
     color: var(--text-muted);
 }
 
-/* Once decks exist the "import or choose" instruction is noise. */
-body.has-decks #app-subtitle {
+/* The "import or choose a saved deck" line repeated the deck list and, with
+   nothing saved yet, contradicted the empty state below it. */
+#app-subtitle {
     display: none;
 }
 
@@ -388,12 +389,14 @@ body.has-decks #app-subtitle {
 }
 
 /* Type chips (MC / Text per category) */
+/* Wide enough for MC + Text + Zuordnung on one line; at 13.5rem the third
+   chip dropped to a second, right-aligned line even on a laptop. */
 .type-chips {
     display: flex;
     flex-wrap: wrap;
     justify-content: flex-end;
     gap: 0.3rem;
-    max-width: 13.5rem;
+    max-width: 20rem;
 }
 
 .type-chip {
@@ -435,8 +438,10 @@ body.has-decks #app-subtitle {
     background-color: var(--primary);
 }
 
+/* White chip text needs ≥ 4.5:1: the plain status green (#28a745, 3.1:1)
+   and orange (#d9822b, 2.9:1) fills were too light for it. */
 .type-chip-text.selected {
-    background-color: var(--success, #2ecc71);
+    background-color: #1e7e34;
 }
 
 .type-chip-matching.selected {
@@ -444,7 +449,7 @@ body.has-decks #app-subtitle {
 }
 
 .type-chip-identify.selected {
-    background-color: #d9822b;
+    background-color: #a85a14;
 }
 
 .type-chip::after {
@@ -1115,11 +1120,20 @@ body.has-decks .drop-zone {
     display: none;
 }
 
+/* First visit: the drop zone is the one import control (it takes decks and
+   backups alike), so the footer's import and restore buttons would repeat it. */
 body:not(.has-decks) .saved-decks-header,
 body:not(.has-decks) .deck-search-container,
 body:not(.has-decks) #calibration-option,
 body:not(.has-decks) #deck-selection-controls,
+body:not(.has-decks) #import-file-btn,
+body:not(.has-decks) #import-backup-btn,
 body:not(.has-decks) #export-backup-btn {
+    display: none;
+}
+
+/* "Alle" / "Keine" only mean something with more than one deck. */
+.select-actions[hidden] {
     display: none;
 }
 
@@ -1232,6 +1246,17 @@ body:not(.has-decks) #export-backup-btn {
     display: flex;
     gap: 0.4rem;
     flex: 1;
+}
+
+/* The question the four buttons answer, visible like "Wie sicher bist du?"
+   on the front (screen readers get it from the group's aria-label). A row of
+   its own above undo + ratings, so neither changes size. */
+.controls:has(> .recall-rating:not(.hidden))::before {
+    content: 'Wie gut wusstest du die Antwort?';
+    flex-basis: 100%;
+    text-align: center;
+    font-size: 0.95rem;
+    color: var(--text-muted);
 }
 
 .recall-rating-btn {
@@ -2541,12 +2566,12 @@ details[open] > .explanation-summary::after,
 }
 
 .sr-bucket-header {
-    padding: 0.75rem 1rem;
+    padding: 0.6rem 0.5rem 0.6rem 1rem;
     background: linear-gradient(135deg, var(--sr-gradient-start) 0%, var(--sr-gradient-end) 100%);
     color: white;
     display: flex;
-    justify-content: space-between;
     align-items: center;
+    gap: 0.75rem;
     cursor: pointer;
     user-select: none;
 }
@@ -2559,10 +2584,22 @@ details[open] > .explanation-summary::after,
     );
 }
 
-.sr-bucket-info {
+/* Title on top, count and interval below it: the same two lines on every
+   width, instead of pieces wrapping to different places per bucket. */
+.sr-bucket-toggle {
+    flex: 1 1 auto;
+    min-width: 0;
     display: flex;
-    align-items: center;
-    gap: 1rem;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.15rem;
+    padding: 0.2rem 0;
+    border: 0;
+    background: none;
+    color: inherit;
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
 }
 
 .sr-bucket-title {
@@ -2570,21 +2607,19 @@ details[open] > .explanation-summary::after,
     font-size: 1.05rem;
 }
 
-.sr-bucket-count {
-    background: rgba(255, 255, 255, 0.2);
-    padding: 0.25rem 0.75rem;
-    border-radius: 12px;
-    font-size: 1.05rem;
+.sr-bucket-sub {
+    font-size: 0.9rem;
 }
 
-.sr-bucket-interval {
-    font-size: 1.05rem;
-    opacity: 0.9;
+.sr-bucket-count {
+    font-weight: 600;
 }
 
 .sr-bucket-checkbox {
-    width: 20px;
-    height: 20px;
+    flex: none;
+    width: 22px;
+    height: 22px;
+    margin: 0;
     cursor: pointer;
 }
 
@@ -2599,12 +2634,17 @@ details[open] > .explanation-summary::after,
     overflow-y: auto;
 }
 
+/* Wraps on phones: the question takes the full line and the review date and
+   actions go below it. Unwrapped, the question shrank to one word per line
+   and pushed "Löschen" off the screen. */
 .sr-card-item {
     padding: 0.75rem 1rem;
     border-bottom: 1px solid var(--border-color);
     display: flex;
+    flex-wrap: wrap;
     justify-content: space-between;
     align-items: center;
+    gap: 0.5rem 1rem;
     transition: background 0.2s;
 }
 
@@ -2617,15 +2657,18 @@ details[open] > .explanation-summary::after,
 }
 
 .sr-card-question {
-    flex: 1;
+    flex: 1 1 14rem;
+    min-width: 0;
     font-weight: 500;
-    margin-right: 1rem;
+    overflow-wrap: anywhere;
 }
 
 .sr-card-meta {
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
-    gap: 1rem;
+    gap: 0.5rem 1rem;
+    margin-left: auto;
     font-size: 1.05rem;
     color: var(--text-muted);
 }
@@ -2640,7 +2683,8 @@ details[open] > .explanation-summary::after,
 }
 
 .sr-card-actions button {
-    padding: 0.25rem 0.5rem;
+    min-height: 2.25rem;
+    padding: 0.35rem 0.75rem;
     font-size: 1.05rem;
     border: none;
     border-radius: 4px;
@@ -2945,7 +2989,7 @@ details[open] > .explanation-summary::after,
     --btn-secondary-hover: #6a6a7e;
     --sr-gradient-start: #3a6a9e;
     --sr-gradient-end: #2a5a88;
-    --sr-gradient-hover-start: #4a7aae;
+    --sr-gradient-hover-start: #4572a6; /* #4a7aae was 4.48:1 for white */
     --sr-gradient-hover-end: #3a6a98;
     --sr-info-color: #117a8b;
     --sr-info-hover: #0f6b7a;
@@ -2955,6 +2999,10 @@ details[open] > .explanation-summary::after,
 [data-theme='dark'] .type-chip-mc.selected,
 [data-theme='dark'] .type-chip-text.selected {
     color: var(--on-primary);
+}
+
+[data-theme='dark'] .type-chip-text.selected {
+    background-color: var(--success);
 }
 
 [data-theme='dark'] .btn-success:hover {
@@ -3026,6 +3074,8 @@ details[open] > .explanation-summary::after,
 
 #book-view-import {
     flex: 0 0 auto;
+    /* Full width on phones (flex-basis 100%) must include the padding. */
+    box-sizing: border-box;
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -3391,6 +3441,17 @@ details[open] > .explanation-summary::after,
     padding-top: 0.25rem;
 }
 
+/* Words of the correct answer the student also wrote (near-miss text
+   answers). Bold as well as tinted, so it reads without colour. */
+mark.answer-hit {
+    background: rgba(40, 167, 69, 0.2);
+    color: inherit;
+    font-weight: 700;
+    border-radius: 3px;
+    box-decoration-break: clone;
+    -webkit-box-decoration-break: clone;
+}
+
 /* Matching result on card back */
 .matching-result-container {
     margin: 0.5rem 0;
@@ -3400,10 +3461,13 @@ details[open] > .explanation-summary::after,
     gap: 0.35rem;
 }
 
+/* Grid, not flex: as a third flex item the correction line took all the
+   width and squeezed the pair text to 0px, so the two overlapped. */
 .matching-result-pair {
-    display: flex;
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
     align-items: baseline;
-    gap: 0.5rem;
+    column-gap: 0.5rem;
     padding: 0.4rem 0.6rem;
     border-radius: 6px;
     font-size: 0.92rem;
@@ -3436,11 +3500,11 @@ details[open] > .explanation-summary::after,
 
 .matching-result-text {
     line-height: 1.4;
-    flex: 1;
-    min-width: 0;
+    overflow-wrap: anywhere;
 }
 
 .matching-correction {
+    grid-column: 2;
     color: var(--text-color);
     font-style: italic;
     font-size: 0.88em;
@@ -3478,16 +3542,18 @@ details[open] > .explanation-summary::after,
 }
 
 .sr-bucket-book-btn {
+    flex: none;
+    min-width: 44px;
+    min-height: 44px;
     background: none;
     border: none;
     cursor: pointer;
-    font-size: 1.05rem;
-    padding: 0.25rem 0.4rem;
-    border-radius: 4px;
+    font-size: 1.15rem;
+    border-radius: 6px;
 }
 
 .sr-bucket-book-btn:hover {
-    background-color: rgba(0, 0, 0, 0.08);
+    background-color: rgba(255, 255, 255, 0.15);
 }
 
 @media (max-width: 768px) {

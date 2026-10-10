@@ -103,34 +103,43 @@
 
                 <section id="host-lobby">
                     <h2>Lobby</h2>
+                    <!-- Same join block as the quiz lobby: read from the back of the
+                         room on a projector, so QR and code are large. -->
                     <div id="qr-container">
-                        <h3>QR-Code scannen oder URL eingeben, um beizutreten</h3>
-                        <div id="qrcode" style="cursor: pointer"></div>
-                        <p>
-                            URL:
-                            <a
-                                id="join-link"
-                                href="#"
-                                target="_blank"
-                                style="font-size: 1.4em; font-weight: bold"
-                            ></a>
-                        </p>
-                        <p>
-                            Code:
-                            <span
-                                id="room-id"
-                                style="font-size: 1.4em; font-weight: bold; letter-spacing: 0.1em"
-                            ></span>
-                        </p>
-                        <p>Verbundene Spieler: <span id="player-count">0</span></p>
-                        <div class="players-list" id="players-list"></div>
-                        <p id="duplicate-names-hint" class="duplicate-names-hint hidden">
-                            ⚠️ Manche Namen kommen doppelt vor – oft dieselbe Person auf zwei
-                            Geräten. Tippe auf einen Namen, um ihn zu ändern.
-                        </p>
-                        <p class="player-hint">Tippe auf einen Namen, um ihn zu ändern.</p>
+                        <div class="lobby-join">
+                            <h3>QR-Code scannen oder URL eingeben, um beizutreten</h3>
+                            <div
+                                id="qrcode"
+                                role="button"
+                                tabindex="0"
+                                aria-label="QR-Code vergrößern"
+                                title="Klicken zum Vergrößern"
+                            ></div>
+                            <p class="qr-enlarge-hint">Klicken zum Vergrößern</p>
+                            <p class="join-step">
+                                URL eingeben:
+                                <a id="join-link" class="join-link" href="#" target="_blank"></a>
+                            </p>
+                            <p class="join-step">
+                                Dann Code eingeben:
+                                <span id="room-id" class="room-code"></span>
+                            </p>
+                        </div>
+                        <div class="lobby-roster">
+                            <p class="player-count-line">
+                                Verbundene Spieler: <span id="player-count">0</span>
+                            </p>
+                            <div class="players-list" id="players-list"></div>
+                            <p id="duplicate-names-hint" class="duplicate-names-hint hidden">
+                                ⚠️ Manche Namen kommen doppelt vor – oft dieselbe Person auf zwei
+                                Geräten. Tippe auf einen Namen, um ihn zu ändern.
+                            </p>
+                            <p class="player-hint">Tippe auf einen Namen, um ihn zu ändern.</p>
+                            <button id="show-composer-btn" class="btn btn-accent btn-block">
+                                Frage erstellen
+                            </button>
+                        </div>
                     </div>
-                    <button id="show-composer-btn" class="btn btn-accent">Frage erstellen</button>
                 </section>
 
                 <section id="host-composer" class="hidden">
@@ -294,7 +303,7 @@
                     <input
                         type="text"
                         id="room-code-input"
-                        placeholder="Code eingeben oder QR scannen"
+                        placeholder="Code vom Beamer, z. B. AB 12"
                         autocapitalize="characters"
                         autocorrect="off"
                         spellcheck="false"
@@ -313,7 +322,8 @@
                         enterkeyhint="go"
                         maxlength="50"
                     />
-                    <button id="join-btn" class="btn">Beitreten</button>
+                    <button id="join-btn" class="btn btn-block">Beitreten</button>
+                    <p class="join-hint">Oder den QR-Code am Beamer scannen.</p>
                 </div>
 
                 <div id="player-waiting" class="hidden">
@@ -344,7 +354,7 @@
                         <div id="rank-options" class="rank-options"></div>
                     </div>
 
-                    <button id="submit-vote-btn" class="btn btn-accent" disabled>
+                    <button id="submit-vote-btn" class="btn btn-accent btn-block" disabled>
                         Stimme abgeben
                     </button>
                 </div>
@@ -377,19 +387,11 @@
                 <div id="large-qrcode"></div>
                 <p>
                     URL:
-                    <a
-                        id="join-link-modal"
-                        href="#"
-                        target="_blank"
-                        style="font-size: 1.4em; font-weight: bold"
-                    ></a>
+                    <a id="join-link-modal" class="join-link" href="#" target="_blank"></a>
                 </p>
                 <p>
                     Code:
-                    <span
-                        id="modal-room-id"
-                        style="font-size: 1.4em; font-weight: bold; letter-spacing: 0.1em"
-                    ></span>
+                    <span id="modal-room-id" class="room-code"></span>
                 </p>
             </div>
         </div>

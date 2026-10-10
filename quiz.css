@@ -228,6 +228,13 @@ header h1 {
     font-weight: 600;
 }
 
+/* White on the pink is 3.5:1, enough only for large text (≥ 18.66px bold),
+   so the CTA is set large and bold instead of changing its colour. */
+.btn.btn-accent {
+    font-size: 1.2rem;
+    font-weight: 700;
+}
+
 /* Quiet secondary action inside forms ("+ Option"). */
 .btn.btn-quiet {
     background-color: transparent;
@@ -755,8 +762,10 @@ select:focus {
     font-size: 1.1em;
 }
 
+/* Not on the selected option: the hover fill (0,3,0) outranked .selected and
+   left its white text on the pale hover tint. */
 @media (hover: hover) {
-    .option-btn:hover:not(:disabled) {
+    .option-btn:hover:not(:disabled, .selected) {
         background-color: var(--quiz-hover);
         border-color: var(--primary-color);
     }
@@ -1095,8 +1104,11 @@ select:focus {
     align-items: center;
 }
 
-#large-qrcode img {
-    width: 300px;
+/* Larger than the lobby QR it enlarges (up to 22rem there), as big as the
+   screen allows; a fixed 300px made "Vergrößern" shrink it on a projector. */
+#large-qrcode img,
+#large-qrcode canvas {
+    width: min(36rem, 80vw, 65vh);
     max-width: 100%;
     height: auto;
 }
@@ -1753,6 +1765,11 @@ select:focus {
     flex: 0 0 auto;
 }
 
+/* Muted grey on the gold leader row fell below 4.5:1. */
+.rank-1 .player-rank {
+    color: inherit;
+}
+
 .player-name {
     flex: 1 1 auto;
     min-width: 0;
@@ -2331,19 +2348,38 @@ body.player-in-game footer {
    cyan app, classical=warm gold chamber. */
 .music-poll-card[data-theme='arcade'] {
     --theme-color: #e91e63;
+    --theme-text: #ad1457;
     --theme-tint: rgba(233, 30, 99, 0.12);
 }
 .music-poll-card[data-theme='cinematic'] {
     --theme-color: #6b42a6;
+    --theme-text: #6b42a6;
     --theme-tint: rgba(107, 66, 166, 0.14);
 }
 .music-poll-card[data-theme='modern_minimal'] {
     --theme-color: #4dabf7;
+    --theme-text: #1864ab;
     --theme-tint: rgba(77, 171, 247, 0.12);
 }
 .music-poll-card[data-theme='classical'] {
     --theme-color: #b8860b;
+    --theme-text: #8a6408;
     --theme-tint: rgba(184, 134, 11, 0.14);
+}
+
+/* Theme colours are fills (bars, borders, badges); as text they need a
+   deeper shade on light cards and a lighter one on dark ones (AA 4.5:1). */
+[data-theme='dark'] .music-poll-card[data-theme='arcade'] {
+    --theme-text: #f48fb1;
+}
+[data-theme='dark'] .music-poll-card[data-theme='cinematic'] {
+    --theme-text: #b39ddb;
+}
+[data-theme='dark'] .music-poll-card[data-theme='modern_minimal'] {
+    --theme-text: #74c0fc;
+}
+[data-theme='dark'] .music-poll-card[data-theme='classical'] {
+    --theme-text: #e0b84a;
 }
 .music-poll-card[data-theme='none'] {
     --theme-color: #6c7480;
@@ -2467,7 +2503,7 @@ body.player-in-game footer {
 .music-poll-name {
     font-weight: 600;
     font-size: 1rem;
-    color: var(--theme-color);
+    color: var(--theme-text, var(--theme-color));
     line-height: 1.15;
 }
 
@@ -2525,7 +2561,7 @@ body.player-in-game footer {
 
 .music-poll-share {
     font-weight: 600;
-    color: var(--theme-color);
+    color: var(--theme-text, var(--text-muted));
 }
 
 .lobby-music-status {

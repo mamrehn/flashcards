@@ -14,6 +14,7 @@ const {
     cardKnowledge,
     scoreMultipleChoice,
     normalizeAnswer,
+    answerMatchSegments,
     dedupeCardsByQuestion,
     validateCards,
     cardType,
@@ -91,6 +92,34 @@ test('normalizeAnswer: case, whitespace and trailing punctuation are ignored', (
 test('normalizeAnswer: tolerates non-strings', () => {
     assert.equal(normalizeAnswer(), '');
     assert.equal(normalizeAnswer(null), '');
+});
+
+const hits = (answer, typed) =>
+    answerMatchSegments(answer, typed)
+        .filter((seg) => seg.hit)
+        .map((seg) => seg.text);
+
+test('answerMatchSegments: marks the typed words and rejoins to the answer', () => {
+    const answer = 'Mind. 4 GB RAM, 64 GB Speicher und TPM 2.0.';
+    const segments = answerMatchSegments(answer, 'tpm 2.0, 4gb ram');
+    assert.equal(segments.map((seg) => seg.text).join(''), answer);
+    assert.deepEqual(hits(answer, 'TPM 2.0, 4 GB RAM'), ['4 GB RAM', 'GB', 'TPM 2.0']);
+});
+
+test('answerMatchSegments: shared stems and umlaut spellings count', () => {
+    assert.deepEqual(hits('Dynamic Host Configuration Protocol', 'dynamic host config'), [
+        'Dynamic Host Configuration',
+    ]);
+    assert.deepEqual(hits('Der Schlüssel wird übertragen', 'Schluessel-Uebertragung'), [
+        'Schlüssel',
+        'übertragen',
+    ]);
+});
+
+test('answerMatchSegments: filler words, single letters and near names do not count', () => {
+    assert.deepEqual(hits('Der Netzwerk-Switch und ein Router', 'der die und ein a netzteil'), []);
+    assert.deepEqual(hits('Berlin', ''), []);
+    assert.deepEqual(answerMatchSegments('', 'x'), []);
 });
 
 test('dedupeCardsByQuestion: duplicate questions collapse, last content wins', () => {

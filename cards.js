@@ -2205,8 +2205,10 @@ function displaySavedDecks(searchTerm = '', preselectDeckNames = []) {
         return;
     }
 
-    // The search box only earns its space once the list gets long.
+    // The search box only earns its space once the list gets long, and
+    // "Alle"/"Keine" once there is more than the deck's own checkbox.
     document.querySelector('.deck-search-container').hidden = topics.size < 4 && !searchTerm;
+    document.querySelector('.select-actions').hidden = topics.size < 2;
 
     const preselectSet = new Set(preselectDeckNames);
     const lowerSearch = (searchTerm || '').trim().toLowerCase();
@@ -2760,6 +2762,7 @@ function initializeQuiz(loadedCards) {
     sessionStartLernstand = computeDeckKnowledge(activeDecks.filter((d) => savedDecks[d])).percent;
 
     // Show the app content
+    dismissToasts();
     document.querySelector('#file-input-container').style.display = 'none';
     appContent.classList.remove('hidden');
 
@@ -4413,6 +4416,8 @@ function showAnswer() {
         } else {
             // Otherwise let the student grade their own recall (4-level scale),
             // which feeds the spaced-repetition ladder a finer signal than yes/no.
+            // Marking the words they already had makes that comparison quick.
+            if (userAnswer) renderAnswerWithHits(card.answer, userAnswer);
             updateRatingIntervals(card);
             recallRating.classList.remove('hidden');
             nextCardBtn.style.display = 'none';
@@ -4472,6 +4477,131 @@ function normalizeAnswer(text) {
     let end = collapsed.length;
     while (end > 0 && '.,;:!?'.includes(collapsed[end - 1])) end--;
     return collapsed.slice(0, end).trim();
+}
+
+// Filler words that would light up in almost any answer.
+const ANSWER_STOPWORDS = new Set(
+    (
+        'der die das den dem des ein eine einer eines einem einen und oder mit von zu ' +
+        'zum zur im in am an auf aus bei für über unter vom durch als auch ist sind ' +
+        'wird werden wie so nur nicht je pro es sie er man sich the a an of to is and or'
+    ).split(' ')
+);
+
+// A word of an answer: letters/digits, keeping decimals like "2.0" whole.
+const ANSWER_WORD = /[\p{L}\p{N}]+(?:[.,]\p{N}+)*/gu;
+
+/**
+ * Whether a folded word can count as a match (no filler words or lone letters).
+ * @param {string} w
+ * @returns {boolean}
+ */
+function isCountedWord(w) {
+    return !ANSWER_STOPWORDS.has(w) && (w.length > 1 || /\p{N}/u.test(w));
+}
+
+/**
+ * Comparable form of one word: lower case, umlauts and accents folded
+ * ("Schlüssel" = "Schluessel"), so spelling variants still count.
+ * @param {string} word
+ * @returns {string}
+ */
+function foldWord(word) {
+    return word
+        .toLowerCase()
+        .replaceAll('ß', 'ss')
+        .replaceAll('ä', 'ae')
+        .replaceAll('ö', 'oe')
+        .replaceAll('ü', 'ue')
+        .normalize('NFD')
+        .replaceAll(/\p{M}/gu, '');
+}
+
+/**
+ * Two folded words share a stem when their common prefix covers at least
+ * three quarters of the shorter one (and four letters).
+ * @param {string} a
+ * @param {string} b
+ * @returns {boolean}
+ */
+function sharesStem(a, b) {
+    const shorter = Math.min(a.length, b.length);
+    if (shorter < 4) return false;
+    let i = 0;
+    while (i < shorter && a[i] === b[i]) i++;
+    return i >= Math.max(4, Math.ceil(shorter * 0.75));
+}
+
+/**
+ * Split a correct answer into segments and mark the words that also occur in
+ * the student's answer, so a near-miss can be compared at a glance. Longer
+ * words also match by a shared stem ("Config" ↔ "Configuration", "übertragen"
+ * ↔ "Übertragung", but not "Netzwerk" ↔ "Netzteil"). Filler words and single
+ * letters never count.
+ * @param {string} answer - the card's correct answer
+ * @param {string} userAnswer - what the student typed
+ * @returns {Array<{text: string, hit: boolean}>} segments that join back to `answer`
+ */
+function answerMatchSegments(answer, userAnswer) {
+    const typedSet = new Set(
+        [...String(userAnswer ?? '').matchAll(ANSWER_WORD)]
+            .map((m) => foldWord(m[0]))
+            .filter((w) => isCountedWord(w))
+    );
+    const isHit = (w) => isCountedWord(w) && [...typedSet].some((u) => u === w || sharesStem(u, w));
+    const text = String(answer ?? '');
+    const segments = [];
+    let last = 0;
+    for (const m of text.matchAll(ANSWER_WORD)) {
+        if (!isHit(foldWord(m[0]))) continue;
+        if (m.index > last) segments.push({ text: text.slice(last, m.index), hit: false });
+        segments.push({ text: m[0], hit: true });
+        last = m.index + m[0].length;
+    }
+    if (last < text.length) segments.push({ text: text.slice(last), hit: false });
+    return mergeAdjacentHits(segments);
+}
+
+/**
+ * "4 GB RAM" reads as one phrase: join hits separated only by spaces.
+ * @param {Array<{text: string, hit: boolean}>} segments
+ * @returns {Array<{text: string, hit: boolean}>}
+ */
+function mergeAdjacentHits(segments) {
+    const merged = [];
+    for (const seg of segments) {
+        const prev = merged.at(-1);
+        const beforePrev = merged.at(-2);
+        if (seg.hit && prev && !prev.hit && /^ +$/.test(prev.text) && beforePrev?.hit) {
+            merged.pop();
+            beforePrev.text += prev.text + seg.text;
+        } else if (seg.hit && prev?.hit) {
+            prev.text += seg.text;
+        } else {
+            merged.push({ ...seg });
+        }
+    }
+    return merged;
+}
+
+/**
+ * Show the correct answer with the words the student already had marked.
+ * @param {string} answer
+ * @param {string} userAnswer
+ */
+function renderAnswerWithHits(answer, userAnswer) {
+    const segments = answerMatchSegments(answer, userAnswer);
+    if (!segments.some((seg) => seg.hit)) return;
+    answerText.replaceChildren(
+        ...segments.map((seg) => {
+            if (!seg.hit) return document.createTextNode(seg.text);
+            const mark = document.createElement('mark');
+            mark.className = 'answer-hit';
+            mark.title = 'Steht auch in deiner Antwort';
+            mark.textContent = seg.text;
+            return mark;
+        })
+    );
 }
 
 /**
@@ -4910,7 +5040,7 @@ function restartQuiz() {
     // Don't allow restart from SR buckets mode
     const isFromSRBuckets = activeDecks.length === 1 && activeDecks[0] === 'SR Buckets';
     if (isFromSRBuckets) {
-        showError('Bitte nutze "Zurück zur SR-Verwaltung" um neue Buckets auszuwählen.');
+        showError('Bitte nutze „Zurück zur Kartenverwaltung“, um andere Stufen auszuwählen.');
         return;
     }
 
@@ -4965,7 +5095,7 @@ function resetAndUpload() {
     // Don't allow upload from SR buckets mode
     const isFromSRBuckets = activeDecks.length === 1 && activeDecks[0] === 'SR Buckets';
     if (isFromSRBuckets) {
-        showError('Bitte nutze "Zurück zur SR-Verwaltung" um neue Buckets auszuwählen.');
+        showError('Bitte nutze „Zurück zur Kartenverwaltung“, um andere Stufen auszuwählen.');
         return;
     }
 
@@ -5275,6 +5405,18 @@ function loadSpacedRepetitionData() {
 function handleDeckSearch(event) {
     const searchTerm = event.target.value.trim();
     displaySavedDecks(searchTerm);
+}
+
+/**
+ * Clear informational toasts (errors stay): a new screen takes the stage, and
+ * an import message must not hang over the first question.
+ */
+function dismissToasts() {
+    for (const el of document.querySelectorAll(
+        '#toast-region .message-popup:not(.message-popup--error)'
+    )) {
+        el.remove();
+    }
 }
 
 /**
@@ -5804,7 +5946,7 @@ function openBookViewForBucket(step) {
     }
 
     if (cardsInBucket.length === 0) {
-        showMessage('Keine Karten in diesem Bucket gefunden.');
+        showMessage('Keine Karten in dieser Stufe gefunden.');
         return;
     }
 
@@ -5834,7 +5976,15 @@ function buildLadderDistributionHTML(deckNames) {
     // old red→green ramp collapsed for red-green colour-blind students: the
     // first and last stage (the difference that matters) looked alike.
     const colors = ['#d73027', '#fc8d59', '#fee090', '#91bfdb', '#4575b4'];
-    const labels = ['Wackelig (Minuten)', 'Im Aufbau (Stunden)', '1 Tag', '3 Tage', '7 Tage'];
+    // Named by the same stage numbers as the "Karten verwalten" tab (whose
+    // names differ per stage: step 1 there is "Frisch gelernt", not "Wackelig").
+    const labels = [
+        'Stufe 1–2 (Minuten)',
+        'Stufe 3–4 (Stunden)',
+        'Stufe 5 (1 Tag)',
+        'Stufe 6 (3 Tage)',
+        'Stufe 7 (7 Tage)',
+    ];
     const counts = [0, 0, 0, 0, 0];
     let attempts = 0;
     let scoreSum = 0;
@@ -5985,15 +6135,14 @@ function displaySpacedRepetitionBuckets() {
         const isChecked = selectedSteps.has(step) ? 'checked' : '';
 
         html += `
-            <div class="sr-bucket ${isSelected}" data-step="${step}">
+            <div class="sr-bucket ${isSelected}" data-step="${step}" data-count="${cards.length}">
                 <div class="sr-bucket-header" data-action="toggle-expand" data-step="${step}">
-                    <div class="sr-bucket-info">
-                        <input type="checkbox" class="sr-bucket-checkbox" data-action="toggle-select" data-step="${step}" ${isChecked}>
+                    <input type="checkbox" class="sr-bucket-checkbox" data-action="toggle-select" data-step="${step}" ${isChecked} aria-label="${stepLabel} zum Üben auswählen">
+                    <button type="button" class="sr-bucket-toggle" data-action="toggle-expand" data-step="${step}" aria-expanded="${isExpanded ? 'true' : 'false'}" aria-controls="bucket-cards-${step}">
                         <span class="sr-bucket-title">${stepLabel}</span>
-                        <span class="sr-bucket-count">${cards.length} Karten${overdueCount > 0 ? ` (${overdueCount} fällig)` : ''}</span>
-                    </div>
-                    <button class="sr-bucket-book-btn" data-action="book" data-step="${step}" title="Buchansicht">📖</button>
-                    <span class="sr-bucket-interval">${SR_STEP_LABELS[step] ?? ''}</span>
+                        <span class="sr-bucket-sub"><span class="sr-bucket-count">${formatCardCount(cards.length)}${overdueCount > 0 ? ` · ${overdueCount} fällig` : ''}</span> <span class="sr-bucket-interval">Wiederholung nach ${SR_STEP_LABELS[step] ?? '–'}</span></span>
+                    </button>
+                    <button type="button" class="sr-bucket-book-btn" data-action="book" data-step="${step}" title="Im Lesemodus ansehen" aria-label="${stepLabel} im Lesemodus ansehen">📖</button>
                 </div>
                 <div class="sr-bucket-cards ${isExpanded}" id="bucket-cards-${step}">
                     ${cards
@@ -6009,7 +6158,7 @@ function displaySpacedRepetitionBuckets() {
                                     <button class="sr-move-btn" data-action="move" data-step="${step}" title="Zu anderer Stufe verschieben">
                                         Verschieben
                                     </button>
-                                    <button class="sr-delete-btn" data-action="delete" title="Aus SR-System entfernen">
+                                    <button class="sr-delete-btn" data-action="delete" title="Aus der Wiederholung entfernen (der Lernfortschritt dieser Karte wird gelöscht)">
                                         Löschen
                                     </button>
                                 </div>
@@ -6025,6 +6174,15 @@ function displaySpacedRepetitionBuckets() {
 
     srBucketsDisplay.innerHTML = html;
     updateStartBucketButton();
+}
+
+/**
+ * "1 Karte" / "5 Karten".
+ * @param {number} n
+ * @returns {string}
+ */
+function formatCardCount(n) {
+    return n === 1 ? '1 Karte' : `${n} Karten`;
 }
 
 /**
@@ -6050,7 +6208,10 @@ function getStepLabel(step) {
  */
 function toggleBucketExpansion(step) {
     const cardsContainer = document.querySelector(`#bucket-cards-${step}`);
-    cardsContainer.classList.toggle('expanded');
+    const expanded = cardsContainer.classList.toggle('expanded');
+    document
+        .querySelector(`.sr-bucket-toggle[data-step="${step}"]`)
+        ?.setAttribute('aria-expanded', String(expanded));
 }
 
 /**
@@ -6067,13 +6228,11 @@ function toggleBucketSelection(step) {
  * Update the state of the start button based on selected buckets
  */
 function updateStartBucketButton() {
-    const selectedCount = document.querySelectorAll('.sr-bucket.selected').length;
-    startSelectedBucketsBtn.disabled = selectedCount === 0;
-    const bucketSuffix = selectedCount === 1 ? '' : 's';
+    const selected = [...document.querySelectorAll('.sr-bucket.selected')];
+    const cardCount = selected.reduce((n, el) => n + Number(el.dataset.count || 0), 0);
+    startSelectedBucketsBtn.disabled = cardCount === 0;
     startSelectedBucketsBtn.textContent =
-        selectedCount > 0
-            ? `Mit ${selectedCount} Bucket${bucketSuffix} üben`
-            : 'Mit ausgewählten Buckets üben';
+        cardCount > 0 ? `${formatCardCount(cardCount)} üben` : 'Ausgewählte Stufen üben';
 }
 
 /**
@@ -6232,16 +6391,19 @@ async function moveSRCard(cardKey, currentStep) {
  * @param cardKey
  */
 async function deleteSRCard(cardKey) {
-    const ok = await uiConfirm('Diese Karte aus dem Spaced Repetition System entfernen?', {
-        confirmText: 'Entfernen',
-        danger: true,
-    });
+    const ok = await uiConfirm(
+        'Diese Karte aus der Wiederholung entfernen? Ihr Lernfortschritt wird gelöscht.',
+        {
+            confirmText: 'Entfernen',
+            danger: true,
+        }
+    );
     if (!ok) return;
 
     delete spacedRepetitionData[cardKey];
     saveSpacedRepetitionData();
     displaySpacedRepetitionBuckets();
-    showMessage('Karte aus SR-System entfernt.');
+    showMessage('Karte aus der Wiederholung entfernt.');
 }
 
 /**
@@ -6579,7 +6741,9 @@ function renderFeedbackGamification(knowledge) {
     }
 
     const parts = [];
-    if (knowledge.total > 0) {
+    // From 0 the gain only repeats the Lernstand line above, so it shows from
+    // the second session on.
+    if (knowledge.total > 0 && sessionStartLernstand > 0) {
         const delta = knowledge.percent - sessionStartLernstand;
         if (delta > 0) {
             parts.push(
@@ -6594,10 +6758,14 @@ function renderFeedbackGamification(knowledge) {
 
     const totalAnswered = correctCount + incorrectCount;
     const pct = totalAnswered > 0 ? Math.round((correctCount / totalAnswered) * 100) : 0;
-    if (pct > achievements.bestSessionScore) {
+    const previousBest = achievements.bestSessionScore;
+    if (pct > previousBest) {
         achievements.bestSessionScore = pct;
         saveProgressData();
-        parts.push(`<span class="gam-badge gam-best">Neue Bestleistung: ${pct} %</span>`);
+        // The first round ever beats nothing; only a real record is news.
+        if (previousBest > 0) {
+            parts.push(`<span class="gam-badge gam-best">Neue Bestleistung: ${pct} %</span>`);
+        }
     }
 
     // The bigger shows are for real milestones: a mastered deck, or a strong
@@ -6790,7 +6958,7 @@ function renderProgressView() {
         <section class="progress-section"><h4>Selbsteinschätzung</h4>${progressReliability(cal)}</section>
         <section class="progress-section"><h4>Abdeckung &amp; Beherrschung</h4>${progressCoverage(scopeDecks)}</section>
         <section class="progress-section"><h4>Wiederholungs-Stufen</h4>${buildLadderDistributionHTML(srScope)}</section>
-        <section class="progress-section"><h4>${isAll ? 'Schwachstellen' : 'Schwachstellen je Lerneinheit'}</h4>${progressWeakSpots(scopeDecks)}</section>
+        <section class="progress-section"><h4>Schwachstellen</h4>${progressWeakSpots(scopeDecks)}</section>
         <section class="progress-section"><h4>Erfolge</h4>${progressAchievements(cal, srScope)}</section>
         <section class="progress-section"><h4>Sitzungen</h4>${progressSessions(srScope)}</section>
     `;
@@ -6819,7 +6987,7 @@ function renderProgressView() {
     const studyWeakest = content.querySelector('#study-weakest');
     if (studyWeakest) {
         studyWeakest.addEventListener('click', () => {
-            startDecksByNames(JSON.parse(decodeURIComponent(studyWeakest.dataset.decks)));
+            startCategoryFocus(JSON.parse(decodeURIComponent(studyWeakest.dataset.groups)));
         });
     }
 }
@@ -6957,32 +7125,102 @@ function progressCoverage(allDecks) {
 }
 
 /**
- * Weakest decks first, with a one-tap drill-in for the lowest three.
- * @param allDecks
+ * Lernstand per category across the given decks — the level a student can act
+ * on ("Subnetting sitzt noch nicht"), where one library deck is often the only
+ * deck they have. Categories merge across the files of one topic (a library
+ * archive) but not across topics; uncategorised cards form one group per topic.
+ * Unattempted cards count as 0, as in computeDeckKnowledge.
+ * @param {string[]} deckNames
+ * @returns {Array<{topic: string, cat: string, decks: string[], percent: number, attempted: number, total: number}>}
+ */
+function computeCategoryKnowledge(deckNames) {
+    const groups = new Map();
+    for (const deckName of deckNames) {
+        const deck = savedDecks[deckName];
+        const topic = (deck?.meta?.name && String(deck.meta.name).trim()) || deckName;
+        for (const card of deck?.cards || []) {
+            if (!isPoolOnlyIdentify(card)) addToCategoryGroups(groups, topic, deckName, card);
+        }
+    }
+    return [...groups.values()].map((g) => ({
+        topic: g.topic,
+        cat: g.cat,
+        decks: [...g.decks],
+        percent: g.total > 0 ? Math.round((g.sum / g.total) * 100) : 0,
+        attempted: g.attempted,
+        total: g.total,
+    }));
+}
+
+/**
+ * The categories a card is filed under; uncategorised cards share one.
+ * @param {object} card
+ * @returns {string[]}
+ */
+function cardCategories(card) {
+    return card.categories?.length > 0 ? card.categories : ['__uncategorized__'];
+}
+
+/**
+ * Count one card into each of its category groups (see computeCategoryKnowledge).
+ * @param {Map<string, object>} groups
+ * @param {string} topic
+ * @param {string} deckName
+ * @param {object} card
+ */
+function addToCategoryGroups(groups, topic, deckName, card) {
+    const data = spacedRepetitionData[`${deckName}|||${card.question}`];
+    const tried = Boolean(data?.history?.length);
+    for (const cat of cardCategories(card)) {
+        const key = `${topic}\u0000${cat}`;
+        let g = groups.get(key);
+        if (!g) {
+            g = { topic, cat, decks: new Set(), sum: 0, attempted: 0, total: 0 };
+            groups.set(key, g);
+        }
+        g.decks.add(deckName);
+        g.total++;
+        if (tried) {
+            g.attempted++;
+            g.sum += cardKnowledge(data);
+        }
+    }
+}
+
+/**
+ * Weakest practised categories first, with a one-tap drill-in for the lowest
+ * three that are still below the mastery target.
+ * @param {string[]} allDecks
  */
 function progressWeakSpots(allDecks) {
-    const arr = allDecks
-        .map((d) => ({ d, k: computeDeckKnowledge([d]) }))
-        .filter((x) => x.k.attempted > 0)
-        .sort((a, b) => a.k.percent - b.k.percent)
-        .slice(0, 8);
-    if (arr.length === 0) return '<p class="progress-empty">Noch keine geübten Karten.</p>';
+    const groups = computeCategoryKnowledge(allDecks).filter((g) => g.attempted > 0);
+    if (groups.length === 0) return '<p class="progress-empty">Noch keine geübten Karten.</p>';
+    const manyTopics = new Set(groups.map((g) => g.topic)).size > 1;
+    const label = (g) => {
+        if (g.cat === '__uncategorized__') return manyTopics ? g.topic : 'Allgemein';
+        return manyTopics ? `${g.topic} · ${g.cat}` : g.cat;
+    };
+    const arr = groups.sort((a, b) => a.percent - b.percent).slice(0, 8);
     const rows = arr
         .map(
-            (x) => `<div class="weakspot-row">
-            <span class="weakspot-name">${sanitizeHTML(deckLabel(x.d))}</span>
-            <span class="weakspot-bar"><span class="weakspot-fill weakspot-${levelClass(x.k.percent, masteryTargetPercent([x.d]))}" style="width:${x.k.percent}%"></span></span>
-            <span class="weakspot-val">${x.k.percent} %</span>
+            (g) => `<div class="weakspot-row">
+            <span class="weakspot-name">${sanitizeHTML(label(g))}</span>
+            <span class="weakspot-bar"><span class="weakspot-fill weakspot-${levelClass(g.percent, masteryTargetPercent(g.decks))}" style="width:${g.percent}%"></span></span>
+            <span class="weakspot-val">${g.percent} %</span>
         </div>`
         )
         .join('');
     const weakest = arr
-        .filter((x) => x.k.percent < masteryTargetPercent([x.d]))
+        .filter((g) => g.percent < masteryTargetPercent(g.decks))
         .slice(0, 3)
-        .map((x) => x.d);
+        .map((g) => ({ decks: g.decks, cat: g.cat }));
+    // When the drill-in covers every listed category, "the weakest" is moot.
+    let btnLabel = `Die ${weakest.length} schwächsten Kategorien üben`;
+    if (weakest.length === groups.length) btnLabel = 'Diese Karten üben';
+    else if (weakest.length === 1) btnLabel = 'Schwächste Kategorie üben';
     const btn =
         weakest.length > 0
-            ? `<button class="btn btn-primary" id="study-weakest" data-decks="${encodeURIComponent(JSON.stringify(weakest))}">Schwächste ${weakest.length} üben</button>`
+            ? `<button class="btn btn-primary" id="study-weakest" data-groups="${encodeURIComponent(JSON.stringify(weakest))}">${btnLabel}</button>`
             : '';
     return `<div class="weakspot-list">${rows}</div>${btn}`;
 }
@@ -7140,28 +7378,33 @@ function buildSparkline(values) {
 }
 
 /**
- * Start a focused study session on the given decks (used by the weak-spot
- * drill-in). Builds the merged card set directly, bypassing the checkbox UI.
- * @param {string[]} deckNames
+ * Start a focused session on the cards of the given categories (the weak-spot
+ * drill-in). A card in two of them is asked once.
+ * @param {Array<{decks: string[], cat: string}>} groups
  */
-function startDecksByNames(deckNames) {
-    const valid = deckNames.filter((d) => savedDecks[d]?.cards?.length);
-    if (valid.length === 0) return;
-    studyMode = 'spaced-repetition';
-    activeDecks = valid;
-    updateAppTitle(valid);
-    let merged = [];
-    deckStats = {};
-    for (const deckName of valid) {
-        // Skip pool-only identify cards (no photo): they're distractors, not
-        // questions, so they don't belong in the rotation or the deck total.
-        const withSource = savedDecks[deckName].cards
-            .filter((card) => !isPoolOnlyIdentify(card))
-            .map((card) => ({ ...card, sourceDeck: deckName }));
-        merged = [...merged, ...withSource];
-        deckStats[deckName] = { correct: 0, incorrect: 0, total: withSource.length };
+function startCategoryFocus(groups) {
+    const picked = new Map();
+    for (const { decks, cat } of groups) {
+        for (const deckName of decks) {
+            const inCategory = (savedDecks[deckName]?.cards || []).filter(
+                (card) => !isPoolOnlyIdentify(card) && cardCategories(card).includes(cat)
+            );
+            for (const card of inCategory) {
+                const withSource = { ...card, sourceDeck: deckName };
+                picked.set(getCardKey(withSource), withSource);
+            }
+        }
     }
+    const merged = [...picked.values()];
     if (merged.length === 0) return;
+    studyMode = 'spaced-repetition';
+    activeDecks = [...new Set(merged.map((c) => c.sourceDeck))];
+    updateAppTitle(activeDecks);
+    deckStats = {};
+    for (const deckName of activeDecks) {
+        const total = merged.filter((c) => c.sourceDeck === deckName).length;
+        deckStats[deckName] = { correct: 0, incorrect: 0, total };
+    }
     closeProgressView();
     initializeQuiz(merged);
 }
@@ -7175,6 +7418,7 @@ if (typeof module !== 'undefined' && module.exports) {
         cardKnowledge,
         scoreMultipleChoice,
         normalizeAnswer,
+        answerMatchSegments,
         dedupeCardsByQuestion,
         validateCards,
         cardType,

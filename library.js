@@ -502,6 +502,8 @@ function buildDeckCard(deck, status) {
     card.className = 'deck-card';
     card.href = `library.html?deck=${encodeURIComponent(deck.id)}`;
     card.addEventListener('click', (e) => {
+        // Modified clicks (new tab/window) behave like normal links.
+        if (e.ctrlKey || e.metaKey || e.shiftKey || e.button !== 0) return;
         e.preventDefault();
         history.pushState({}, '', card.href);
         routeFromURL();
