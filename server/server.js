@@ -212,6 +212,8 @@ function broadcastMusicTally(room) {
  */
 function decideMusicWinner(room) {
     const tally = tallyMusicVotes(room);
+    // Nobody voted: the music the host picked for the lobby carries on.
+    if (Object.values(tally).every((n) => n === 0)) return room.lobbyMusic || LOBBY_MUSIC_DEFAULT;
     const themeMax = Math.max(...MUSIC_THEME_IDS.map((t) => tally[t]));
     // 'none' wins outright if it has at least as many votes as the leading theme.
     if (tally.none >= themeMax) return 'none';
@@ -1394,7 +1396,8 @@ function handleCastMusicVote(ws, msg) {
 }
 
 /**
- * Host locks the vote at quiz start; tie goes to 'none'.
+ * Host locks the vote at quiz start; tie goes to 'none', no votes keep the
+ * lobby music.
  * @param ws
  */
 function handleLockMusicVote(ws) {

@@ -2,7 +2,8 @@
 
 /**
  * Multiplayer quiz (quiz.html): lobby censoring, a relay restart in the middle
- * of a question, the double-click guard, and the final screen after a reload.
+ * of a question, the double-click guard, the final screen after a reload, and
+ * starting a second game.
  */
 
 const path = require('node:path');
@@ -19,14 +20,23 @@ async function hostQuiz(device) {
     const host = await device('host');
     await host.goto('/quiz.html');
     await host.click('#host-btn');
+    const code = await openRoom(host);
+    return { host, code };
+}
+
+/**
+ * Import the test deck on the host setup and open a room.
+ * @param {import('@playwright/test').Page} host
+ * @returns {Promise<string>} the room code
+ */
+async function openRoom(host) {
     await host.setInputFiles('#json-file', DECK);
     await expect(host.locator('#file-status')).toContainText('Importiert: 2 MC-Fragen');
     await host.fill('#question-duration-min', '15');
     await host.fill('#question-duration-max', '20');
     await host.click('#start-quiz-btn');
     await expect(host.locator('#room-id')).toHaveText(/^\S{2} \S{2}$/);
-    const code = (await host.locator('#room-id').textContent()).replaceAll(' ', '');
-    return { host, code };
+    return (await host.locator('#room-id').textContent()).replaceAll(' ', '');
 }
 
 /**
@@ -139,5 +149,28 @@ test('a relay restart mid-question resumes the round; double click and reload ar
         await expect(mia.locator('#player-leaderboard-container')).toContainText(
             'Endgültige Rangliste'
         );
+    });
+
+    await test.step('host and players start a second game', async () => {
+        await expect(host.locator('#host-results')).toBeVisible();
+        await expect(host.locator('#leaderboard')).toContainText('Mia');
+        // Mia leaves by herself; Ben is sent back when the host ends the room.
+        await mia.click('#play-again-btn');
+        await Promise.all([host.waitForEvent('load'), host.click('#new-quiz-btn')]);
+        await expect(ben.locator('#player-btn')).toBeVisible();
+        const code2 = await openRoom(host);
+        expect(code2).not.toBe(code);
+        for (const [page, name] of [
+            [mia, 'Mia'],
+            [ben, 'Ben'],
+        ]) {
+            await page.click('#player-btn');
+            await page.fill('#room-code-input', code2);
+            await page.fill('#player-name-input', name);
+            await page.click('#join-btn');
+            await expect(page.locator('#waiting-message')).toContainText('Du bist drin');
+        }
+        await expect(host.locator('#players-list')).toContainText('Mia');
+        await expect(host.locator('#players-list')).toContainText('Ben');
     });
 });

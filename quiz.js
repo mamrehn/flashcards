@@ -64,9 +64,13 @@ function showView(viewToShowId) {
     if (viewElement) viewElement.classList.add('active');
     else console.error('View not found:', viewToShowId);
 
-    // Hide role selection buttons once a role is chosen
+    // Hide role selection buttons once a role is chosen, and bring them back
+    // on the way out (a player's "Nochmal spielen", a terminated quiz) —
+    // otherwise the page is left blank.
     if (viewToShowId === 'host-view' || viewToShowId === 'player-view') {
         document.querySelector('#role-selection').classList.add('hidden');
+    } else if (viewToShowId === 'role-selection') {
+        document.querySelector('#role-selection').classList.remove('hidden');
     }
 
     // The privacy-notice link is only relevant on the landing screen. Once a
@@ -469,6 +473,7 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     // Determine initial view. Priority order:
+    //   0. Reload from "Neues Quiz hosten" → straight to the host setup.
     //   1. ?host=ROOMCODE URL param that points at a *different* room than
     //      the saved session → respect the URL, treat as a fresh join. A
     //      shared invite link is an explicit "join this room" intent that
@@ -492,8 +497,18 @@ document.addEventListener('DOMContentLoaded', () => {
         savedSession &&
         savedSession.role === 'player' &&
         hostIdFromUrl !== savedRoomId;
+    let restartAsHost = false;
+    try {
+        restartAsHost = sessionStorage.getItem(HOST_RESTART_KEY) === '1';
+        sessionStorage.removeItem(HOST_RESTART_KEY);
+    } catch {
+        /* private mode */
+    }
 
-    if (urlOverridesSession) {
+    if (restartAsHost) {
+        showView('host-view');
+        initializeHostFeatures();
+    } else if (urlOverridesSession) {
         // Drop the stale player session so the host_reconnected-style
         // auto-reconnect logic in initPlayerConnection doesn't pick it up
         // by per-room key, and so the user can pick a fresh name.
@@ -1008,19 +1023,12 @@ function createMusicEngine() {
          */
         playStinger(track, followLoop, onEnd) {
             const isUniversal = track === 'final';
-            if (!isUniversal && theme === 'none') {
-                // No audio path — but still fire onEnd so visual transitions
-                // proceed even when the host picked "Keine Musik".
-                pendingOnEnd = onEnd || null;
-                pendingLoop = null;
-                stingerStartedAt = Date.now();
-                flushPending();
-                return;
-            }
-            if (!isUniversal && !HOST_AUDIO_STINGERS.has(track)) return;
+            const silent = !isUniversal && theme === 'none';
+            if (!isUniversal && !silent && !HOST_AUDIO_STINGERS.has(track)) return;
             // Quick fade-out on whichever loop is playing so the stinger
             // doesn't fight it. 250 ms is short enough to feel like a
-            // hand-off rather than a pause.
+            // hand-off rather than a pause. Also when silent: the lobby loop
+            // is still running when the vote locks to "Keine Musik".
             for (const a of loops) {
                 detachWrap(a);
                 if (a.paused) {
@@ -1031,6 +1039,15 @@ function createMusicEngine() {
                 }
             }
             activeTrack = null;
+            if (silent) {
+                // No audio path — but still fire onEnd so visual transitions
+                // proceed even when the host picked "Keine Musik".
+                pendingOnEnd = onEnd || null;
+                pendingLoop = null;
+                stingerStartedAt = Date.now();
+                flushPending();
+                return;
+            }
             stinger.src = isUniversal ? HOST_AUDIO_FINAL_PATH : audioFilePath(theme, track);
             stinger.currentTime = 0;
             stinger.volume = STINGER_VOLUME;
@@ -1081,6 +1098,36 @@ let hostMusicWinner = null;
 // Lobby music is host-controlled (separate from the in-game vote). The teacher
 // can switch themes in class to glimpse each, including "Keine".
 let hostLobbyMusicTheme = LOBBY_HOST_MUSIC_DEFAULT;
+// Pending wait of lockHostMusicVote(): {promise, resolve} until the verdict.
+let hostMusicLockWait = null;
+// Upper bound for that wait; on a slower link the game starts in the lobby theme.
+const HOST_MUSIC_LOCK_WAIT_MS = 1000;
+
+/**
+ * Locks the music vote and resolves once the server has announced the
+ * winner, so the first stinger already plays in the winning theme (or stays
+ * silent). Concurrent calls (a double click) share one wait.
+ * @returns {Promise<void>}
+ */
+function lockHostMusicVote() {
+    if (hostMusicLocked || !hostWs || hostWs.readyState !== WebSocket.OPEN) {
+        return Promise.resolve();
+    }
+    if (!hostMusicLockWait) {
+        let resolve;
+        const promise = new Promise((r) => (resolve = r));
+        hostMusicLockWait = { promise, resolve };
+        setTimeout(settleHostMusicLock, HOST_MUSIC_LOCK_WAIT_MS);
+        hostWs.send(JSON.stringify({ type: 'lock_music_vote' }));
+    }
+    return hostMusicLockWait.promise;
+}
+
+function settleHostMusicLock() {
+    if (!hostMusicLockWait) return;
+    hostMusicLockWait.resolve();
+    hostMusicLockWait = null;
+}
 
 /**
  * Returns an array of non-host players from quizState.
@@ -1625,11 +1672,9 @@ async function initializeHostFeatures(reconnectInfo) {
                 );
                 return;
             }
-            // Lock the music vote at start. The server replies with the
-            // winning theme; the dispatch handler wires the engine accordingly.
-            if (hostWs && hostWs.readyState === WebSocket.OPEN) {
-                hostWs.send(JSON.stringify({ type: 'lock_music_vote' }));
-            }
+            // Lock the music vote at start. The dispatch handler wires the
+            // engine to the winning theme before the first stinger plays.
+            await lockHostMusicVote();
             // A second click while the first question is being set up
             // would restart it.
             if (quizState.isQuestionActive) return;
@@ -1670,13 +1715,34 @@ async function initializeHostFeatures(reconnectInfo) {
             showFinalResults();
         });
 
-        // Event listener for starting a new quiz
-        newQuizBtn.addEventListener('click', async () => {
+        // Event listener for starting a new quiz. Ends the room, then reloads
+        // into a fresh host setup: every host listener closes over this
+        // game's quizState, and re-initialising in place left the old
+        // handlers bound next to the new ones (each button fired twice) and
+        // kept the finished game's locked music vote.
+        newQuizBtn.addEventListener('click', () => {
+            newQuizBtn.disabled = true;
             if (hostMusicEngine) hostMusicEngine.stop();
-            // Terminate room on server and close WebSocket
             clearActiveSession();
+            let restarted = false;
+            const restart = () => {
+                if (restarted) return;
+                restarted = true;
+                try {
+                    sessionStorage.setItem(HOST_RESTART_KEY, '1');
+                } catch {
+                    /* private mode: the reload lands on the role selection */
+                }
+                globalThis.location.reload();
+            };
+            // The page must not go away before the terminate frame has left,
+            // so wait for the socket to close — but not forever.
+            setTimeout(restart, 1500);
             if (hostWs && hostWs.readyState === WebSocket.OPEN) {
+                hostSuppressReconnect = true;
+                hostWs.addEventListener('close', restart, { once: true });
                 hostWs.send(JSON.stringify({ type: 'terminate' }));
+                hostWs.close();
             } else if (hostRoomId && hostSessionId) {
                 // Host is disconnected — open one-shot connection to terminate
                 try {
@@ -1701,38 +1767,14 @@ async function initializeHostFeatures(reconnectInfo) {
                         { once: true }
                     );
                     tempWs.addEventListener('error', () => tempWs.close());
+                    tempWs.addEventListener('close', restart, { once: true });
                 } catch {
                     // Server's 5-minute timeout will handle cleanup
+                    restart();
                 }
+            } else {
+                restart();
             }
-            if (hostWs) {
-                hostSuppressReconnect = true;
-                hostWs.close();
-                hostWs = null;
-            }
-
-            hostRoomId = null;
-            hostSessionId = null;
-            hostGlobalQuizState = null;
-            hostPendingQuestion = null;
-            hostPendingResults = null;
-            // Reset isHostInitialized so the next initializeHostFeatures()
-            // call re-attaches listeners with closures over the fresh
-            // hostGlobalQuizState. The old listeners stay bound to the old
-            // state, but their mutations are invisible (the old state has
-            // no reachable references outside the dead closures, and
-            // module-level helpers like getNonHostPlayers() read the new
-            // hostGlobalQuizState).
-            isHostInitialized = false;
-            fileStatus.textContent = '';
-            if (jsonFileInput) jsonFileInput.value = '';
-            hostResults.classList.add('hidden');
-            hostQuestionDisplay.classList.add('hidden');
-            qrContainer.classList.add('hidden');
-            hostSetup.classList.remove('hidden');
-            document.querySelector('#role-selection').classList.remove('hidden');
-            if (hostViewHeading) hostViewHeading.classList.remove('hidden');
-            initializeHostFeatures();
         });
 
         // Clean up on window unload
@@ -2246,7 +2288,10 @@ async function initializeHostFeatures(reconnectInfo) {
                         hostMusicEngine.playLoop(prevTrack);
                     }
                 }
-                if (hostMusicLocked) renderHostLobbyMusicOptions();
+                if (hostMusicLocked) {
+                    settleHostMusicLock();
+                    renderHostLobbyMusicOptions();
+                }
                 break;
             }
 
@@ -3648,6 +3693,9 @@ function getPlayerSession(roomId) {
 
 // --- Active Session Helpers (for auto-reconnect on page load) ---
 const ACTIVE_SESSION_KEY = 'quiz_active_session';
+// One-shot flag (sessionStorage, this tab only): "Neues Quiz hosten" reloads
+// the page and the reload opens the host setup directly.
+const HOST_RESTART_KEY = 'quiz_host_restart';
 
 /**
  * Saves the active session info so the user can auto-reconnect after page refresh.

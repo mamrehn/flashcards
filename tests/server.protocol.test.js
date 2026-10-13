@@ -308,4 +308,25 @@ test('relay server protocol', { skip }, async (t) => {
         assert.equal(replay.isReplay, true);
         assert.equal(replay.questionIndex, 4);
     });
+
+    await t.test('music vote: no votes keep the lobby music, a tie means silence', async () => {
+        const quiet = await hostRoom(url);
+        quiet.host.send({ type: 'set_lobby_music', theme: 'cinematic' });
+        await joinRoom(url, quiet.roomId);
+        quiet.host.send({ type: 'lock_music_vote' });
+        const kept = await quiet.host.next('music_vote_update');
+        assert.equal(kept.locked, true);
+        assert.equal(kept.winner, 'cinematic');
+
+        const tied = await hostRoom(url);
+        tied.host.send({ type: 'set_lobby_music', theme: 'cinematic' });
+        for (const choice of ['arcade', 'lofi']) {
+            const { player } = await joinRoom(url, tied.roomId);
+            player.send({ type: 'cast_music_vote', choice });
+            await tied.host.next('music_vote_update');
+        }
+        tied.host.send({ type: 'lock_music_vote' });
+        const tie = await tied.host.next('music_vote_update');
+        assert.equal(tie.winner, 'none');
+    });
 });
