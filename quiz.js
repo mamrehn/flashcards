@@ -296,11 +296,15 @@ function generateRandomPlayerName(taken) {
 }
 
 // Themes mirror audio/themes/<id>/ folders. Keep ids in sync with the server.
+// Set `voteDisabled: true` on a theme while its clips are still missing:
+// players then cannot vote for it (the button renders disabled) and its
+// audio is not prefetched.
 const LOBBY_MUSIC_THEMES = [
     { id: 'arcade', label: 'Arcade', icon: '🕹️', tagline: 'Schnell & spielerisch' },
     { id: 'cinematic', label: 'Cinematic', icon: '🎬', tagline: 'Episch & dramatisch' },
     { id: 'modern_minimal', label: 'Minimal', icon: '📱', tagline: 'Klar & ruhig' },
     { id: 'classical', label: 'Klassik', icon: '🎻', tagline: 'Elegant & akademisch' },
+    { id: 'lofi', label: 'LoFi', icon: '🎧', tagline: 'Beats zum Lernen' },
 ];
 const LOBBY_HOST_MUSIC_DEFAULT = 'modern_minimal';
 const LOBBY_HOST_MUSIC_STORAGE_KEY = 'quiz_host_lobby_music';
@@ -309,6 +313,7 @@ const LOBBY_MUSIC_THEME_LABELS = {
     cinematic: 'Cinematic',
     modern_minimal: 'Minimal',
     classical: 'Klassik',
+    lofi: 'LoFi',
     none: 'Keine Musik',
 };
 const LOBBY_MUSIC_VOTE_OPTIONS = [
@@ -316,9 +321,9 @@ const LOBBY_MUSIC_VOTE_OPTIONS = [
     { id: 'none', label: 'Keine Musik', icon: '🔇', tagline: 'Stille fürs Lernen' },
 ];
 const LOBBY_MUSIC_VOTE_IDS = new Set(LOBBY_MUSIC_VOTE_OPTIONS.map((o) => o.id));
-// Themes that exist as host-side audio but aren't fully implemented yet —
-// players cannot vote for these (the buttons render disabled).
-const LOBBY_MUSIC_VOTE_DISABLED = new Set(['cinematic', 'classical']);
+const LOBBY_MUSIC_VOTE_DISABLED = new Set(
+    LOBBY_MUSIC_THEMES.filter((t) => t.voteDisabled).map((t) => t.id)
+);
 
 // Host-side audio split into seamless loops vs. one-shot stingers.
 // See audio/themes/README.md for the full spec.
@@ -836,10 +841,18 @@ function createMusicEngine() {
         fadeIntervals.set(audio, id);
     }
 
+    // `timeupdate` fires only every ~250 ms, so a wrap started by it alone
+    // lands up to that late (an audible hiccup at the loop seam). Inside this
+    // window before the wrap point a timer takes over for an on-time restart;
+    // `timeupdate` stays the fallback, since timers are throttled in
+    // background tabs.
+    const WRAP_TIMER_WINDOW_S = 0.6;
+
     function detachWrap(audio) {
         const h = wrapHandlers.get(audio);
         if (h) {
-            audio.removeEventListener('timeupdate', h);
+            audio.removeEventListener('timeupdate', h.check);
+            clearTimeout(h.timer);
             wrapHandlers.delete(audio);
         }
     }
@@ -847,23 +860,33 @@ function createMusicEngine() {
     /**
      * Schedule the loop wrap: when the active element reaches its last
      * `FADE_MS`, kick off a crossfade into a fresh playback of the same
-     * track on the other element. Skips when duration is unknown / zero
-     * (empty stub files), so the engine stays silent rather than thrashing.
+     * track on the other element. Loop files carry `FADE_MS` of extra audio
+     * past their seam (see audio/themes/<theme>/CUTS.md), so the restart has
+     * to start exactly there. Skips when duration is unknown / zero (empty
+     * stub files), so the engine stays silent rather than thrashing.
      * @param {HTMLAudioElement} audio
      * @param {string} track
      */
     function attachWrap(audio, track) {
         detachWrap(audio);
-        const handler = () => {
+        const h = { check: null, timer: undefined };
+        h.check = () => {
+            // Paused mid-file means someone else took over; at the very end
+            // the element may already report paused, so `ended` still wraps.
+            if (audio.paused && !audio.ended) return;
             if (!audio.duration || !Number.isFinite(audio.duration)) return;
             if (audio.duration <= FADE_MS / 1000) return; // too short to wrap
-            const remaining = audio.duration - audio.currentTime;
-            if (remaining > FADE_MS / 1000) return;
-            detachWrap(audio);
-            crossfadeToTrack(track);
+            const lead = audio.duration - audio.currentTime - FADE_MS / 1000;
+            if (lead <= 0.005) {
+                detachWrap(audio);
+                crossfadeToTrack(track);
+            } else if (lead < WRAP_TIMER_WINDOW_S) {
+                clearTimeout(h.timer);
+                h.timer = setTimeout(h.check, (lead / (audio.playbackRate || 1)) * 1000);
+            }
         };
-        audio.addEventListener('timeupdate', handler);
-        wrapHandlers.set(audio, handler);
+        audio.addEventListener('timeupdate', h.check);
+        wrapHandlers.set(audio, h);
     }
 
     /**
@@ -891,6 +914,9 @@ function createMusicEngine() {
         }
 
         rampVolume(incoming, LOOP_VOLUME, FADE_MS);
+        // The outgoing element is on its way out: its pending wrap must not
+        // fire during the fade and restart the track we are leaving.
+        detachWrap(outgoing);
         if (!outgoing.paused) {
             const tail = outgoing;
             rampVolume(tail, 0, FADE_MS, () => tail.pause());
@@ -1047,6 +1073,7 @@ let hostMusicVoteTally = {
     cinematic: 0,
     modern_minimal: 0,
     classical: 0,
+    lofi: 0,
     none: 0,
 };
 let hostMusicLocked = false;
@@ -2647,7 +2674,7 @@ async function initializeHostFeatures(reconnectInfo) {
 
     /**
      * Called when the host enters the lobby/QR view. Restores the saved theme
-     * (or default Lofi) and starts the lobby loop.
+     * (or LOBBY_HOST_MUSIC_DEFAULT) and starts the lobby loop.
      */
     function startHostLobbyMusic() {
         if (hostMusicLocked) return;
@@ -3512,12 +3539,13 @@ let pendingFinalResultData = null;
 let playerAvatarBase = LOBBY_AVATAR_BASE_DEFAULT;
 let playerAvatarAccessory = null; // null = bare base
 let playerAvatar = composeAvatar(playerAvatarBase, playerAvatarAccessory);
-let playerVote = null; // theme id ('arcade' | 'cinematic' | 'modern_minimal' | 'classical' | 'none') or null
+let playerVote = null; // theme id ('arcade' | 'cinematic' | 'modern_minimal' | 'classical' | 'lofi' | 'none') or null
 let playerLobbyTally = {
     arcade: 0,
     cinematic: 0,
     modern_minimal: 0,
     classical: 0,
+    lofi: 0,
     none: 0,
 };
 let playerLobbyMusicLocked = false;
@@ -3923,13 +3951,13 @@ function initializePlayerFeatures(reconnectInfo) {
                 ? '<span class="music-poll-now" aria-label="Spielt gerade in der Lobby" title="Spielt gerade">🔊</span>'
                 : '';
             btn.innerHTML = `
-                ${nowBadge}
                 <div class="music-poll-card-head">
                     <span class="music-poll-icon" aria-hidden="true">${sanitizeHTML(opt.icon)}</span>
                     <div class="music-poll-titles">
                         <span class="music-poll-name">${sanitizeHTML(opt.label)}</span>
                         <span class="music-poll-tag">${sanitizeHTML(opt.tagline || '')}</span>
                     </div>
+                    ${nowBadge}
                     <span class="music-poll-check" aria-hidden="true">✓</span>
                 </div>
                 <div class="music-poll-bar" role="presentation">

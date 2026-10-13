@@ -105,7 +105,7 @@ function generateSessionId() {
 
 // Lobby cosmetic state — server stays a relay; clients enforce the curated set.
 // Themes mirror audio/themes/<id>/ folder names. See audio/themes/README.md.
-const MUSIC_THEME_IDS = ['arcade', 'cinematic', 'modern_minimal', 'classical'];
+const MUSIC_THEME_IDS = ['arcade', 'cinematic', 'modern_minimal', 'classical', 'lofi'];
 const VALID_MUSIC_VOTES = new Set([...MUSIC_THEME_IDS, 'none']);
 const VALID_LOBBY_MUSIC = new Set([...MUSIC_THEME_IDS, 'none']);
 const LOBBY_MUSIC_DEFAULT = 'modern_minimal';

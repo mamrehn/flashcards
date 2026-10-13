@@ -9,7 +9,9 @@ in an MPEG-4 (`.m4a`/`.aac`) container. The audio engine treats missing
 or unreadable files as silence and continues without errors, so partial
 themes are fine while you record.
 
-Each theme folder must contain the same six tracks:
+Each theme folder must contain the same five tracks (the app loads the
+`.opus` versions). Each finished theme folder has a `CUTS.md` noting the source
+file and time range every clip was cut from.
 
 # 🎵 Quiz App Audio Implementation Plan & Specifications
 
@@ -17,10 +19,10 @@ Each theme folder must contain the same six tracks:
 This document outlines the background music (BGM) and sound effects (SFX) strategy for the multiplayer quiz app. The audio design balances cognitive load, engagement, and learning psychology across four distinct themes.
 
 ### Structure
-* **4 Themed Folders:** `arcade`, `cinematic`, `modern_minimal`, `classical`
+* **5 Themed Folders:** `arcade`, `cinematic`, `modern_minimal`, `classical`, `lofi`
 * **5 Audio Files per Theme:** 3 seamless loops, 2 short stingers
 * **1 Universal Finale File:** Non-musical, pure Foley (CC0)
-* **Total Files:** 21
+* **Total Files:** 26
 
 ### 🛠️ Technical Implementation Notes
 * **Suno Custom Mode:** For all generated tracks, use Custom Mode and include `[Instrumental]` in the lyrics box.
@@ -78,6 +80,15 @@ This document outlines the background music (BGM) and sound effects (SFX) strate
 | `leaderboard.aac` | Loop | Polite, grand resolution. | `120 bpm, classical symphony fanfare, bright orchestral hit into triumphant elegant major chords, positive reinforcement, loopable` |
 | `time_up.aac` | Stinger | Sharp, acoustic cessation. | `Classical staccato string hit, sharp violin pluck, definite ending, elegant, short sound effect` |
 | `new_question.aac`| Stinger | Light, airy attention grabber. | `Classical quick flute trill, ascending elegant woodwind run, bright, short alert sting` |
+
+---
+
+## 🎧 Theme 5: Lofi
+**Vibe:** Chill study beats, low arousal, warm and unhurried (sage-green card).
+
+Cut from full Suno songs (`lofi_* (Remastered).wav`). Loops are whole 8/16-bar
+phrases; `new_question` is a song intro (pickup into the first downbeat),
+`time_up` is the moment the beat drops out. See `lofi/CUTS.md`.
 
 ---
 
