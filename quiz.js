@@ -304,7 +304,7 @@ const LOBBY_MUSIC_THEMES = [
     { id: 'cinematic', label: 'Cinematic', icon: '🎬', tagline: 'Episch & dramatisch' },
     { id: 'modern_minimal', label: 'Minimal', icon: '📱', tagline: 'Klar & ruhig' },
     { id: 'classical', label: 'Klassik', icon: '🎻', tagline: 'Elegant & akademisch' },
-    { id: 'lofi', label: 'LoFi', icon: '🎧', tagline: 'Beats zum Lernen' },
+    { id: 'lofi', label: 'LoFi', icon: '🎧', tagline: 'Chillig & gemütlich' },
 ];
 const LOBBY_HOST_MUSIC_DEFAULT = 'modern_minimal';
 const LOBBY_HOST_MUSIC_STORAGE_KEY = 'quiz_host_lobby_music';
