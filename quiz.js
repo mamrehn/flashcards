@@ -333,6 +333,10 @@ const LOBBY_MUSIC_VOTE_DISABLED = new Set(
 // See audio/themes/README.md for the full spec.
 const HOST_AUDIO_LOOPS = new Set(['lobby', 'question', 'leaderboard']);
 const HOST_AUDIO_STINGERS = new Set(['time_up', 'new_question']);
+// Loops that pick up where they stopped when they come back: each scoreboard
+// plays the next part of the leaderboard song instead of its opening again.
+// The question loop restarts, since it builds tension from its start.
+const HOST_AUDIO_RESUME = new Set(['leaderboard']);
 // Universal one-shot played on the final results screen — same file for all
 // themes (and even when the chosen theme is "none").
 const HOST_AUDIO_FINAL_PATH = 'audio/final.opus';
@@ -815,6 +819,25 @@ function createMusicEngine() {
     let pendingLoop = null;
     const fadeIntervals = new WeakMap();
     const wrapHandlers = new WeakMap();
+    // `${theme}/${track}` → seconds to continue from (HOST_AUDIO_RESUME tracks).
+    const resumeAt = new Map();
+
+    /**
+     * Remember where the active loop goes silent (after its fade-out) so it
+     * can continue from there next time.
+     */
+    function rememberPosition() {
+        const a = loops[activeIdx];
+        if (!activeTrack || !HOST_AUDIO_RESUME.has(activeTrack)) return;
+        const pos = a.currentTime + FADE_MS / 1000;
+        // Too close to the end: the wrap would fire right away, start over.
+        const fits = Number.isFinite(a.duration) && pos < a.duration - 1;
+        resumeAt.set(`${theme}/${activeTrack}`, fits ? pos : 0);
+    }
+
+    function resumePosition(track) {
+        return HOST_AUDIO_RESUME.has(track) ? resumeAt.get(`${theme}/${track}`) || 0 : 0;
+    }
 
     function cancelFade(audio) {
         const id = fadeIntervals.get(audio);
@@ -909,8 +932,10 @@ function createMusicEngine() {
      * out the currently-active element. Used for both new-track transitions
      * and same-track loop wraps.
      * @param {string} track
+     * @param {number} [startAt] - seconds into the file; a wrap starts at 0.
+     *   Set before the new source has loaded, the browser seeks there on load.
      */
-    function crossfadeToTrack(track) {
+    function crossfadeToTrack(track, startAt = 0) {
         if (theme === 'none' || !HOST_AUDIO_LOOPS.has(track)) return;
         const next = (activeIdx + 1) % 2;
         const incoming = loops[next];
@@ -919,7 +944,7 @@ function createMusicEngine() {
         cancelFade(incoming);
         detachWrap(incoming);
         incoming.src = audioFilePath(theme, track);
-        incoming.currentTime = 0;
+        incoming.currentTime = startAt;
         incoming.volume = 0;
         const p = incoming.play();
         if (p && typeof p.catch === 'function') {
@@ -977,7 +1002,7 @@ function createMusicEngine() {
                     /* swallow */
                 }
             }
-            if (next) crossfadeToTrack(next);
+            if (next) crossfadeToTrack(next, resumePosition(next));
         };
         if (remaining > 0) setTimeout(finish, remaining);
         else finish();
@@ -1007,7 +1032,7 @@ function createMusicEngine() {
             if (theme === 'none' || !HOST_AUDIO_LOOPS.has(track)) return;
             if (activeTrack === track && !loops[activeIdx].paused) return;
             pendingLoop = null;
-            crossfadeToTrack(track);
+            crossfadeToTrack(track, resumePosition(track));
         },
         /**
          * Plays a stinger (one-shot) in isolation. Optional `followLoop` is
@@ -1029,6 +1054,7 @@ function createMusicEngine() {
             // doesn't fight it. 250 ms is short enough to feel like a
             // hand-off rather than a pause. Also when silent: the lobby loop
             // is still running when the vote locks to "Keine Musik".
+            rememberPosition();
             for (const a of loops) {
                 detachWrap(a);
                 if (a.paused) {

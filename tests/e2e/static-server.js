@@ -52,10 +52,30 @@ const server = http.createServer((req, res) => {
             res.writeHead(404, { 'Content-Type': 'text/plain' }).end('not found');
             return;
         }
-        res.writeHead(200, {
+        const headers = {
             'Content-Type': TYPES[path.extname(file).toLowerCase()] || 'application/octet-stream',
             'Cache-Control': 'no-cache',
-        });
+            'Accept-Ranges': 'bytes',
+        };
+        // Single byte ranges, like Pages: without them the browser cannot
+        // seek in audio (the music engine resumes the leaderboard mid-file).
+        const range = /^bytes=(\d*)-(\d*)$/.exec(req.headers.range || '');
+        if (range && (range[1] || range[2])) {
+            const start = range[1] ? Number(range[1]) : Math.max(0, data.length - Number(range[2]));
+            const end =
+                range[1] && range[2]
+                    ? Math.min(Number(range[2]), data.length - 1)
+                    : data.length - 1;
+            if (start > end) {
+                res.writeHead(416, { 'Content-Range': `bytes */${data.length}` }).end();
+                return;
+            }
+            headers['Content-Range'] = `bytes ${start}-${end}/${data.length}`;
+            res.writeHead(206, headers);
+            res.end(data.subarray(start, end + 1));
+            return;
+        }
+        res.writeHead(200, headers);
         res.end(data);
     });
 });

@@ -4368,6 +4368,15 @@ function showAnswer() {
             }
         }
 
+        // A card-level explanation (e.g. the verdict on an example system)
+        // closes the option list, behind the same opt-in toggle.
+        if (card.explanation) {
+            const cardExplanation = document.createElement('div');
+            cardExplanation.className = 'option-explanation mc-card-explanation';
+            cardExplanation.textContent = card.explanation;
+            optionsContainerBack.append(cardExplanation);
+        }
+
         // Show back options container and hide other answer displays
         optionsContainerBack.classList.remove('hidden');
         selectedOptionsContainer.classList.add('hidden');

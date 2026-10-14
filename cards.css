@@ -2504,6 +2504,13 @@ details[open] > .explanation-summary::after,
     display: none;
 }
 
+/* The card's own explanation (e.g. a verdict) sums up below all options. */
+.mc-card-explanation {
+    margin-top: 0.6rem;
+    font-weight: 600;
+    text-align: left;
+}
+
 .explanation-icon {
     font-size: 1.2rem;
     flex-shrink: 0;
