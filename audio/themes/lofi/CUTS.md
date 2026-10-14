@@ -1,4 +1,4 @@
-# Lofi — where each clip was cut from
+# LoFi — where each clip was cut from
 
 All times are seconds in the **source file**. Encoding: Opus 128 kbit/s VBR,
 48 kHz stereo, no gain change unless noted. The sources are full Suno songs
@@ -10,7 +10,7 @@ All times are seconds in the **source file**. Encoding: Opus 128 kbit/s VBR,
 | :------------------ | :------ | :------------------------------------------------------------------------------- |
 | `lobby.opus`        | loop    | host lobby while players join                                                    |
 | `question.opus`     | loop    | while a question is open (starts when `new_question` ends)                       |
-| `leaderboard.opus`  | loop    | scoreboard between questions (starts when `time_up` ends)                        |
+| `leaderboard.opus`  | loop    | scoreboard between questions (starts when `time_up` ends; see below)             |
 | `new_question.opus` | stinger | before each question; the question is revealed when it ends (min 1.8 s, max 6 s) |
 | `time_up.opus`      | stinger | when the timer runs out; the scoreboard flies in when it ends                    |
 
@@ -19,15 +19,20 @@ All times are seconds in the **source file**. Encoding: Opus 128 kbit/s VBR,
 downbeat + the loop body + 250 ms of the original continuation. The musical seam
 is "source _loop end_ → source _loop start_".
 
+**Leaderboard:** only the first scoreboard starts it from the top; later
+scoreboards continue where the previous one stopped (`HOST_AUDIO_RESUME` in
+quiz.js). So a long leaderboard loop means each round hears new music, and a
+scoreboard that stays up while the class discusses an answer does not repeat.
+
 ## Clips
 
-| File                | Source                                   | Cut in source (file range) | Loop seam (start → end)            | Length  | Fades / gain                  |
-| :------------------ | :--------------------------------------- | :------------------------- | :--------------------------------- | :------ | :---------------------------- |
-| `lobby.opus`        | `lofi_lobby (Remastered).wav`            | 22.700 – 66.554            | 22.850 → 66.454 (16 bars @ 88 bpm) | 43.85 s | 5 ms in, 60 ms out            |
-| `question.opus`     | `lofi_question (Remastered).wav`         | 55.365 – 81.561            | 55.515 → 81.461 (8 bars @ 74 bpm)  | 26.20 s | 5 ms in, 60 ms out            |
-| `leaderboard.opus`  | `lofi_leaderboard (Remastered).wav`      | 26.134 – 52.691            | 26.284 → 52.591 (8 bars @ 73 bpm)  | 26.56 s | 5 ms in, 60 ms out            |
-| `new_question.opus` | `lofi_new_question (Remastered).wav`     | 0.390 – 3.660              | —                                  | 3.27 s  | 0.5 s cosine out              |
-| `time_up.opus`      | **`lofi_new_question (Remastered).wav`** | 21.247 – 24.100            | —                                  | 2.85 s  | 0.6 s cosine out, **+2.5 dB** |
+| File                | Source                                   | Cut in source (file range) | Loop seam (start → end)             | Length   | Fades / gain                  |
+| :------------------ | :--------------------------------------- | :------------------------- | :---------------------------------- | :------- | :---------------------------- |
+| `lobby.opus`        | `lofi_lobby (Remastered).wav`            | 22.700 – 66.554            | 22.850 → 66.454 (16 bars @ 88 bpm)  | 43.85 s  | 5 ms in, 60 ms out            |
+| `question.opus`     | `lofi_question (Remastered).wav`         | 55.365 – 81.561            | 55.515 → 81.461 (8 bars @ 74 bpm)   | 26.20 s  | 5 ms in, 60 ms out            |
+| `leaderboard.opus`  | `lofi_leaderboard (Remastered).wav`      | 26.134 – 131.595           | 26.284 → 131.495 (32 bars @ 73 bpm) | 105.47 s | 5 ms in, 60 ms out            |
+| `new_question.opus` | `lofi_new_question (Remastered).wav`     | 0.390 – 3.660              | —                                   | 3.27 s   | 0.5 s cosine out              |
+| `time_up.opus`      | **`lofi_new_question (Remastered).wav`** | 21.247 – 24.100            | —                                   | 2.85 s   | 0.6 s cosine out, **+2.5 dB** |
 
 ### Why these sections
 
@@ -40,7 +45,10 @@ is "source _loop end_ → source _loop start_".
   loop (steady focus). Seam harmony distance 0.03, onset correlation 0.92.
 - **leaderboard**: starts on the section-entry kick after the intro break
   (26.3 s), so the scoreboard flies in on the drop. The first bar is
-  deliberately sparse ("kick, then space"), as in the song.
+  deliberately sparse ("kick, then space"), as in the song. 32 bars (four of the
+  song's 8-bar sections, 105 s), so the scoreboard music does not audibly
+  repeat; ends before the break at 156 s. Seam: harmony distance 0.13, onset
+  correlation 0.86 (the previous 8-bar loop: 0.10 / 0.89).
 - **new_question**: the song's intro: a three-note pickup (0.40 / 0.81 / 1.22 s)
   lands on the first downbeat (kick + chord at 1.67 s), snare, then fades out
   before the next kick at 3.73 s. A gentle "here we go", like Minimal's

@@ -9,6 +9,11 @@ in an MPEG-4 (`.m4a`/`.aac`) container. The audio engine treats missing
 or unreadable files as silence and continues without errors, so partial
 themes are fine while you record.
 
+The leaderboard loop should be much longer (90 s or more): later scoreboards
+continue where the previous one stopped, and a scoreboard can stay up for
+minutes while the class discusses an answer. Arcade (15 s) and Minimal (29 s)
+are still short because their Suno takes are; they need full-length songs.
+
 Each theme folder must contain the same five tracks (the app loads the
 `.opus` versions). Each finished theme folder has a `CUTS.md` noting the source
 file and time range every clip was cut from.
@@ -83,10 +88,10 @@ This document outlines the background music (BGM) and sound effects (SFX) strate
 
 ---
 
-## 🎧 Theme 5: Lofi
+## 🎧 Theme 5: LoFi
 **Vibe:** Chill study beats, low arousal, warm and unhurried (sage-green card).
 
-Cut from full Suno songs (`lofi_* (Remastered).wav`). Loops are whole 8/16-bar
+Cut from full Suno songs (`lofi_* (Remastered).wav`). Loops are whole 8/16/32-bar
 phrases; `new_question` is a song intro (pickup into the first downbeat),
 `time_up` is the moment the beat drops out. See `lofi/CUTS.md`.
 
