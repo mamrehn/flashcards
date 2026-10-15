@@ -237,6 +237,8 @@ let appTitle;
 let appSubtitle;
 let questionText;
 let questionBack;
+let questionCode;
+let questionBackCode;
 let answerText;
 let userAnswerInput;
 let userAnswerContainer;
@@ -324,6 +326,8 @@ function initializeApp() {
     appSubtitle = document.querySelector('#app-subtitle');
     questionText = document.querySelector('#question-text');
     questionBack = document.querySelector('#question-back');
+    questionCode = document.querySelector('#question-code');
+    questionBackCode = document.querySelector('#question-back-code');
     answerText = document.querySelector('#answer-text');
     userAnswerInput = document.querySelector('#user-answer-input');
     userAnswerContainer = document.querySelector('#user-answer-container');
@@ -3702,13 +3706,38 @@ function evaluateIdentifyCard(card) {
 }
 
 /**
+ * A card's optional code snippet (`code` field), or '' when it has none.
+ * Indentation is kept (it is Python syntax); trailing blank lines are dropped.
+ * @param {object} card
+ * @returns {string}
+ */
+function cardCode(card) {
+    return card && typeof card.code === 'string' ? card.code.trimEnd() : '';
+}
+
+/**
+ * Show a card's code snippet in a <pre> under the question, or hide the <pre>
+ * when the card has none. textContent keeps it inert.
+ * @param {HTMLElement} el - The <pre class="card-code"> element
+ * @param {object} card
+ */
+function renderCardCode(el, card) {
+    if (!el) return;
+    const code = cardCode(card);
+    el.textContent = code;
+    el.classList.toggle('hidden', !code);
+}
+
+/**
  * Update the card content with new question data
  * @param {object} card - The card object to display
  */
 function updateCardContent(card) {
-    // Set question on both sides
+    // Set question (and its code snippet, if any) on both sides
     questionText.textContent = card.question;
     questionBack.textContent = card.question;
+    renderCardCode(questionCode, card);
+    renderCardCode(questionBackCode, card);
 
     // Check if current card is identify, multiple choice, matching, or standard
     const isIdentify = cardType(card) === 'identify';
@@ -5724,6 +5753,9 @@ function openBookView(cardsToShow, title) {
         }
 
         html += `<div class="book-card-question">${sanitizeHTML(card.question)}</div>`;
+        if (cardCode(card)) {
+            html += `<pre class="card-code">${sanitizeHTML(cardCode(card))}</pre>`;
+        }
 
         if (card.options && Array.isArray(card.options)) {
             html += '<div class="book-card-options">';
@@ -5778,7 +5810,7 @@ function exportToCsv() {
     ];
 
     for (const card of bookViewCurrentCards) {
-        const question = card.question || '';
+        const question = [card.question || '', cardCode(card)].filter(Boolean).join('\n');
         let answer = '';
         let explanation = '';
         let options = '';
@@ -5838,6 +5870,8 @@ function exportToAnki() {
 
     for (const card of bookViewCurrentCards) {
         let front = escapeAnkiField(card.question);
+        // Code is full of `<` and `>` (comparisons), so it is HTML-escaped here.
+        if (cardCode(card)) front += `<pre>${escapeAnkiField(sanitizeHTML(cardCode(card)))}</pre>`;
         let back;
         let extra = '';
 
@@ -7431,6 +7465,7 @@ if (typeof module !== 'undefined' && module.exports) {
         dedupeCardsByQuestion,
         validateCards,
         cardType,
+        cardCode,
         canonicalLabel,
         acceptedAnswers,
         identifyRecallSplit,

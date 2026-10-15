@@ -18,6 +18,7 @@ const {
     dedupeCardsByQuestion,
     validateCards,
     cardType,
+    cardCode,
     canonicalLabel,
     acceptedAnswers,
     identifyRecallSplit,
@@ -381,4 +382,31 @@ test('isPoolOnlyIdentify: only media-less identify cards qualify', () => {
     assert.ok(isPoolOnlyIdentify({ type: 'identify', labels: { name: 'X' } })); // media absent
     assert.ok(!isPoolOnlyIdentify({ type: 'identify', media: IMG, labels: { name: 'X' } }));
     assert.ok(!isPoolOnlyIdentify({ question: 'Q', answer: 'A' })); // not identify
+});
+
+test('cardCode: keeps indentation, drops trailing blank lines, ignores non-strings', () => {
+    assert.equal(cardCode({ code: 'if x:\n    print(x)\n\n' }), 'if x:\n    print(x)');
+    assert.equal(cardCode({ code: '   ' }), '');
+    assert.equal(cardCode({ code: 42 }), '');
+    assert.equal(cardCode({}), '');
+    assert.equal(cardCode(null), '');
+});
+
+test('validateCards keeps the code field and dedupes by question text only', () => {
+    const cards = validateCards([
+        {
+            question: 'Was gibt der Code aus? (a)',
+            code: 'print(1)',
+            options: ['1', '2'],
+            correct: [0],
+        },
+        {
+            question: 'Was gibt der Code aus? (b)',
+            code: 'print(2)',
+            options: ['1', '2'],
+            correct: [1],
+        },
+    ]);
+    assert.equal(cards.length, 2);
+    assert.equal(cards[1].code, 'print(2)');
 });

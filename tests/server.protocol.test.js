@@ -113,6 +113,27 @@ test('relay server protocol', { skip }, async (t) => {
         assert.equal(q.question, 'Q');
     });
 
+    await t.test('a code snippet is relayed with its question, and only then', async () => {
+        const { host, roomId } = await hostRoom(url);
+        const { player } = await joinRoom(url, roomId);
+        const code = 'for i in range(3):\n    print(i)';
+        host.send({ type: 'start_question', question: 'Q1', code, options: ['a', 'b'] });
+        const withCode = await player.next('question');
+        assert.equal(withCode.code, code, 'line breaks and indentation survive the relay');
+        host.send({ type: 'start_question', question: 'Q2', options: ['a', 'b'] });
+        const plain = await player.next('question');
+        assert.equal('code' in plain, false, 'plain questions keep their old shape');
+        host.send({
+            type: 'start_question',
+            question: 'Q3',
+            code: 'x'.repeat(4001),
+            options: ['a'],
+        });
+        assert.equal((await host.next('error')).code, 'QUESTION_INVALID');
+        host.send({ type: 'start_question', question: 'Q4', code: 42, options: ['a'] });
+        assert.equal((await host.next('error')).code, 'QUESTION_INVALID');
+    });
+
     await t.test('locked room: knock, admit, deny, assign, and reconnect', async () => {
         const { host, roomId } = await hostRoom(url);
         const { player: anna, joined: annaJoined } = await joinRoom(url, roomId, {

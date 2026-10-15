@@ -85,6 +85,8 @@ A deck is JSON with a `meta` block and a `cards` array. Free-text and multiple-c
 }
 ```
 
+Any card may carry an optional `code` string (for example `"for i in range(3):\n    print(i)"`). It is shown under the question as a monospace block that keeps line breaks and indentation, in the study app and in the quiz. A card is identified by its question text, so cards that share a stem such as "Was gibt der Code aus?" still need distinct questions.
+
 A `.zip` deck bundles one or more `.json` files; the library manifest is regenerated on each deploy by [scripts/build-library-manifest.js](scripts/build-library-manifest.js).
 
 ## Multiplayer Quiz

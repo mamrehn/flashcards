@@ -747,6 +747,20 @@ function setDoublePointsBadge(el, isDouble) {
     }
 }
 
+/**
+ * Show a question's code snippet (the optional `code` field of a deck card) in
+ * its <pre>, or hide the <pre> when the question has none. textContent keeps
+ * it inert; the <pre> keeps Python's indentation.
+ * @param {HTMLElement|null} el
+ * @param {unknown} code
+ */
+function renderQuestionCode(el, code) {
+    if (!el) return;
+    const text = typeof code === 'string' ? code.trimEnd() : '';
+    el.textContent = text;
+    el.classList.toggle('hidden', !text);
+}
+
 const preloadedAudioThemes = new Set();
 
 /**
@@ -1342,6 +1356,7 @@ async function initializeHostFeatures(reconnectInfo) {
     const startQuestionsBtn = document.querySelector('#start-questions-btn');
     const hostQuestionDisplay = document.querySelector('#host-question-display');
     const currentQuestionTextEl = document.querySelector('#current-question-text');
+    const currentQuestionCodeEl = document.querySelector('#current-question-code');
     const hostCurrentOptionsEl = document.querySelector('#host-current-options');
     const questionCounterEl = document.querySelector('#question-counter');
     const doublePointsBadgeEl = document.querySelector('#double-points-badge');
@@ -1610,12 +1625,20 @@ async function initializeHostFeatures(reconnectInfo) {
             }
             // Validate question and option lengths against server limits
             const MAX_QUESTION_LENGTH = 4000;
+            const MAX_CODE_LENGTH = 4000;
             const MAX_OPTION_LENGTH = 500;
             const MAX_OPTIONS = 20;
             for (const [i, q] of activeQuestions.entries()) {
                 if (q.question.length > MAX_QUESTION_LENGTH) {
                     showMessage(
                         `Frage ${i + 1} ist zu lang (${q.question.length}/${MAX_QUESTION_LENGTH} Zeichen).`,
+                        'error'
+                    );
+                    return;
+                }
+                if (typeof q.code === 'string' && q.code.length > MAX_CODE_LENGTH) {
+                    showMessage(
+                        `Frage ${i + 1}: Code ist zu lang (${q.code.length}/${MAX_CODE_LENGTH} Zeichen).`,
                         'error'
                     );
                     return;
@@ -1645,8 +1668,12 @@ async function initializeHostFeatures(reconnectInfo) {
             shuffleArray(quizState.shuffledQuestions);
 
             // Pre-compute per-question durations based on character count
+            // (a code snippet has to be read too, so it counts).
             const charCounts = quizState.shuffledQuestions.map(
-                (q) => q.question.length + q.options.reduce((sum, o) => sum + o.length, 0)
+                (q) =>
+                    q.question.length +
+                    (typeof q.code === 'string' ? q.code.length : 0) +
+                    q.options.reduce((sum, o) => sum + o.length, 0)
             );
             const minChars = Math.min(...charCounts);
             const maxChars = Math.max(...charCounts);
@@ -1862,6 +1889,7 @@ async function initializeHostFeatures(reconnectInfo) {
             // Re-render current question details if returning to view
             const currentQuestion = quizState.shuffledQuestions[quizState.currentQuestionIndex];
             currentQuestionTextEl.textContent = currentQuestion.question;
+            renderQuestionCode(currentQuestionCodeEl, currentQuestion.code);
             // Options are displayed without correct indicators while question is active
             displayHostOptions(currentQuestion.shuffledOptions || currentQuestion.options, []); // Use shuffled if available
             questionCounterEl.textContent = `Frage ${quizState.currentQuestionIndex + 1} von ${quizState.shuffledQuestions.length}`;
@@ -3016,6 +3044,7 @@ async function initializeHostFeatures(reconnectInfo) {
 
             // Populate the question UI.
             currentQuestionTextEl.textContent = currentQuestion.question;
+            renderQuestionCode(currentQuestionCodeEl, currentQuestion.code);
             displayHostOptions(shuffledOptions, []);
             questionCounterEl.textContent = `Frage ${quizState.currentQuestionIndex + 1} von ${quizState.shuffledQuestions.length}`;
             setDoublePointsBadge(
@@ -3091,6 +3120,10 @@ async function initializeHostFeatures(reconnectInfo) {
         return {
             type: 'start_question',
             question: question.question,
+            // Only cards with a code snippet carry the field.
+            ...(typeof question.code === 'string' && question.code.trim()
+                ? { code: question.code }
+                : {}),
             options: question.shuffledOptions,
             index: quizState.currentQuestionIndex,
             total: quizState.shuffledQuestions.length,
@@ -3844,6 +3877,7 @@ function initializePlayerFeatures(reconnectInfo) {
     const lobbyAvatarAccessoriesEl = document.querySelector('#lobby-avatar-accessories');
     const playerQuestionView = document.querySelector('#player-question');
     const playerQuestionTextEl = document.querySelector('#player-question-text');
+    const playerQuestionCodeEl = document.querySelector('#player-question-code');
     const playerQuestionCounterEl = document.querySelector('#player-question-counter');
     const playerDoublePointsBadgeEl = document.querySelector('#player-double-points-badge');
     const playerTimerBar = document.querySelector('#player-timer-bar');
@@ -4741,6 +4775,7 @@ function initializePlayerFeatures(reconnectInfo) {
         flyInElement(playerQuestionView);
 
         playerQuestionTextEl.textContent = qData.question;
+        renderQuestionCode(playerQuestionCodeEl, qData.code);
         playerQuestionCounterEl.textContent = `Frage ${qData.index + 1} von ${qData.total}`;
         setDoublePointsBadge(playerDoublePointsBadgeEl, Boolean(qData.doublePoints));
 

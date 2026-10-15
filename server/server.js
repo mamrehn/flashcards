@@ -1209,6 +1209,11 @@ function handleStartQuestion(ws, msg) {
         sendError(ws, ERR.OPTION_INVALID, 'Eine Option ist zu lang oder ungültig.');
         return;
     }
+    // Optional code snippet shown under the question (deck field `code`).
+    if (msg.code !== undefined && (typeof msg.code !== 'string' || msg.code.length > 4000)) {
+        sendError(ws, ERR.QUESTION_INVALID, 'Der Code zur Frage ist zu lang oder ungültig.');
+        return;
+    }
 
     // Validate relay fields
     const questionIndex =
@@ -1243,6 +1248,8 @@ function handleStartQuestion(ws, msg) {
     const payload = {
         type: 'question',
         question: msg.question,
+        // Relayed only when present, so plain questions keep their old shape.
+        ...(typeof msg.code === 'string' && msg.code.length > 0 ? { code: msg.code } : {}),
         options: [...msg.options],
         index: questionIndex,
         total: questionTotal,
