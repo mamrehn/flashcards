@@ -1901,6 +1901,13 @@ select:focus {
     line-height: 1.3;
 }
 
+/* The host screen is read from the back of the room: code grows with it,
+   like the question above it. A narrow host window falls back to the phone
+   size from theme.css. */
+#current-question-code {
+    font-size: clamp(0.8rem, 1.7vw, 1.6rem);
+}
+
 .player-item.disconnected {
     opacity: 0.5;
     font-style: italic;

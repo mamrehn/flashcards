@@ -60,7 +60,8 @@
     border: 1px solid var(--border-color);
     border-radius: var(--radius-md);
     font-family: var(--font-mono);
-    font-size: 0.95rem;
+    /* Scales down on narrow phones so 36 columns fit from 360 px up. */
+    font-size: clamp(0.8rem, 3.7vw, 0.95rem);
     font-weight: normal;
     line-height: 1.45;
     text-align: left;

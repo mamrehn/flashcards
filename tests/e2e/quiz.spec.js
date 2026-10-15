@@ -10,27 +10,30 @@ const path = require('node:path');
 const { test, expect } = require('./fixtures');
 
 const DECK = path.join(__dirname, 'data', 'quiz-two-questions.json');
+const CODE_DECK = path.join(__dirname, 'data', 'quiz-code-question.json');
 
 /**
- * Host a quiz with the two-question test deck.
+ * Host a quiz with a two-question test deck.
  * @param {(label: string) => Promise<import('@playwright/test').Page>} device
+ * @param {string} [deck] - path of the deck file
  * @returns {Promise<{host: import('@playwright/test').Page, code: string}>}
  */
-async function hostQuiz(device) {
+async function hostQuiz(device, deck = DECK) {
     const host = await device('host');
     await host.goto('/quiz.html');
     await host.click('#host-btn');
-    const code = await openRoom(host);
+    const code = await openRoom(host, deck);
     return { host, code };
 }
 
 /**
- * Import the test deck on the host setup and open a room.
+ * Import a two-question test deck on the host setup and open a room.
  * @param {import('@playwright/test').Page} host
+ * @param {string} [deck] - path of the deck file
  * @returns {Promise<string>} the room code
  */
-async function openRoom(host) {
-    await host.setInputFiles('#json-file', DECK);
+async function openRoom(host, deck = DECK) {
+    await host.setInputFiles('#json-file', deck);
     await expect(host.locator('#file-status')).toContainText('Importiert: 2 MC-Fragen');
     await host.fill('#question-duration-min', '15');
     await host.fill('#question-duration-max', '20');
@@ -67,6 +70,18 @@ async function answer(page, optionSelector = '.option-btn:not([disabled])') {
     await page.click('#submit-answer-btn');
 }
 
+/**
+ * The code snippet a page shows under its question, or null while it is hidden.
+ * @param {import('@playwright/test').Page} page
+ * @param {string} selector
+ * @returns {Promise<string|null>}
+ */
+function codeOf(page, selector) {
+    return page
+        .locator(selector)
+        .evaluate((el) => (el.classList.contains('hidden') ? null : el.textContent));
+}
+
 test('lobby: emoji stripped, the dice gives a random name the player cannot undo', async ({
     device,
 }) => {
@@ -91,6 +106,28 @@ test('lobby: emoji stripped, the dice gives a random name the player cannot undo
 
     await rude.reload();
     await expect(title).toContainText(newName);
+});
+
+test('a code snippet reaches the host screen and the phones, line breaks intact', async ({
+    device,
+}) => {
+    const { host, code } = await hostQuiz(device, CODE_DECK);
+    const mia = await joinQuiz(device, code, 'Mia');
+    const snippet = 'for i in range(3):\n    print(i)';
+
+    await host.click('#start-questions-btn');
+    // The quiz shuffles its questions, so check both in whatever order they come.
+    for (const n of [1, 2]) {
+        await expect(mia.locator('#player-question-counter')).toHaveText(`Frage ${n} von 2`);
+        const question = await host.locator('#current-question-text').textContent();
+        const expected = question.includes('Schleife') ? snippet : null;
+        expect(await codeOf(host, '#current-question-code')).toBe(expected);
+        expect(await codeOf(mia, '#player-question-code')).toBe(expected);
+        await answer(mia);
+        if (n === 1) {
+            await host.click('#show-next-btn');
+        }
+    }
 });
 
 test('a relay restart mid-question resumes the round; double click and reload are safe', async ({

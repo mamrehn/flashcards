@@ -1,0 +1,19 @@
+{
+    "meta": {
+        "name": "E2E-Quiz mit Code",
+        "description": "One question with a code snippet, one without, for the end-to-end tests."
+    },
+    "cards": [
+        {
+            "question": "Welche Zahlen gibt die Schleife aus?",
+            "code": "for i in range(3):\n    print(i)",
+            "options": ["0 1 2", "1 2 3"],
+            "correct": [0]
+        },
+        {
+            "question": "Welche sind Primzahlen?",
+            "options": ["2", "4", "7", "9"],
+            "correct": [0, 2]
+        }
+    ]
+}
