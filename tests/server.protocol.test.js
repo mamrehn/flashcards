@@ -122,6 +122,7 @@ test('relay server protocol', { skip }, async (t) => {
         assert.equal(withCode.code, code, 'line breaks and indentation survive the relay');
         host.send({ type: 'start_question', question: 'Q2', options: ['a', 'b'] });
         const plain = await player.next('question');
+        assert.equal('codeLanguage' in plain, false);
         assert.equal('code' in plain, false, 'plain questions keep their old shape');
         host.send({
             type: 'start_question',
@@ -132,6 +133,24 @@ test('relay server protocol', { skip }, async (t) => {
         assert.equal((await host.next('error')).code, 'QUESTION_INVALID');
         host.send({ type: 'start_question', question: 'Q4', code: 42, options: ['a'] });
         assert.equal((await host.next('error')).code, 'QUESTION_INVALID');
+        host.send({
+            type: 'start_question',
+            question: 'Q5',
+            code,
+            codeLanguage: 'python',
+            options: ['a'],
+        });
+        assert.equal((await player.next('question')).codeLanguage, 'python');
+        host.send({
+            type: 'start_question',
+            question: 'Q6',
+            code,
+            codeLanguage: '<x>',
+            options: ['a'],
+        });
+        const dropped = await player.next('question');
+        assert.equal(dropped.code, code, 'an invalid language still shows the code');
+        assert.equal('codeLanguage' in dropped, false);
     });
 
     await t.test('locked room: knock, admit, deny, assign, and reconnect', async () => {

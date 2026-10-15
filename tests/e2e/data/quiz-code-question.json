@@ -7,6 +7,7 @@
         {
             "question": "Welche Zahlen gibt die Schleife aus?",
             "code": "for i in range(3):\n    print(i)",
+            "codeLanguage": "python",
             "options": ["0 1 2", "1 2 3"],
             "correct": [0]
         },

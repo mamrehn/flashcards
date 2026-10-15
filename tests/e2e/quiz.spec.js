@@ -123,6 +123,16 @@ test('a code snippet reaches the host screen and the phones, line breaks intact'
         const expected = question.includes('Schleife') ? snippet : null;
         expect(await codeOf(host, '#current-question-code')).toBe(expected);
         expect(await codeOf(mia, '#player-question-code')).toBe(expected);
+        if (expected) {
+            // Highlighted as Python on both screens, with the language label.
+            for (const [page, selector] of [
+                [host, '#current-question-code'],
+                [mia, '#player-question-code'],
+            ]) {
+                await expect(page.locator(`${selector} .hljs-keyword`).first()).toHaveText('for');
+                await expect(page.locator(selector)).toHaveAttribute('data-language', 'Python');
+            }
+        }
         await answer(mia);
         if (n === 1) {
             await host.click('#show-next-btn');

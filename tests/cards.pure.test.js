@@ -19,6 +19,8 @@ const {
     validateCards,
     cardType,
     cardCode,
+    cardCodeLanguage,
+    highlightedCode,
     canonicalLabel,
     acceptedAnswers,
     identifyRecallSplit,
@@ -409,4 +411,25 @@ test('validateCards keeps the code field and dedupes by question text only', () 
     ]);
     assert.equal(cards.length, 2);
     assert.equal(cards[1].code, 'print(2)');
+});
+
+test('code highlighting: known languages only, escaped output, a label', (t) => {
+    const card = { code: 'if x < 3:\n    print("<b>")', codeLanguage: 'Python' };
+    // Without highlight.js (offline before the vendor script) it stays plain.
+    assert.equal(cardCodeLanguage(card), '');
+    assert.equal(highlightedCode(card), null);
+
+    globalThis.hljs = require('../vendor/highlight-11.12.0.min.js');
+    t.after(() => delete globalThis.hljs);
+    assert.equal(cardCodeLanguage(card), 'python');
+    assert.equal(cardCodeLanguage({ code: 'x', codeLanguage: 'cs' }), 'cs');
+    assert.equal(cardCodeLanguage({ code: 'x', codeLanguage: 'klingon' }), '');
+    assert.equal(cardCodeLanguage({ code: 'x' }), '');
+
+    const python = highlightedCode(card);
+    assert.equal(python.label, 'Python');
+    assert.match(python.html, /<span class="hljs-keyword">if<\/span>/);
+    assert.ok(python.html.includes('&lt;b&gt;'), 'the source text is escaped');
+    assert.ok(!python.html.includes('<b>'));
+    assert.equal(highlightedCode({ code: 'int x = 1;', codeLanguage: 'csharp' }).label, 'C#');
 });

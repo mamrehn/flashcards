@@ -749,15 +749,34 @@ function setDoublePointsBadge(el, isDouble) {
 
 /**
  * Show a question's code snippet (the optional `code` field of a deck card) in
- * its <pre>, or hide the <pre> when the question has none. textContent keeps
- * it inert; the <pre> keeps Python's indentation.
+ * its <pre>, or hide the <pre> when the question has none. With a language
+ * highlight.js knows (`codeLanguage`, e.g. "python", "csharp") the code is
+ * highlighted and labelled; highlight.js escapes the source and only adds
+ * <span class="hljs-…">. Otherwise textContent keeps it inert.
  * @param {HTMLElement|null} el
  * @param {unknown} code
+ * @param {unknown} [language]
  */
-function renderQuestionCode(el, code) {
+function renderQuestionCode(el, code, language) {
     if (!el) return;
     const text = typeof code === 'string' ? code.trimEnd() : '';
-    el.textContent = text;
+    const lang = typeof language === 'string' ? language.trim().toLowerCase() : '';
+    const definition = text && lang ? globalThis.hljs?.getLanguage(lang) : null;
+    let html = null;
+    if (definition) {
+        try {
+            html = globalThis.hljs.highlight(text, { language: lang, ignoreIllegals: true }).value;
+        } catch {
+            html = null;
+        }
+    }
+    if (html === null) {
+        el.textContent = text;
+        delete el.dataset.language;
+    } else {
+        el.innerHTML = html;
+        el.dataset.language = definition.name || lang;
+    }
     el.classList.toggle('hidden', !text);
 }
 
@@ -1889,7 +1908,11 @@ async function initializeHostFeatures(reconnectInfo) {
             // Re-render current question details if returning to view
             const currentQuestion = quizState.shuffledQuestions[quizState.currentQuestionIndex];
             currentQuestionTextEl.textContent = currentQuestion.question;
-            renderQuestionCode(currentQuestionCodeEl, currentQuestion.code);
+            renderQuestionCode(
+                currentQuestionCodeEl,
+                currentQuestion.code,
+                currentQuestion.codeLanguage
+            );
             // Options are displayed without correct indicators while question is active
             displayHostOptions(currentQuestion.shuffledOptions || currentQuestion.options, []); // Use shuffled if available
             questionCounterEl.textContent = `Frage ${quizState.currentQuestionIndex + 1} von ${quizState.shuffledQuestions.length}`;
@@ -3044,7 +3067,11 @@ async function initializeHostFeatures(reconnectInfo) {
 
             // Populate the question UI.
             currentQuestionTextEl.textContent = currentQuestion.question;
-            renderQuestionCode(currentQuestionCodeEl, currentQuestion.code);
+            renderQuestionCode(
+                currentQuestionCodeEl,
+                currentQuestion.code,
+                currentQuestion.codeLanguage
+            );
             displayHostOptions(shuffledOptions, []);
             questionCounterEl.textContent = `Frage ${quizState.currentQuestionIndex + 1} von ${quizState.shuffledQuestions.length}`;
             setDoublePointsBadge(
@@ -3123,6 +3150,9 @@ async function initializeHostFeatures(reconnectInfo) {
             // Only cards with a code snippet carry the field.
             ...(typeof question.code === 'string' && question.code.trim()
                 ? { code: question.code }
+                : {}),
+            ...(typeof question.codeLanguage === 'string' && question.codeLanguage.trim()
+                ? { codeLanguage: question.codeLanguage.trim().slice(0, 32) }
                 : {}),
             options: question.shuffledOptions,
             index: quizState.currentQuestionIndex,
@@ -4775,7 +4805,7 @@ function initializePlayerFeatures(reconnectInfo) {
         flyInElement(playerQuestionView);
 
         playerQuestionTextEl.textContent = qData.question;
-        renderQuestionCode(playerQuestionCodeEl, qData.code);
+        renderQuestionCode(playerQuestionCodeEl, qData.code, qData.codeLanguage);
         playerQuestionCounterEl.textContent = `Frage ${qData.index + 1} von ${qData.total}`;
         setDoublePointsBadge(playerDoublePointsBadgeEl, Boolean(qData.doublePoints));
 

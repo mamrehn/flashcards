@@ -13,7 +13,7 @@ const SW_DEBUG =
 // eslint-disable-next-line no-console
 const swLog = SW_DEBUG ? console.log.bind(console) : () => {};
 
-const CACHE_NAME = 'flashcards-v8';
+const CACHE_NAME = 'flashcards-v9';
 const ASSETS_TO_CACHE = [
     './',
     './index.html',
@@ -46,6 +46,7 @@ const ASSETS_TO_CACHE = [
     './vendor/qrcode-1.0.0.min.js',
     './vendor/marked-16.3.0.umd.min.js',
     './vendor/purify-3.2.7.min.js',
+    './vendor/highlight-11.12.0.min.js',
 ];
 
 // Library deck files (decks/library.json and decks/*.zip) are intentionally

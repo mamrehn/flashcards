@@ -855,6 +855,12 @@ function buildLongDescription(md) {
         ALLOWED_ATTR: ['href', 'title'],
         ALLOWED_URI_REGEXP: /^(?:https?:|mailto:|#|\/)/i,
     });
+    // External links (e.g. chapters of the course book in Mebis) open in a
+    // new tab, so the deck page stays where the student left it.
+    for (const link of body.querySelectorAll('a[href^="http"]')) {
+        link.target = '_blank';
+        link.rel = 'noopener noreferrer';
+    }
     wrap.append(body);
     return wrap;
 }

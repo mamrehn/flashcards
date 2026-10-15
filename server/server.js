@@ -315,6 +315,8 @@ const MAX_OPTIONS_PER_QUESTION = 250;
 // validation); polls may run longer, and `0` means "no timer — the host ends
 // the vote manually".
 const MAX_DURATION_SEC = 600;
+// Name of a highlight.js language for a question's code ("python", "csharp", "c#").
+const CODE_LANGUAGE_RE = /^[\d#+a-z-]{1,32}$/i;
 // Knock requests waiting on the host while a room is locked.
 const MAX_PENDING_JOINS = 50;
 
@@ -1210,6 +1212,8 @@ function handleStartQuestion(ws, msg) {
         return;
     }
     // Optional code snippet shown under the question (deck field `code`).
+    // An invalid `codeLanguage` is dropped below, not rejected: the code still
+    // shows, just without highlighting.
     if (msg.code !== undefined && (typeof msg.code !== 'string' || msg.code.length > 4000)) {
         sendError(ws, ERR.QUESTION_INVALID, 'Der Code zur Frage ist zu lang oder ungültig.');
         return;
@@ -1250,6 +1254,11 @@ function handleStartQuestion(ws, msg) {
         question: msg.question,
         // Relayed only when present, so plain questions keep their old shape.
         ...(typeof msg.code === 'string' && msg.code.length > 0 ? { code: msg.code } : {}),
+        // Highlighting language of the code ("python", "csharp"); the client
+        // only uses it when highlight.js knows the name.
+        ...(typeof msg.codeLanguage === 'string' && CODE_LANGUAGE_RE.test(msg.codeLanguage)
+            ? { codeLanguage: msg.codeLanguage }
+            : {}),
         options: [...msg.options],
         index: questionIndex,
         total: questionTotal,

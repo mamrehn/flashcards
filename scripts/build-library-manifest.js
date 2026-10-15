@@ -245,10 +245,14 @@ async function main() {
     const deckFiles = fs
         .readdirSync(DECKS_DIR)
         // `_`-prefixed files are private (gitignored, e.g. class rosters with
-        // photos) and must never end up in the public library.
+        // photos) and must never end up in the public library. Neither must
+        // retired decks kept locally as `<name>__old_archived.zip`.
         .filter(
             (f) =>
-                /\.(zip|json)$/i.test(f) && f.toLowerCase() !== 'library.json' && !f.startsWith('_')
+                /\.(zip|json)$/i.test(f) &&
+                f.toLowerCase() !== 'library.json' &&
+                !f.startsWith('_') &&
+                !f.includes('__old_archived')
         )
         .map((f) => path.join(DECKS_DIR, f))
         .toSorted();

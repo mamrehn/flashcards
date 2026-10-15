@@ -11,6 +11,7 @@ the `<script integrity>` attributes.
 | `qrcode-1.0.0.min.js`       | [qrcodejs](https://github.com/davidshimjs/qrcodejs) 1.0.0 | MIT — `LICENSE.qrcodejs.txt`   |
 | `marked-16.3.0.umd.min.js`  | [marked](https://github.com/markedjs/marked) 16.3.0 | MIT — `LICENSE.marked.md`          |
 | `purify-3.2.7.min.js`       | [DOMPurify](https://github.com/cure53/DOMPurify) 3.2.7 | Apache-2.0 or MPL-2.0 — `LICENSE.dompurify.txt` |
+| `highlight-11.12.0.min.js`  | [highlight.js](https://github.com/highlightjs/highlight.js) 11.12.0, common build (Python, C#, Java, JavaScript, JSON, SQL, Bash …) | BSD-3-Clause — `LICENSE.highlightjs.txt` |
 
 SRI (sha512) of the files as vendored:
 
@@ -18,6 +19,7 @@ SRI (sha512) of the files as vendored:
 - `qrcode-1.0.0.min.js`: `CNgIRecGo7nphbeZ04Sc13ka07paqdeTu0WR1IM4kNcpmBAUSHSQX0FslNhTDadL4O5SAGapGt4FodqL8My0mA==`
 - `marked-16.3.0.umd.min.js`: `V6rGY7jjOEUc7q5Ews8mMlretz1Vn2wLdMW/qgABLWunzsLfluM0FwHuGjGQ1lc8jO5vGpGIGFE+rTzB+63HdA==`
 - `purify-3.2.7.min.js`: `78KH17QLT5e55GJqP76vutp1D2iAoy06WcYBXB6iBCsmO6wWzx0Qdg8EDpm8mKXv68BcvHOyeeP4wxAL0twJGQ==`
+- `highlight-11.12.0.min.js`: `gzqHAlI1hVdzJ4wiQj/MkppDr6zgEdCoBsrXKRidcaZsSPvNQ3Fy5p7PpMt/8mltxTxMHj1Ur5NWbJdqIfpxgA==`
 
 To upgrade: download the new release, verify it against the publisher's
 hash, replace the file (new version in the file name), and update the

@@ -3716,15 +3716,57 @@ function cardCode(card) {
 }
 
 /**
- * Show a card's code snippet in a <pre> under the question, or hide the <pre>
- * when the card has none. textContent keeps it inert.
+ * The highlight.js language of a card's code: its `codeLanguage` field
+ * ("python", "csharp" or an alias such as "cs") when highlight.js knows it,
+ * else '' for plain text. highlight.js is looked up only now: in the minified
+ * build cards.js is inlined and runs before the deferred vendor script.
+ * @param {object} card
+ * @returns {string}
+ */
+function cardCodeLanguage(card) {
+    const lang =
+        card && typeof card.codeLanguage === 'string' ? card.codeLanguage.trim().toLowerCase() : '';
+    return lang && globalThis.hljs?.getLanguage(lang) ? lang : '';
+}
+
+/**
+ * A card's code as highlighted HTML plus the language name for the label
+ * ("Python", "C#"), or null when it has no code or no known language.
+ * highlight.js escapes the source text and only adds <span class="hljs-…">.
+ * @param {object} card
+ * @returns {{html: string, label: string} | null}
+ */
+function highlightedCode(card) {
+    const code = cardCode(card);
+    const language = cardCodeLanguage(card);
+    if (!code || !language) return null;
+    try {
+        return {
+            html: globalThis.hljs.highlight(code, { language, ignoreIllegals: true }).value,
+            label: globalThis.hljs.getLanguage(language).name || language,
+        };
+    } catch {
+        return null;
+    }
+}
+
+/**
+ * Show a card's code snippet in a <pre> under the question, highlighted when
+ * its language is known, or hide the <pre> when the card has none.
  * @param {HTMLElement} el - The <pre class="card-code"> element
  * @param {object} card
  */
 function renderCardCode(el, card) {
     if (!el) return;
     const code = cardCode(card);
-    el.textContent = code;
+    const highlighted = highlightedCode(card);
+    if (highlighted) {
+        el.innerHTML = highlighted.html;
+        el.dataset.language = highlighted.label;
+    } else {
+        el.textContent = code;
+        delete el.dataset.language;
+    }
     el.classList.toggle('hidden', !code);
 }
 
@@ -5754,7 +5796,10 @@ function openBookView(cardsToShow, title) {
 
         html += `<div class="book-card-question">${sanitizeHTML(card.question)}</div>`;
         if (cardCode(card)) {
-            html += `<pre class="card-code">${sanitizeHTML(cardCode(card))}</pre>`;
+            const highlighted = highlightedCode(card);
+            const label = highlighted ? ` data-language="${sanitizeHTML(highlighted.label)}"` : '';
+            const body = highlighted ? highlighted.html : sanitizeHTML(cardCode(card));
+            html += `<pre class="card-code"${label}>${body}</pre>`;
         }
 
         if (card.options && Array.isArray(card.options)) {
@@ -7466,6 +7511,8 @@ if (typeof module !== 'undefined' && module.exports) {
         validateCards,
         cardType,
         cardCode,
+        cardCodeLanguage,
+        highlightedCode,
         canonicalLabel,
         acceptedAnswers,
         identifyRecallSplit,

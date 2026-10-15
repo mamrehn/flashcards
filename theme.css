@@ -33,6 +33,15 @@
     --shadow-sm: 0 1px 3px var(--shadow-color);
     --shadow-md: 0 2px 4px var(--shadow-color);
     --shadow-lg: 0 10px 40px rgba(0, 0, 0, 0.35);
+
+    /* Syntax highlighting in .card-code (GitHub light colours); each one is
+       ≥ 4.5:1 on --surface-secondary. */
+    --code-keyword: #cf222e;
+    --code-string: #0a3069;
+    --code-comment: #57606a;
+    --code-number: #0550ae;
+    --code-builtin: #953800;
+    --code-title: #8250df;
 }
 
 [data-theme='dark'] {
@@ -47,6 +56,14 @@
     --input-border: #4a4a5c;
     --input-bg: #1e1e2e;
     --shadow-color: rgba(0, 0, 0, 0.3);
+
+    /* Catppuccin Mocha, whose base is this --surface-secondary; ≥ 5.8:1. */
+    --code-keyword: #cba6f7;
+    --code-string: #a6e3a1;
+    --code-comment: #9399b2;
+    --code-number: #fab387;
+    --code-builtin: #f9e2af;
+    --code-title: #89b4fa;
 }
 
 /* A card's code snippet (optional `code` field): shown under the question in
@@ -69,6 +86,63 @@
     tab-size: 4;
     overflow-x: auto;
     overscroll-behavior-x: contain;
+}
+
+/* The language above highlighted code ("Python", "C#"), so a C# snippet next
+   to a Python question is not mistaken for Python. */
+.card-code[data-language]::before {
+    content: attr(data-language);
+    display: block;
+    margin-bottom: 0.2rem;
+    font-family: var(--font-sans);
+    font-size: 0.7rem;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+}
+
+/* Token colours for highlight.js output. Keywords are also semi-bold and
+   comments italic, so the structure does not depend on colour alone. */
+.card-code .hljs-keyword,
+.card-code .hljs-tag,
+.card-code .hljs-name,
+.card-code .hljs-selector-tag {
+    color: var(--code-keyword);
+    font-weight: 600;
+}
+
+.card-code .hljs-string,
+.card-code .hljs-regexp,
+.card-code .hljs-template-tag {
+    color: var(--code-string);
+}
+
+.card-code .hljs-comment,
+.card-code .hljs-quote {
+    color: var(--code-comment);
+    font-style: italic;
+}
+
+.card-code .hljs-number,
+.card-code .hljs-literal,
+.card-code .hljs-symbol,
+.card-code .hljs-variable {
+    color: var(--code-number);
+}
+
+.card-code .hljs-built_in,
+.card-code .hljs-type,
+.card-code .hljs-meta,
+.card-code .hljs-title.class_ {
+    color: var(--code-builtin);
+}
+
+.card-code .hljs-title,
+.card-code .hljs-attr,
+.card-code .hljs-attribute,
+.card-code .hljs-section {
+    color: var(--code-title);
 }
 
 /* Shared base: the system font everywhere (form controls don't inherit it
