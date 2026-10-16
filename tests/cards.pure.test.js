@@ -14,6 +14,7 @@ const {
     cardKnowledge,
     scoreMultipleChoice,
     normalizeAnswer,
+    textAnswersAccepted,
     answerMatchSegments,
     dedupeCardsByQuestion,
     validateCards,
@@ -95,6 +96,19 @@ test('normalizeAnswer: case, whitespace and trailing punctuation are ignored', (
 test('normalizeAnswer: tolerates non-strings', () => {
     assert.equal(normalizeAnswer(), '');
     assert.equal(normalizeAnswer(null), '');
+});
+
+test('textAnswersAccepted: answer plus per-card accept alternatives', () => {
+    const card = {
+        answer: 'return wert >= unten and wert <= oben',
+        accept: ['return wert <= oben and wert >= unten', '', 42],
+    };
+    const acc = textAnswersAccepted(card);
+    assert.ok(acc.has(normalizeAnswer('return wert >= unten and wert <= oben')));
+    assert.ok(acc.has(normalizeAnswer('Return  wert <= oben and wert >= unten')));
+    assert.ok(!acc.has(normalizeAnswer('return wert <= oben and wert >= untern')));
+    assert.equal(acc.size, 2);
+    assert.equal(textAnswersAccepted({ answer: 'Berlin' }).size, 1);
 });
 
 const hits = (answer, typed) =>

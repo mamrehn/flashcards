@@ -4481,14 +4481,18 @@ function showAnswer() {
         }
 
         // Treat a normalized match (case/whitespace/trailing-punctuation
-        // insensitive) as correct; anything else falls through to self-grading.
+        // insensitive) with the answer or one of the card's `accept`
+        // alternatives as correct; anything else falls through to self-grading.
         const isExactMatch =
-            userAnswer.length > 0 && normalizeAnswer(userAnswer) === normalizeAnswer(card.answer);
+            userAnswer.length > 0 && textAnswersAccepted(card).has(normalizeAnswer(userAnswer));
 
         if (isExactMatch) {
             // Exact text match is a fair correctness proxy: auto-grade as perfect.
-            // The student's answer equals the correct one — show it once.
-            userAnswerContainer.classList.add('hidden');
+            // If the student's answer equals the shown one, show it once; an
+            // accepted alternative stays visible next to it.
+            if (normalizeAnswer(userAnswer) === normalizeAnswer(card.answer)) {
+                userAnswerContainer.classList.add('hidden');
+            }
             setAnswerVerdict('correct', '✓ Richtig');
             markAnswer(true);
             recallRating.classList.add('hidden');
@@ -4557,6 +4561,26 @@ function normalizeAnswer(text) {
     let end = collapsed.length;
     while (end > 0 && '.,;:!?'.includes(collapsed[end - 1])) end--;
     return collapsed.slice(0, end).trim();
+}
+
+/**
+ * Accepted (normalized) answers for a free-text card: its `answer` plus any
+ * per-card `accept` alternatives, e.g. the same code line with the two
+ * conditions swapped.
+ * @param {object} card
+ * @returns {Set<string>} normalized accepted answers
+ */
+function textAnswersAccepted(card) {
+    const accepted = new Set();
+    if (typeof card.answer === 'string' && card.answer.trim()) {
+        accepted.add(normalizeAnswer(card.answer));
+    }
+    if (Array.isArray(card.accept)) {
+        for (const a of card.accept) {
+            if (typeof a === 'string' && a.trim()) accepted.add(normalizeAnswer(a));
+        }
+    }
+    return accepted;
 }
 
 // Filler words that would light up in almost any answer.
@@ -7506,6 +7530,7 @@ if (typeof module !== 'undefined' && module.exports) {
         cardKnowledge,
         scoreMultipleChoice,
         normalizeAnswer,
+        textAnswersAccepted,
         answerMatchSegments,
         dedupeCardsByQuestion,
         validateCards,

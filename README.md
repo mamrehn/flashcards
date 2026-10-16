@@ -87,6 +87,8 @@ A deck is JSON with a `meta` block and a `cards` array. Free-text and multiple-c
 
 Any card may carry an optional `code` string (for example `"for i in range(3):\n    print(i)"`). It is shown under the question as a monospace block that keeps line breaks and indentation, in the study app and in the quiz. Add `codeLanguage` (`"python"`, `"csharp"`, or any other [highlight.js](https://highlightjs.org/) name in the bundled common build) to get syntax highlighting and a language label; without it the code stays plain text. A card is identified by its question text, so cards that share a stem such as "Was gibt der Code aus?" still need distinct questions.
 
+A free-text card may list other correct answers in `accept` (for example `["return wert <= oben and wert >= unten"]`). A typed answer that matches `answer` or one of them, ignoring case, extra spaces and trailing punctuation, is graded correct automatically; anything else goes to self-grading.
+
 A `.zip` deck bundles one or more `.json` files; the library manifest is regenerated on each deploy by [scripts/build-library-manifest.js](scripts/build-library-manifest.js).
 
 ## Multiplayer Quiz
