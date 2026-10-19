@@ -506,9 +506,13 @@ body {
         transform 0.05s ease;
 }
 
-.identify-choice:hover {
-    border-color: var(--primary);
-    background: var(--cards-hover-bg);
+/* Hover only where a pointer can hover: on a phone the tapped spot keeps
+   :hover, so the choice in that place on the next card looked pre-picked. */
+@media (hover: hover) {
+    .identify-choice:hover {
+        border-color: var(--primary);
+        background: var(--cards-hover-bg);
+    }
 }
 
 .identify-choice.selected {
@@ -1386,8 +1390,12 @@ body:not(.has-decks) #export-backup-btn {
     transition: all 0.15s ease;
 }
 
-.confidence-btn:hover {
-    border-color: var(--primary);
+/* Gated like the answer options: a tap leaves :hover behind on phones, and
+   the button under the last rating tap looked like a preset confidence. */
+@media (hover: hover) {
+    .confidence-btn:hover {
+        border-color: var(--primary);
+    }
 }
 
 .confidence-btn.selected {
@@ -2670,6 +2678,15 @@ details[open] > .explanation-summary::after,
     overflow-wrap: anywhere;
 }
 
+/* A progress entry whose card is gone (deck deleted, question reworded). */
+.sr-card-orphan {
+    flex-basis: 100%;
+    order: 1;
+    color: var(--text-muted);
+    font-size: 0.85rem;
+    font-style: italic;
+}
+
 .sr-card-meta {
     display: flex;
     flex-wrap: wrap;
@@ -3123,6 +3140,15 @@ details[open] > .explanation-summary::after,
     line-height: 1.4;
 }
 
+.book-card-photo {
+    display: block;
+    width: 7rem;
+    height: 7rem;
+    object-fit: cover;
+    margin-bottom: 0.5rem;
+    border-radius: 8px;
+}
+
 .book-card-explanation {
     color: var(--text-muted, #888);
     font-size: 1.05rem;
@@ -3358,9 +3384,11 @@ details[open] > .explanation-summary::after,
     text-align: center;
 }
 
-.matching-item:hover {
-    border-color: var(--primary);
-    transform: translateY(-1px);
+@media (hover: hover) {
+    .matching-item:hover {
+        border-color: var(--primary);
+        transform: translateY(-1px);
+    }
 }
 
 .matching-item:focus-visible {

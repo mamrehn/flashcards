@@ -34,6 +34,10 @@ const {
     sanitizeSessionHistory,
     sanitizeAchievements,
     sanitizeSRData,
+    daysUntil,
+    pairsAsText,
+    csvRow,
+    ankiLine,
     SR_STEP_MINUTES,
     SR_PASS_SCORE,
 } = require('../cards.js');
@@ -446,4 +450,84 @@ test('code highlighting: known languages only, escaped output, a label', (t) => 
     assert.ok(python.html.includes('&lt;b&gt;'), 'the source text is escaped');
     assert.ok(!python.html.includes('<b>'));
     assert.equal(highlightedCode({ code: 'int x = 1;', codeLanguage: 'csharp' }).label, 'C#');
+});
+
+/**
+ * Local calendar date `offset` days from today, as YYYY-MM-DD.
+ * @param {number} offset
+ * @returns {string}
+ */
+function isoDayFromToday(offset) {
+    const d = new Date();
+    d.setDate(d.getDate() + offset);
+    return [d.getFullYear(), d.getMonth() + 1, d.getDate()]
+        .map((n) => String(n).padStart(2, '0'))
+        .join('-');
+}
+
+test('daysUntil counts calendar days: today is 0, tomorrow 1, yesterday -1', () => {
+    // The 24-hour-span version said "noch 1 Tag" on the exam day itself.
+    assert.equal(daysUntil(isoDayFromToday(0)), 0);
+    assert.equal(daysUntil(isoDayFromToday(1)), 1);
+    assert.equal(daysUntil(isoDayFromToday(-1)), -1);
+    assert.equal(daysUntil(isoDayFromToday(30)), 30);
+});
+
+test('exports: matching pairs and identify names are not lost', () => {
+    const matching = {
+        question: 'Ordne zu.',
+        pairs: [
+            { left: 'Deutschland', right: 'Berlin' },
+            { left: null, right: 'Paris' },
+        ],
+        categories: ['Geo'],
+        sourceDeck: 'deck',
+    };
+    assert.equal(
+        pairsAsText(matching.pairs, '; '),
+        'Deutschland → Berlin; (passt zu keinem) Paris'
+    );
+    // CSV: question, answer, explanation, options, correct options, categories, deck
+    assert.deepEqual(csvRow(matching), [
+        'Ordne zu.',
+        'Deutschland → Berlin; (passt zu keinem) Paris',
+        '',
+        '',
+        '',
+        'Geo',
+        'deck',
+    ]);
+    const identify = foldIdentitySet({
+        set: { labelParts: ['first', 'last'] },
+        cards: [{ type: 'identify', labels: { first: 'Ada', last: 'Lovelace' }, media: 'a.png' }],
+    })[0];
+    assert.equal(csvRow(identify)[1], 'Ada Lovelace');
+    const mc = {
+        question: 'Welche?',
+        options: ['a', 'b'],
+        correct: [1],
+        explanations: { 0: 'nein' },
+        explanation: 'Weil.',
+    };
+    assert.deepEqual(csvRow(mc).slice(1, 5), ['', 'a: nein; Weil.', 'a; b', 'b']);
+});
+
+test('Anki export escapes text, since the file is declared as HTML', (t) => {
+    globalThis.sanitizeHTML = (x) =>
+        x.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;');
+    t.after(() => delete globalThis.sanitizeHTML);
+    const [front, back, extra, tags] = ankiLine({
+        question: 'Ist 3 < 5?',
+        answer: 'Ja, <b> bleibt Text',
+        explanation: 'Zeile 1\nZeile 2',
+        categories: ['Mathe Basics'],
+        sourceDeck: 'deck',
+    }).split('\t');
+    assert.equal(front, 'Ist 3 &lt; 5?');
+    assert.equal(back, 'Ja, &lt;b&gt; bleibt Text');
+    assert.equal(extra, 'Zeile 1<br>Zeile 2');
+    assert.equal(tags, 'Mathe_Basics deck::deck');
+    const mcLine = ankiLine({ question: 'Q', options: ['x', 'y'], correct: [1] }).split('\t');
+    assert.equal(mcLine[0], 'Q<br><br>A) x<br>B) y');
+    assert.equal(mcLine[1], 'B) y');
 });

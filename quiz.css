@@ -1637,6 +1637,29 @@ select:focus {
     color: var(--secondary-color);
 }
 
+/* Player's final ranking: the host's scoreboard rows, own row marked. */
+.final-ranking {
+    margin: 0.5rem 0 0;
+    padding: 0;
+    list-style: none;
+}
+
+.final-ranking .leaderboard-item {
+    border-radius: 6px;
+}
+
+.final-ranking .leaderboard-item.is-me {
+    outline: 3px solid var(--primary-color);
+    outline-offset: -3px;
+    font-weight: bold;
+}
+
+.final-own-rank {
+    margin: 0.25rem 0 0;
+    font-weight: 600;
+    color: var(--primary-color);
+}
+
 /* Placeholder shown on the player's final screen while the ranking is held
    back, so a glance at the phone can't spoil the host's podium reveal. */
 .leaderboard-suspense {

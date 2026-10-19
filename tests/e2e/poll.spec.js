@@ -157,3 +157,40 @@ test('untimed secret vote: no timer, no auto-submit, ballots counted on reveal',
     await expect(host.locator('#host-reveal-meta')).toContainText('geheime Abstimmung');
     await expect(voters[0].locator('#player-podium-list')).toContainText('Cara');
 });
+
+test('a timed vote that ended early cannot close the next vote', async ({ device }) => {
+    const { host, code } = await hostPoll(device);
+    const voters = [];
+    for (const name of ['Anna', 'Ben']) {
+        const page = await joinPoll(device, code, name);
+        await loggedInAs(page, name);
+        voters.push(page);
+    }
+
+    await host.click('#show-composer-btn');
+    await host.fill('#composer-question', 'Wohin geht der Ausflug?');
+    await host.fill('#composer-duration', '5');
+    await host.click('#start-vote-btn');
+    for (const page of voters) await expect(page.locator('#player-vote')).toBeVisible();
+
+    // The countdown runs out; its grace period (5 s) lets late ballots in.
+    // Both vote inside it, so the vote ends early.
+    await host.waitForTimeout(5500);
+    for (const page of voters) {
+        await page.locator('#rank-options button').first().click();
+        await page.click('#submit-vote-btn');
+    }
+    await expect(host.locator('#host-reveal')).toBeVisible();
+
+    // The teacher starts the next vote at once, inside the old grace period.
+    await host.click('#next-question-btn');
+    await host.fill('#composer-question', 'Wer soll Klassensprecher werden?');
+    await host.check('#composer-untimed');
+    await host.click('#start-vote-btn');
+    await expect(host.locator('#host-voting')).toBeVisible();
+
+    // The old grace timer used to fire now and close this vote unanswered.
+    await host.waitForTimeout(5500);
+    await expect(host.locator('#host-voting')).toBeVisible();
+    await expect(voters[0].locator('#player-vote')).toBeVisible();
+});

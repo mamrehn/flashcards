@@ -191,11 +191,19 @@ test('a relay restart mid-question resumes the round; double click and reload ar
         await host.click('#show-results-btn');
         await expect(mia.locator('#player-final-result')).toBeVisible();
         await expect(mia.locator('#player-leaderboard-container')).toContainText('Rangliste');
+        // Each row is numbered once (the list marker used to add a second
+        // "1.") and the player's own row is marked, with the place up front.
+        const ranking = mia.locator('#player-leaderboard-container .final-ranking');
+        await expect(ranking).toHaveCSS('list-style-type', 'none');
+        await expect(ranking.locator('li').first()).toHaveText(/^1\.\S/);
+        await expect(ranking.locator('.is-me')).toContainText('Mia (du)');
+        await expect(mia.locator('.final-own-rank')).toHaveText(/^Du bist auf Platz [12] von 2\.$/);
         await mia.reload();
         await expect(mia.locator('#player-final-result')).toBeVisible();
         await expect(mia.locator('#player-leaderboard-container')).toContainText(
             'Endgültige Rangliste'
         );
+        await expect(ranking.locator('.is-me')).toContainText('Mia (du)');
     });
 
     await test.step('host and players start a second game', async () => {

@@ -598,7 +598,10 @@ function handleGlobalKeyboard(e) {
     if (e.key === '?') {
         const hintsPanel = document.querySelector('.keyboard-hints-panel');
         if (hintsPanel) {
-            hintsPanel.classList.toggle('hidden');
+            const open = hintsPanel.classList.toggle('hidden') === false;
+            document
+                .querySelector('.keyboard-hints-toggle')
+                ?.setAttribute('aria-expanded', String(open));
         }
         return;
     }
@@ -1668,18 +1671,23 @@ function validateCards(cards) {
  * @param {Array<string>} deckNames - Names of active decks
  */
 function updateAppTitle(deckNames) {
-    let title;
-    if (deckNames.length === 1 && deckNames[0] === 'SR Buckets') {
-        title = 'Wiederholung';
-    } else {
-        // Show what the student chose — the topic title (meta.name), not the
-        // JSON file names inside a ZIP ("Lernkarten - beispiel-allgemeinwissen").
-        const titles = [...new Set(deckNames.map((d) => deckDisplayTitle(d)))];
-        title = titles.length === 1 ? titles[0] : `${titles.length} Decks kombiniert`;
-    }
-    appTitle.textContent = title;
+    appTitle.textContent =
+        deckNames.length === 1 && deckNames[0] === 'SR Buckets'
+            ? 'Wiederholung'
+            : decksTitle(deckNames);
     // Hide the subtitle when a deck is active
     appSubtitle.style.display = 'none';
+}
+
+/**
+ * What the student chose, in their words: the topic title (meta.name), not the
+ * JSON file names inside a ZIP ("Lernkarten - beispiel-allgemeinwissen").
+ * @param {string[]} deckNames
+ * @returns {string}
+ */
+function decksTitle(deckNames) {
+    const titles = [...new Set(deckNames.map((d) => deckDisplayTitle(d)))];
+    return titles.length === 1 ? titles[0] : `${titles.length} Decks kombiniert`;
 }
 
 /**
@@ -2694,7 +2702,7 @@ function deselectAllDecks() {
  * @param {string} deckName - Name of the deck to delete
  */
 async function deleteSavedDeck(deckName) {
-    const ok = await uiConfirm(`Möchtest du das Deck "${deckName}" wirklich löschen?`, {
+    const ok = await uiConfirm(`Möchtest du das Deck „${deckLabel(deckName)}“ wirklich löschen?`, {
         confirmText: 'Löschen',
         danger: true,
     });
@@ -2751,6 +2759,9 @@ function initializeQuiz(loadedCards) {
 
     // Shuffle, then order by review urgency so even a short session is spent
     // where it matters most (bucket order is preserved, so skip it there).
+    // The round-start note is rewritten there; a bucket session has none, so
+    // a note left from an earlier, unanswered session must not linger.
+    sessionNoteEl.hidden = true;
     if (!isFromSRBuckets) {
         shuffleArray(cards);
         orderCardsForReview();
@@ -5582,13 +5593,11 @@ function exportBackup() {
         examDate: examDate,
     };
 
-    const blob = new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `lernkarten-backup-${new Date().toISOString().slice(0, 10)}.json`;
-    a.click();
-    URL.revokeObjectURL(url);
+    downloadFile(
+        JSON.stringify(backup, null, 2),
+        'application/json',
+        `lernkarten-backup-${new Date().toISOString().slice(0, 10)}.json`
+    );
 
     const deckCount = Object.keys(savedDecks).length;
     const srCount = Object.keys(spacedRepetitionData).length;
@@ -5738,6 +5747,16 @@ function hasAnswerHistory(e) {
 }
 
 /**
+ * The topic a book-view card comes from: its title, not the JSON file name.
+ * A library preview was never saved, so it has none.
+ * @param {{sourceDeck?: string}} card
+ * @returns {string|null}
+ */
+function bookSourceTitle(card) {
+    return savedDecks[card.sourceDeck] ? deckDisplayTitle(card.sourceDeck) : null;
+}
+
+/**
  * Render cards in book view format
  * @param {Array<object>} cardsToShow - Cards to render
  * @param {string} title - Title for the book view
@@ -5771,6 +5790,10 @@ function openBookView(cardsToShow, title) {
         return aAvg - bAvg;
     });
 
+    // "Quelle" names the topic a card comes from, and only when the cards span
+    // several topics: within one topic the heading already says it.
+    const showSource = new Set(cardsToShow.map((c) => bookSourceTitle(c)).filter(Boolean)).size > 1;
+
     // Find where unanswered section starts (no SR data OR SR data with empty history)
     const firstUnansweredIdx = enriched.findIndex((e) => !hasAnswerHistory(e));
     const answeredCount = firstUnansweredIdx === -1 ? enriched.length : firstUnansweredIdx;
@@ -5802,9 +5825,14 @@ function openBookView(cardsToShow, title) {
                 const hasPartialScores = history.some((s) => s > 0 && s < 1);
                 let badgeText;
                 if (hasPartialScores) {
-                    // MC with partial scores: show percentages per attempt
-                    const pcts = history.map((s) => Math.round(s * 100) + '%');
-                    badgeText = `${pcts.join(' → ')} richtig durch die letzten ${history.length} Versuche`;
+                    // Partial scores (MC, matching): the last few attempts as a
+                    // trend, oldest first ("Letzte Versuche: 25 % → 50 % → 100 %").
+                    const recent = history.slice(-5).map((s) => `${Math.round(s * 100)} %`);
+                    const more = history.length > recent.length ? '… → ' : '';
+                    badgeText =
+                        history.length === 1
+                            ? `1 Versuch: ${recent[0]} richtig`
+                            : `Letzte Versuche: ${more}${recent.join(' → ')}`;
                 } else {
                     // Binary scores: show "X von Y Mal richtig"
                     const correctAttempts = history.filter((s) => s === 1).length;
@@ -5826,7 +5854,16 @@ function openBookView(cardsToShow, title) {
             html += `<pre class="card-code"${label}>${body}</pre>`;
         }
 
-        if (card.options && Array.isArray(card.options)) {
+        if (cardType(card) === 'identify') {
+            // An identify card has no `answer`: its answer is the photo + name.
+            // The name usually is the question already (the heading above).
+            if (isSafeMediaSrc(card.media)) {
+                html += `<img class="book-card-photo" src="${sanitizeHTML(card.media).replaceAll('"', '&quot;')}" alt="" loading="lazy">`;
+            }
+            if (canonicalLabel(card) !== card.question) {
+                html += `<div class="book-card-answer">${sanitizeHTML(canonicalLabel(card))}</div>`;
+            }
+        } else if (card.options && Array.isArray(card.options)) {
             html += '<div class="book-card-options">';
             for (let j = 0; j < card.options.length; j++) {
                 const isCorrect = card.correct && card.correct.includes(j);
@@ -5851,8 +5888,8 @@ function openBookView(cardsToShow, title) {
             }
         }
 
-        if (card.sourceDeck) {
-            html += `<div class="book-card-source">Quelle: ${sanitizeHTML(card.sourceDeck)}</div>`;
+        if (showSource && bookSourceTitle(card)) {
+            html += `<div class="book-card-source">Quelle: ${sanitizeHTML(bookSourceTitle(card))}</div>`;
         }
 
         cardEl.innerHTML = html;
@@ -5866,9 +5903,6 @@ function openBookView(cardsToShow, title) {
 }
 
 /**
- * Export currently displayed book view cards as Anki-importable tab-separated text file
- */
-/**
  * Export currently displayed book view cards as CSV
  */
 function exportToCsv() {
@@ -5876,52 +5910,52 @@ function exportToCsv() {
 
     const rows = [
         ['Frage', 'Antwort', 'Erklärung', 'Optionen', 'Korrekte Optionen', 'Kategorien', 'Deck'],
+        ...bookViewCurrentCards.map((card) => csvRow(card)),
     ];
-
-    for (const card of bookViewCurrentCards) {
-        const question = [card.question || '', cardCode(card)].filter(Boolean).join('\n');
-        let answer = '';
-        let explanation = '';
-        let options = '';
-        let correctOptions = '';
-
-        if (card.options && Array.isArray(card.options)) {
-            options = card.options.join('; ');
-            correctOptions = (card.correct || []).map((i) => card.options[i]).join('; ');
-            // Collect explanations
-            if (card.explanations) {
-                const parts = [];
-                for (const [idx, text] of Object.entries(card.explanations)) {
-                    parts.push(`${card.options[Number.parseInt(idx)] || idx}: ${text}`);
-                }
-                explanation = parts.join('; ');
-            }
-        } else {
-            answer = card.answer || '';
-            explanation = card.explanation || '';
-        }
-
-        const categories = (card.categories || []).join('; ');
-        const deck = card.sourceDeck || '';
-
-        rows.push([question, answer, explanation, options, correctOptions, categories, deck]);
-    }
-
     const csvContent = rows
         .map((row) => row.map((cell) => `"${String(cell).replaceAll('"', '""')}"`).join(','))
         .join('\n');
 
     // BOM for Excel UTF-8 detection
-    const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'lernkarten-export.csv';
-    a.click();
-    URL.revokeObjectURL(url);
-
+    downloadFile('\uFEFF' + csvContent, 'text/csv;charset=utf-8', 'lernkarten-export.csv');
     showMessage(`${bookViewCurrentCards.length} Karten als CSV exportiert.`);
+}
+
+/**
+ * One CSV row of a book-view card; which columns it fills depends on its type.
+ * @param {object} card
+ * @returns {string[]}
+ */
+function csvRow(card) {
+    const question = [card.question || '', cardCode(card)].filter(Boolean).join('\n');
+    let answer = '';
+    let options = '';
+    let correctOptions = '';
+    let explanations = [card.explanation];
+    if (cardType(card) === 'identify') {
+        answer = canonicalLabel(card);
+    } else if (Array.isArray(card.pairs)) {
+        // Matching: the answer is the list of pairs.
+        answer = pairsAsText(card.pairs, '; ');
+    } else if (Array.isArray(card.options)) {
+        options = card.options.join('; ');
+        correctOptions = (card.correct || []).map((i) => card.options[i]).join('; ');
+        const perOption = Object.entries(card.explanations || {}).map(
+            ([idx, text]) => `${card.options[Number.parseInt(idx)] || idx}: ${text}`
+        );
+        explanations = [...perOption, card.explanation];
+    } else {
+        answer = card.answer || '';
+    }
+    return [
+        question,
+        answer,
+        explanations.filter(Boolean).join('; '),
+        options,
+        correctOptions,
+        (card.categories || []).join('; '),
+        card.sourceDeck || '',
+    ];
 }
 
 /**
@@ -5935,81 +5969,95 @@ function exportToAnki() {
         '#html:true',
         '#tags column:4',
         '#columns:Front\tBack\tExtra\tTags',
+        ...bookViewCurrentCards.map((card) => ankiLine(card)),
     ];
-
-    for (const card of bookViewCurrentCards) {
-        let front = escapeAnkiField(card.question);
-        // Code is full of `<` and `>` (comparisons), so it is HTML-escaped here.
-        if (cardCode(card)) front += `<pre>${escapeAnkiField(sanitizeHTML(cardCode(card)))}</pre>`;
-        let back;
-        let extra = '';
-
-        if (card.options && Array.isArray(card.options)) {
-            // MC: add options to front, correct answers + explanations to back
-            front += '<br><br>';
-            front += card.options
-                .map((opt, i) => {
-                    const letter = String.fromCodePoint(65 + i); // A, B, C...
-                    return `${letter}) ${escapeAnkiField(opt)}`;
-                })
-                .join('<br>');
-
-            const correctLabels = (card.correct || []).map((i) => {
-                const letter = String.fromCodePoint(65 + i);
-                return `${letter}) ${escapeAnkiField(card.options[i])}`;
-            });
-            back = correctLabels.join('<br>');
-
-            // Explanations as extra
-            if (card.explanations) {
-                const explanationParts = [];
-                for (const [idx, text] of Object.entries(card.explanations)) {
-                    const letter = String.fromCodePoint(65 + Number.parseInt(idx));
-                    explanationParts.push(`${letter}: ${escapeAnkiField(text)}`);
-                }
-                if (explanationParts.length > 0) {
-                    extra = explanationParts.join('<br>');
-                }
-            }
-        } else {
-            // Standard card
-            back = escapeAnkiField(card.answer || '');
-            if (card.explanation) {
-                extra = escapeAnkiField(card.explanation);
-            }
-        }
-
-        // Tags: categories + source deck, space-separated
-        const tags = [];
-        if (card.categories && card.categories.length > 0) {
-            tags.push(...card.categories.map((c) => c.replaceAll(/\s+/g, '_')));
-        }
-        if (card.sourceDeck) {
-            tags.push('deck::' + card.sourceDeck.replaceAll(/\s+/g, '_'));
-        }
-
-        lines.push(`${front}\t${back}\t${extra}\t${tags.join(' ')}`);
-    }
-
-    const content = lines.join('\n');
-    const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'lernkarten-anki-export.txt';
-    a.click();
-    URL.revokeObjectURL(url);
-
+    downloadFile(lines.join('\n'), 'text/plain;charset=utf-8', 'lernkarten-anki-export.txt');
     showMessage(`${bookViewCurrentCards.length} Karten als Anki-Datei exportiert.`);
 }
 
 /**
- * Escape a string for use in an Anki tab-separated field
- * @param text
+ * One Anki note (Front, Back, Extra, Tags) of a book-view card. Multiple
+ * choice puts its options on the front and the correct ones on the back.
+ * @param {object} card
+ * @returns {string}
+ */
+function ankiLine(card) {
+    let front = escapeAnkiField(card.question);
+    if (cardCode(card)) front += `<pre>${escapeAnkiField(cardCode(card))}</pre>`;
+    let back;
+    let extras = [];
+    if (cardType(card) === 'identify') {
+        back = escapeAnkiField(canonicalLabel(card));
+    } else if (Array.isArray(card.pairs)) {
+        back = escapeAnkiField(pairsAsText(card.pairs, '\n'));
+    } else if (Array.isArray(card.options)) {
+        const option = (i) => `${optionLetter(i)}) ${escapeAnkiField(card.options[i])}`;
+        front += '<br><br>' + card.options.map((_, i) => option(i)).join('<br>');
+        back = (card.correct || []).map((i) => option(i)).join('<br>');
+        extras = Object.entries(card.explanations || {}).map(
+            ([idx, text]) => `${optionLetter(idx)}: ${escapeAnkiField(text)}`
+        );
+    } else {
+        back = escapeAnkiField(card.answer || '');
+    }
+    if (card.explanation) extras.push(escapeAnkiField(card.explanation));
+
+    // Tags: categories + source deck, space-separated
+    const tags = (card.categories || []).map((c) => c.replaceAll(/\s+/g, '_'));
+    if (card.sourceDeck) tags.push('deck::' + card.sourceDeck.replaceAll(/\s+/g, '_'));
+    return `${front}\t${back}\t${extras.join('<br>')}\t${tags.join(' ')}`;
+}
+
+/**
+ * Letter of an answer option for the exports: 0 → "A", 1 → "B" …
+ * @param {number|string} index
+ * @returns {string}
+ */
+function optionLetter(index) {
+    return String.fromCodePoint(65 + Number(index));
+}
+
+/**
+ * Offer `content` as a file download.
+ * @param {string} content
+ * @param {string} type - MIME type
+ * @param {string} filename
+ */
+function downloadFile(content, type, filename) {
+    const url = URL.createObjectURL(new Blob([content], { type }));
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    a.click();
+    URL.revokeObjectURL(url);
+}
+
+/**
+ * Escape a string for use in an Anki tab-separated field. The file declares
+ * `#html:true`, so the text is HTML-escaped first: a question such as
+ * "Ist 3 < 5?" or "Was macht <title>?" must show as written, not as markup.
+ * @param {unknown} text
+ * @returns {string}
  */
 function escapeAnkiField(text) {
-    return text.replaceAll('\t', ' ').replaceAll('\n', '<br>');
+    return sanitizeHTML(String(text ?? ''))
+        .replaceAll('\t', ' ')
+        .replaceAll('\n', '<br>');
+}
+
+/**
+ * A matching card's pairs as readable text ("Deutschland → Berlin"); a
+ * distractor without a left partner is marked as such.
+ * @param {Array<{left?: string|null, right: string}>} pairs
+ * @param {string} separator
+ * @returns {string}
+ */
+function pairsAsText(pairs, separator) {
+    return pairs
+        .map((p) =>
+            typeof p.left === 'string' ? `${p.left} → ${p.right}` : `(passt zu keinem) ${p.right}`
+        )
+        .join(separator);
 }
 
 /**
@@ -6032,12 +6080,7 @@ function startBookViewFromDecks() {
 
     if (allCards.length === 0) return;
 
-    const title =
-        selectedDeckNames.length === 1
-            ? `Lesemodus — ${selectedDeckNames[0]}`
-            : `Lesemodus — ${selectedDeckNames.length} Decks`;
-
-    openBookView(allCards, title);
+    openBookView(allCards, `Lesemodus — ${decksTitle(selectedDeckNames)}`);
 }
 
 /**
@@ -6206,28 +6249,18 @@ function displaySpacedRepetitionBuckets() {
             buckets[stepKey] = [];
         }
 
-        // Parse the card from the key
+        // Parse the card from the key. An orphan (deck deleted, question
+        // reworded) is still listed, so it can be removed, but not practised.
         const card = getCardFromKey(key);
-        if (card) {
-            buckets[stepKey].push({
-                key,
-                card,
-                data,
-                isOverdue: data.nextReview <= now,
-            });
-        } else {
-            console.warn('Card not found for key:', key);
-            // Still add it with the key as the question
-            buckets[stepKey].push({
-                key,
-                card: {
-                    question: key.split('|||')[1] || 'Unbekannte Frage',
-                    sourceDeck: 'Unbekannt',
-                },
-                data,
-                isOverdue: data.nextReview <= now,
-            });
-        }
+        buckets[stepKey].push({
+            key,
+            card: card || {
+                question: key.split('|||').slice(1).join('|||') || 'Unbekannte Frage',
+            },
+            orphan: !card,
+            data,
+            isOverdue: data.nextReview <= now,
+        });
     }
 
     // Sort buckets by step
@@ -6240,28 +6273,33 @@ function displaySpacedRepetitionBuckets() {
     for (const step of sortedSteps) {
         const cards = buckets[step];
         const stepLabel = getStepLabel(step);
-        const overdueCount = cards.filter((c) => c.isOverdue).length;
+        const overdueCount = cards.filter((c) => c.isOverdue && !c.orphan).length;
+        // Only cards that still exist can be practised ("… Karten üben").
+        const playable = cards.filter((c) => !c.orphan).length;
+        const orphans = cards.length - playable;
+        const orphanNote = orphans > 0 ? ` · ${orphans} nicht mehr im Deck` : '';
 
         const isExpanded = expandedSteps.has(step) ? 'expanded' : '';
         const isSelected = selectedSteps.has(step) ? 'selected' : '';
         const isChecked = selectedSteps.has(step) ? 'checked' : '';
 
         html += `
-            <div class="sr-bucket ${isSelected}" data-step="${step}" data-count="${cards.length}">
+            <div class="sr-bucket ${isSelected}" data-step="${step}" data-count="${playable}">
                 <div class="sr-bucket-header" data-action="toggle-expand" data-step="${step}">
                     <input type="checkbox" class="sr-bucket-checkbox" data-action="toggle-select" data-step="${step}" ${isChecked} aria-label="${stepLabel} zum Üben auswählen">
                     <button type="button" class="sr-bucket-toggle" data-action="toggle-expand" data-step="${step}" aria-expanded="${isExpanded ? 'true' : 'false'}" aria-controls="bucket-cards-${step}">
                         <span class="sr-bucket-title">${stepLabel}</span>
-                        <span class="sr-bucket-sub"><span class="sr-bucket-count">${formatCardCount(cards.length)}${overdueCount > 0 ? ` · ${overdueCount} fällig` : ''}</span> <span class="sr-bucket-interval">Wiederholung nach ${SR_STEP_LABELS[step] ?? '–'}</span></span>
+                        <span class="sr-bucket-sub"><span class="sr-bucket-count">${formatCardCount(playable)}${overdueCount > 0 ? ` · ${overdueCount} fällig` : ''}${orphanNote}</span> <span class="sr-bucket-interval">Wiederholung nach ${SR_STEP_LABELS[step] ?? '–'}</span></span>
                     </button>
                     <button type="button" class="sr-bucket-book-btn" data-action="book" data-step="${step}" title="Im Lesemodus ansehen" aria-label="${stepLabel} im Lesemodus ansehen">📖</button>
                 </div>
                 <div class="sr-bucket-cards ${isExpanded}" id="bucket-cards-${step}">
                     ${cards
                         .map(
-                            ({ key, card, data, isOverdue }) => `
+                            ({ key, card, data, isOverdue, orphan }) => `
                         <div class="sr-card-item" data-card-key="${encodeURIComponent(key)}">
                             <div class="sr-card-question">${sanitizeHTML(card.question || 'Unbekannte Frage')}</div>
+                            ${orphan ? '<div class="sr-card-orphan">Nicht mehr im Deck – „Aufräumen“ entfernt den Eintrag.</div>' : ''}
                             <div class="sr-card-meta">
                                 <span class="sr-card-next-review ${isOverdue ? 'sr-overdue' : 'sr-on-time'}">
                                     ${isOverdue ? '⚠️ Fällig' : '✓'} ${formatDate(data.nextReview)}
@@ -6594,12 +6632,10 @@ function getCardFromKey(key) {
         }
     }
 
-    // If deck not found or card not in deck, return a basic card object
-    return {
-        question: question,
-        sourceDeck: deckName,
-        answer: 'Nicht verfügbar',
-    };
+    // Deck deleted, or the question was reworded in an update: there is no
+    // card to show or practise (it used to come back as a card whose answer
+    // read "Nicht verfügbar"). "Aufräumen" removes such entries.
+    return null;
 }
 
 /**
@@ -6735,7 +6771,11 @@ function computeCalibration(deckNames) {
  */
 function countDueCards(deckNames) {
     const now = new Date();
-    return srDataForDecks(deckNames).filter((d) => new Date(d.nextReview) <= now).length;
+    // Library-wide, only cards that still exist: an entry left by a deleted
+    // deck or a reworded question can never be studied, so it is never "due".
+    return srDataForDecks(deckNames ?? Object.keys(savedDecks)).filter(
+        (d) => new Date(d.nextReview) <= now
+    ).length;
 }
 
 /**
@@ -6829,7 +6869,8 @@ function checkAchievements() {
         ) {
             achievements.deckMastered[d] = new Date().toISOString();
             const cats = deckCategoriesLabel(d);
-            earned.push(cats ? `Deck gemeistert: ${d} · ${cats}` : `Deck gemeistert: ${d}`);
+            const label = deckLabel(d);
+            earned.push(cats ? `Deck gemeistert: ${label} · ${cats}` : `Deck gemeistert: ${label}`);
         }
     }
     if (earned.length > 0) saveProgressData();
@@ -7422,12 +7463,26 @@ function progressSessions(deckNames) {
                     : '';
             return `<div class="session-row">
                 <span class="session-date">${when}</span>
-                <span class="session-decks">${sanitizeHTML([...new Set((s.deckNames || []).map((d) => (savedDecks[d] ? deckDisplayTitle(d) : d)))].join(', '))}</span>
+                <span class="session-decks">${sanitizeHTML(sessionDecksLabel(s.deckNames))}</span>
                 <span class="session-meta">${Number(s.cardsAnswered) || 0} Karten · ${Number(s.avgScore) || 0} %${conf}</span>
             </div>`;
         })
         .join('');
     return `<div class="session-list">${rows}</div>`;
+}
+
+/**
+ * Deck titles of a logged session; a stage practice ("SR Buckets") reads as
+ * "Wiederholung", like its session title.
+ * @param {string[]} [deckNames]
+ * @returns {string}
+ */
+function sessionDecksLabel(deckNames) {
+    const titles = (deckNames || []).map((d) => {
+        if (d === 'SR Buckets') return 'Wiederholung';
+        return savedDecks[d] ? deckDisplayTitle(d) : d;
+    });
+    return [...new Set(titles)].join(', ');
 }
 
 /**
@@ -7441,12 +7496,14 @@ function progressExam(allDecks, includePicker = true) {
     const overall = computeDeckKnowledge(allDecks);
     let countdown = '';
     if (examDate) {
-        const days = Math.ceil((new Date(`${examDate}T23:59:59`) - Date.now()) / 86_400_000);
-        const dayWord = days === 1 ? 'Tag' : 'Tage';
-        countdown =
-            days >= 0
-                ? `<div class="exam-countdown">Noch <strong>${days}</strong> ${dayWord} bis zur Prüfung · Lernstand <strong>${overall.percent} %</strong></div>`
-                : '<div class="exam-countdown">Der Prüfungstermin liegt in der Vergangenheit.</div>';
+        const days = daysUntil(examDate);
+        const lernstand = ` · Lernstand <strong>${overall.percent} %</strong>`;
+        let when;
+        if (days < 0) when = 'Der Prüfungstermin liegt in der Vergangenheit.';
+        else if (days === 0) when = `<strong>Heute</strong> ist die Prüfung${lernstand}`;
+        else if (days === 1) when = `<strong>Morgen</strong> ist die Prüfung${lernstand}`;
+        else when = `Noch <strong>${days}</strong> Tage bis zur Prüfung${lernstand}`;
+        countdown = `<div class="exam-countdown">${when}</div>`;
     }
     const picker = includePicker
         ? `<label class="exam-input-row">Prüfungstermin (optional):
@@ -7454,6 +7511,21 @@ function progressExam(allDecks, includePicker = true) {
         </label>`
         : '';
     return `${countdown}${picker}`;
+}
+
+/**
+ * Calendar days from today to a YYYY-MM-DD date (0 = today, 1 = tomorrow,
+ * negative = past), counted in local days — not 24-hour spans, which said
+ * "noch 1 Tag" on the day of the exam itself.
+ * @param {string} isoDay
+ * @returns {number}
+ */
+function daysUntil(isoDay) {
+    const [y, m, d] = isoDay.split('-').map(Number);
+    const target = Date.UTC(y, m - 1, d);
+    const now = new Date();
+    const today = Date.UTC(now.getFullYear(), now.getMonth(), now.getDate());
+    return Math.round((target - today) / 86_400_000);
 }
 
 /**
@@ -7550,6 +7622,10 @@ if (typeof module !== 'undefined' && module.exports) {
         sanitizeSessionHistory,
         sanitizeAchievements,
         sanitizeSRData,
+        daysUntil,
+        pairsAsText,
+        csvRow,
+        ankiLine,
         SR_STEP_MINUTES,
         SR_PASS_SCORE,
         SR_FAIL_SCORE,

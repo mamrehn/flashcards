@@ -1460,7 +1460,9 @@ async function initializeHostFeatures(reconnectInfo) {
                         const zip = await JSZip.loadAsync(buffer);
                         const entries = [];
                         for (const [relPath, entry] of Object.entries(zip.files)) {
-                            if (!entry.dir && relPath.toLowerCase().endsWith('.json')) {
+                            // manifest.json holds the deck's meta, no cards.
+                            const base = relPath.split('/').pop().toLowerCase();
+                            if (!entry.dir && base.endsWith('.json') && base !== 'manifest.json') {
                                 entries.push(entry);
                             }
                         }
@@ -1497,8 +1499,12 @@ async function initializeHostFeatures(reconnectInfo) {
                 const parts = [
                     `Importiert: ${collected.length} MC-Fragen aus ${processedFiles} Datei(en).`,
                 ];
+                // Only multiple choice can be played live; free-text and
+                // matching cards stay in the study app.
                 if (skippedFreetext > 0)
-                    parts.push(`${skippedFreetext} Freitext-Frage(n) übersprungen.`);
+                    parts.push(
+                        `${skippedFreetext} Karte(n) ohne Antwortoptionen (Freitext, Zuordnung) übersprungen.`
+                    );
                 if (failedFiles > 0) parts.push(`${failedFiles} Datei(en) fehlgeschlagen.`);
                 fileStatus.textContent = parts.join(' ');
             } else {
@@ -3665,6 +3671,9 @@ let selectedAnswers = [];
 let playerHasSubmitted = false;
 let playerWasAutoSubmitted = false;
 let playerScore = 0;
+// The player's name as the server knows it (after sanitizing or a teacher's
+// rename), to find their own row in the final ranking.
+let playerDisplayName = null;
 // Final standings the player has received but is deliberately NOT showing yet,
 // so the leaderboard can't spoil the host's podium reveal. Held until the host
 // broadcasts `reveal_final` (or replayed already-revealed on reconnect).
@@ -4295,8 +4304,9 @@ function initializePlayerFeatures(reconnectInfo) {
         });
 
         playAgainBtn.addEventListener('click', () => {
+            // The listeners stay bound (re-running the setup used to add a
+            // second copy of every handler for each game played).
             resetPlayerStateAndUI();
-            isPlayerInitialized = false;
             showView('role-selection');
         });
 
@@ -4406,6 +4416,7 @@ function initializePlayerFeatures(reconnectInfo) {
                 case 'joined': {
                     playerCurrentId = msg.sessionId;
                     playerScore = msg.score || 0;
+                    playerDisplayName = msg.playerName || pName;
                     roomWaitRetries = 0;
                     // Server has accepted us — safe to reset the reconnect
                     // budget. Doing this here (rather than on TCP open) means
@@ -4564,6 +4575,7 @@ function initializePlayerFeatures(reconnectInfo) {
                 case 'name_changed': {
                     if (typeof msg.name !== 'string' || !msg.name) break;
                     pName = msg.name;
+                    playerDisplayName = pName;
                     savePlayerSession(roomCode, playerCurrentId, pName);
                     saveActiveSession('player', roomCode, playerCurrentId, pName);
                     if (lobbyWelcomeTitle) lobbyWelcomeTitle.textContent = `Willkommen, ${pName}!`;
@@ -5049,39 +5061,63 @@ function initializePlayerFeatures(reconnectInfo) {
      */
     function renderFinalLeaderboard(frData) {
         playerLeaderboardContainer.innerHTML = '';
-
-        if (frData.leaderboard) {
-            const lbDiv = document.createElement('div');
-            lbDiv.innerHTML = '<h4>Endgültige Rangliste:</h4>';
-            const ol = document.createElement('ol');
-            if (frData.leaderboard.length === 0) {
-                ol.innerHTML = '<li>Keine Spieler in der Rangliste.</li>';
-            } else {
-                for (const [idx, p] of frData.leaderboard.entries()) {
-                    const li = document.createElement('li');
-                    switch (idx) {
-                        case 0: {
-                            li.classList.add('rank-1');
-                            break;
-                        }
-                        case 1: {
-                            li.classList.add('rank-2');
-                            break;
-                        }
-                        case 2: {
-                            li.classList.add('rank-3');
-                            break;
-                        }
-                    }
-                    li.textContent = `${idx + 1}. ${p.name}: ${Math.round(p.score)} Punkte`;
-                    ol.append(li);
-                }
-            }
-            lbDiv.append(ol);
-            playerLeaderboardContainer.append(lbDiv);
-        } else {
-            playerLeaderboardContainer.innerHTML = '<p>Keine Ranglistendaten verfügbar.</p>'; // Fallback
+        const list = Array.isArray(frData.leaderboard) ? frData.leaderboard : null;
+        if (!list) {
+            playerLeaderboardContainer.innerHTML = '<p>Keine Ranglistendaten verfügbar.</p>';
+            return;
         }
+
+        const heading = document.createElement('h4');
+        heading.textContent = 'Endgültige Rangliste:';
+        playerLeaderboardContainer.append(heading);
+        if (list.length === 0) {
+            const empty = document.createElement('p');
+            empty.textContent = 'Keine Spieler in der Rangliste.';
+            playerLeaderboardContainer.append(empty);
+            return;
+        }
+
+        // In a class of 30 the own row is far down the list: say the place
+        // up front and mark the row. The ranking carries names and scores
+        // only, so the own row is the one with this name and score.
+        const ownIdx = list.findIndex(
+            (p) => p.name === playerDisplayName && Math.round(p.score) === Math.round(playerScore)
+        );
+        if (ownIdx !== -1) {
+            const own = document.createElement('p');
+            own.className = 'final-own-rank';
+            own.textContent = `Du bist auf Platz ${ownIdx + 1} von ${list.length}.`;
+            playerLeaderboardContainer.append(own);
+        }
+
+        // Same rows as the host's scoreboard, numbered once (the <ol> marker
+        // used to add a second "1." in front of the text's own number).
+        const ol = document.createElement('ol');
+        ol.className = 'final-ranking';
+        for (const [idx, p] of list.entries()) {
+            const li = document.createElement('li');
+            li.className = 'leaderboard-item';
+            if (idx < 3) li.classList.add(`rank-${idx + 1}`);
+            const row = document.createElement('span');
+            row.className = 'player-row';
+            const rank = document.createElement('span');
+            rank.className = 'player-rank';
+            rank.textContent = `${idx + 1}.`;
+            const name = document.createElement('span');
+            name.className = 'player-name';
+            name.textContent = idx === ownIdx ? `${p.name} (du)` : p.name;
+            row.append(rank, name);
+            const score = document.createElement('span');
+            score.className = 'player-score';
+            score.textContent = `${Math.round(p.score)} Punkte`;
+            li.append(row, score);
+            if (idx === ownIdx) {
+                li.classList.add('is-me');
+                li.setAttribute('aria-current', 'true');
+            }
+            ol.append(li);
+        }
+        playerLeaderboardContainer.append(ol);
     }
 
     /**
@@ -5097,6 +5133,7 @@ function initializePlayerFeatures(reconnectInfo) {
         playerConnectFn = null;
 
         playerScore = 0;
+        playerDisplayName = null;
         selectedAnswers = [];
         pendingFinalResultData = null;
         playerCurrentQuestionOptions = [];

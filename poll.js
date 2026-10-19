@@ -268,6 +268,10 @@ let hostRoomLocked = false;
 // requestId -> {name} for knocks waiting on the host's decision.
 const hostJoinRequests = new Map();
 let hostTimerInterval = null;
+// The grace-period endVote() scheduled when the countdown hits zero. Tracked so
+// a vote that ended sooner (everyone voted, host click) can't have it fire
+// into the *next* vote, closing that one seconds after it started.
+let hostEndVoteTimeout = null;
 // Pending results frame to send once a fresh hostWs is open after a transient
 // drop. Without this, an endVote() that ran while the host WS was closed
 // would compute the podium locally but never notify the players — they'd be
@@ -961,6 +965,7 @@ function abortActiveVote(message) {
         clearInterval(hostTimerInterval);
         hostTimerInterval = null;
     }
+    clearEndVoteTimeout();
     clearAppendQueue();
     hostActivePoll = null;
     hostPollEnding = false;
@@ -1765,6 +1770,7 @@ function refreshHostVotingProgress() {
  */
 function startHostTimer(seconds) {
     if (hostTimerInterval) clearInterval(hostTimerInterval);
+    clearEndVoteTimeout();
     dom.hostTimerBar.style.width = '100%';
     // Untimed poll: no countdown, the bar just stays full.
     if (dom.hostTimerContainer) dom.hostTimerContainer.classList.toggle('hidden', !seconds);
@@ -1782,11 +1788,18 @@ function startHostTimer(seconds) {
             // seconds on slow mobile networks — a 2 s grace was dropping
             // votes from players whose phones got the question late and
             // submitted right at the edge of the host's countdown.
-            // endVote()'s own guard makes this a no-op if the vote was
-            // already auto-ended by the last submission landing.
-            setTimeout(endVote, 5000);
+            // endVote() clears this timer when the vote ends sooner.
+            hostEndVoteTimeout = setTimeout(endVote, 5000);
         }
     }, 100);
+}
+
+/** Cancel the grace-period endVote() of the countdown, if one is pending. */
+function clearEndVoteTimeout() {
+    if (hostEndVoteTimeout) {
+        clearTimeout(hostEndVoteTimeout);
+        hostEndVoteTimeout = null;
+    }
 }
 
 /**
@@ -1807,6 +1820,7 @@ function endVote() {
         clearTimeout(hostDisconnectGraceTimeout);
         hostDisconnectGraceTimeout = null;
     }
+    clearEndVoteTimeout();
     dom.endVoteBtn.disabled = true;
     if (hostWs && hostWs.readyState === WebSocket.OPEN) {
         hostWs.send(JSON.stringify({ type: 'collect_ballots' }));
@@ -1992,6 +2006,7 @@ function hardResetHost() {
         clearInterval(hostTimerInterval);
         hostTimerInterval = null;
     }
+    clearEndVoteTimeout();
     hostHeartbeat = stopHeartbeat(hostHeartbeat);
     if (hostWs) {
         try {
@@ -2741,7 +2756,15 @@ document.addEventListener('DOMContentLoaded', () => {
 
     dom.joinBtn.addEventListener('click', submitJoin);
     dom.roomCodeInput.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter') submitJoin();
+        if (e.key !== 'Enter' || e.isComposing) return;
+        // The phone keyboard's "Weiter" goes on to the name, like in the quiz;
+        // with no name yet it used to answer with an error toast.
+        if (!dom.playerNameInput.value.trim()) {
+            e.preventDefault();
+            dom.playerNameInput.focus();
+            return;
+        }
+        submitJoin();
     });
     dom.playerNameInput.addEventListener('keydown', (e) => {
         if (e.key === 'Enter') submitJoin();

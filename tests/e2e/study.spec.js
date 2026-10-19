@@ -289,3 +289,59 @@ test('multiple choice: tapping the option text toggles it exactly once', async (
     await expect(toggle).toContainText('Erklärungen ausblenden');
     await expect(back.locator('.mc-correct-selected .option-status')).toHaveText('✓ richtig');
 });
+
+test('progress of a deleted deck is neither due nor practised; titles, not file names', async ({
+    device,
+}, testInfo) => {
+    const backup = {
+        flashcardDecks: {
+            'hauptstaedte-v2': {
+                meta: { name: 'Hauptstädte' },
+                cards: [{ question: 'Hauptstadt von Frankreich?', answer: 'Paris' }],
+            },
+        },
+        spacedRepetitionData: {
+            'hauptstaedte-v2|||Hauptstadt von Frankreich?': {
+                step: 0,
+                history: [0],
+                nextReview: '2026-01-01T00:00:00Z',
+            },
+            // Left behind by a deck that was deleted since.
+            'alt-deck|||Eine Frage, die es nicht mehr gibt?': {
+                step: 0,
+                history: [0],
+                nextReview: '2026-01-01T00:00:00Z',
+            },
+        },
+    };
+    const file = testInfo.outputPath('orphan-backup.json');
+    fs.writeFileSync(file, JSON.stringify(backup));
+
+    const page = await device('cards', STATIC);
+    await page.goto('/cards.html');
+    await page.setInputFiles('#file-input', file);
+    await page.click('.ui-modal-confirm');
+    await expect(page.locator('#menu-summary')).toContainText('1 fällig');
+
+    await test.step('the stage list notes the orphan but only practises real cards', async () => {
+        await page.click('#open-progress');
+        await page.click('.hub-tab[data-tab="manage"]');
+        await expect(page.locator('.sr-bucket-count')).toHaveText(
+            '1 Karte · 1 fällig · 1 nicht mehr im Deck'
+        );
+        await page.locator('.sr-bucket-checkbox').check();
+        await expect(page.locator('#start-selected-buckets')).toHaveText('1 Karte üben');
+        await page.click('#start-selected-buckets');
+        await expect(page.locator('#question-text')).toHaveText('Hauptstadt von Frankreich?');
+        await expect(page.locator('#cards-remaining')).toHaveText('1');
+    });
+
+    await test.step('Lesemodus is titled with the deck name, not its file name', async () => {
+        await page.goto('/cards.html');
+        await page.locator('.topic-checkbox').check();
+        await page.click('#read-mode-btn');
+        await expect(page.locator('#book-view-title')).toHaveText('Lesemodus — Hauptstädte');
+        // One topic: the heading names it, no "Quelle" line per card.
+        await expect(page.locator('.book-card-source')).toHaveCount(0);
+    });
+});
