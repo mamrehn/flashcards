@@ -153,6 +153,37 @@ test('relay server protocol', { skip }, async (t) => {
         assert.equal('codeLanguage' in dropped, false);
     });
 
+    await t.test('a matching round relays its layout; a broken layout is refused', async () => {
+        const { host, roomId } = await hostRoom(url);
+        const { player } = await joinRoom(url, roomId);
+        const options = ['Deutschland', 'Frankreich', 'Paris', 'Berlin', 'Rom'];
+        host.send({
+            type: 'start_question',
+            question: 'Ordne zu.',
+            options,
+            matching: { left: 2, pairs: 2, reuseLeft: false, reuseRight: 'yes', extra: 1 },
+        });
+        const q = await player.next('question');
+        assert.deepEqual(q.options, options);
+        assert.deepEqual(q.matching, { left: 2, pairs: 2, reuseLeft: false, reuseRight: false });
+
+        // An answer is a flat pair list [term, assignment, …].
+        player.send({ type: 'submit_answer', answerData: [0, 3, 1, 2] });
+        assert.deepEqual((await host.next('player_answered')).answerData, [0, 3, 1, 2]);
+
+        for (const matching of [
+            { left: 5, pairs: 1 }, // no assignments left
+            { left: 0, pairs: 1 },
+            { left: 2, pairs: 11 }, // more pairs than an answer can carry
+            'x',
+        ]) {
+            host.send({ type: 'start_question', question: 'Q', options, matching });
+            assert.equal((await host.next('error')).code, 'QUESTION_INVALID');
+        }
+        host.send({ type: 'start_question', question: 'MC', options: ['a', 'b'] });
+        assert.equal('matching' in (await player.next('question')), false);
+    });
+
     await t.test('locked room: knock, admit, deny, assign, and reconnect', async () => {
         const { host, roomId } = await hostRoom(url);
         const { player: anna, joined: annaJoined } = await joinRoom(url, roomId, {

@@ -4404,8 +4404,20 @@ function showAnswer() {
 
         matchingResultContainer.classList.remove('hidden');
 
-        const score = matchingRequiredCount > 0 ? correctPairCount / matchingRequiredCount : 0;
-        setScoreVerdict(score, `${correctPairCount} von ${matchingRequiredCount} Zuordnungen`);
+        // Correct pairs out of the required ones — or out of the pairs made,
+        // when there are more: where both columns are reusable, linking every
+        // term to every assignment used to score 100 % (the live quiz scores
+        // the same way).
+        const wrongPairCount = matchingPairs.length - correctPairCount;
+        const score =
+            matchingRequiredCount > 0
+                ? correctPairCount / Math.max(matchingRequiredCount, matchingPairs.length)
+                : 0;
+        const wrongNote = wrongPairCount > 0 ? `, ${wrongPairCount} falsch` : '';
+        setScoreVerdict(
+            score,
+            `${correctPairCount} von ${matchingRequiredCount} Zuordnungen${wrongNote}`
+        );
         markAnswer(score);
 
         nextCardBtn.style.display = 'inline-block';

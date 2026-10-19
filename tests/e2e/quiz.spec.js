@@ -11,6 +11,7 @@ const { test, expect } = require('./fixtures');
 
 const DECK = path.join(__dirname, 'data', 'quiz-two-questions.json');
 const CODE_DECK = path.join(__dirname, 'data', 'quiz-code-question.json');
+const MATCHING_DECK = path.join(__dirname, 'data', 'quiz-matching-question.json');
 
 /**
  * Host a quiz with a two-question test deck.
@@ -34,7 +35,9 @@ async function hostQuiz(device, deck = DECK) {
  */
 async function openRoom(host, deck = DECK) {
     await host.setInputFiles('#json-file', deck);
-    await expect(host.locator('#file-status')).toContainText('Importiert: 2 MC-Fragen');
+    await expect(host.locator('#file-status')).toContainText(
+        'Importiert: 2 Multiple-Choice-Fragen'
+    );
     await host.fill('#question-duration-min', '15');
     await host.fill('#question-duration-max', '20');
     await host.click('#start-quiz-btn');
@@ -228,4 +231,177 @@ test('a relay restart mid-question resumes the round; double click and reload ar
         await expect(host.locator('#players-list')).toContainText('Mia');
         await expect(host.locator('#players-list')).toContainText('Ben');
     });
+});
+
+/**
+ * A tile of the phone's matching board.
+ * @param {import('@playwright/test').Page} page
+ * @param {'left'|'right'} side - terms or assignments
+ * @param {string} text
+ * @returns {import('@playwright/test').Locator}
+ */
+function tile(page, side, text) {
+    return page.locator(`#player-question .match-item[data-side="${side}"]`, {
+        hasText: new RegExp(`^${text}$`),
+    });
+}
+
+/**
+ * A term tile, by its text.
+ * @param {string} text
+ * @returns {(page: import('@playwright/test').Page) => import('@playwright/test').Locator}
+ */
+const term = (text) => (page) => tile(page, 'left', text);
+
+/**
+ * An assignment tile, by its text.
+ * @param {string} text
+ * @returns {(page: import('@playwright/test').Page) => import('@playwright/test').Locator}
+ */
+const assignment = (text) => (page) => tile(page, 'right', text);
+
+/**
+ * Tap two tiles to pair them (term then assignment, or the other way round).
+ * @param {import('@playwright/test').Page} page
+ * @param {(page: import('@playwright/test').Page) => import('@playwright/test').Locator} first
+ * @param {(page: import('@playwright/test').Page) => import('@playwright/test').Locator} second
+ */
+async function pair(page, first, second) {
+    await first(page).click();
+    await second(page).click();
+}
+
+test('a matching round: pairs on the phone, partial credit, results on both screens', async ({
+    device,
+}) => {
+    const host = await device('host');
+    await host.goto('/quiz.html');
+    await host.click('#host-btn');
+    await host.setInputFiles('#json-file', MATCHING_DECK);
+    // The free-text card can't be played live; the matching card can.
+    await expect(host.locator('#file-status')).toContainText('Importiert: 1 Zuordnungsfrage');
+    await expect(host.locator('#file-status')).toContainText('1 Freitext-Karte(n) übersprungen');
+    await host.fill('#question-duration-min', '30');
+    await host.fill('#question-duration-max', '30');
+    await host.click('#start-quiz-btn');
+    await expect(host.locator('#room-id')).toHaveText(/^\S{2} \S{2}$/);
+    const code = (await host.locator('#room-id').textContent()).replaceAll(' ', '');
+    const mia = await joinQuiz(device, code, 'Mia');
+    const ben = await joinQuiz(device, code, 'Ben');
+    await host.click('#start-questions-btn');
+
+    await test.step('Mia pairs everything right, in either tap order', async () => {
+        await expect(mia.locator('#player-question-hint')).toHaveText(
+            'Tippe einen Begriff an, dann die passende Zuordnung.'
+        );
+        // The projector shows both columns too, without the answers.
+        await expect(host.locator('#host-current-options .host-match-item')).toHaveCount(7);
+        await expect(tile(mia, 'right', 'Madrid')).toBeVisible();
+        await pair(mia, term('Deutschland'), assignment('Berlin'));
+        await expect(mia.locator('.match-pair')).toHaveText(['Deutschland → Berlin✕']);
+        // One partner each: both tiles left their columns.
+        await expect(tile(mia, 'left', 'Deutschland')).toHaveCount(0);
+        await expect(tile(mia, 'right', 'Berlin')).toHaveCount(0);
+        await expect(mia.locator('.match-progress')).toHaveText('1 von 3 Zuordnungen');
+        await pair(mia, assignment('Paris'), term('Frankreich'));
+        await pair(mia, term('Italien'), assignment('Rom'));
+        // Nothing left to pair: the columns go, the distractor stays unpaired.
+        await expect(mia.locator('.match-cols')).toHaveCount(0);
+        await mia.click('#submit-answer-btn');
+        await expect(mia.locator('#submit-answer-btn')).toContainText('Gesendet');
+    });
+
+    await test.step('Ben gets one of three, after taking a pair back', async () => {
+        await pair(ben, term('Deutschland'), assignment('Madrid'));
+        await ben.locator('.match-unlink').click();
+        await expect(tile(ben, 'left', 'Deutschland')).toBeVisible();
+        await pair(ben, term('Deutschland'), assignment('Paris'));
+        await pair(ben, term('Frankreich'), assignment('Berlin'));
+        await pair(ben, term('Italien'), assignment('Rom'));
+        await ben.click('#submit-answer-btn');
+    });
+
+    await test.step('verdicts on the phones, pair counts on the projector', async () => {
+        // The only question is also the last: the phones go on to the final
+        // screen; the round's verdict is rendered underneath it.
+        await expect(mia.locator('#player-final-result')).toBeVisible();
+        await expect(mia.locator('#result-label')).toHaveText('Richtig!');
+        await expect(ben.locator('#result-icon')).toHaveText('1/3');
+        await expect(ben.locator('#result-label')).toHaveText('Teilweise richtig');
+        await expect(ben.locator('.result-pick-tally')).toHaveText(
+            '2 richtige Zuordnungen fehlen · 2 falsche Zuordnungen'
+        );
+        await expect(ben.locator('.correct-answer-chip.player-selected')).toHaveText([
+            'Italien → Rom',
+        ]);
+        const reveal = host.locator('#host-current-options li');
+        await expect(reveal.filter({ hasText: 'Italien → Rom (2× richtig)' })).toHaveCount(1);
+        await expect(reveal.filter({ hasText: 'Deutschland → Berlin (1× richtig)' })).toHaveCount(
+            1
+        );
+        await expect(reveal.filter({ hasText: 'Madrid – passt zu keinem Begriff' })).toHaveCount(1);
+    });
+
+    await test.step('one right pair of three is a third of the points', async () => {
+        await host.click('#show-results-btn');
+        const points = async (name) => {
+            const text = await host
+                .locator('.podium-place', { hasText: name })
+                .locator('.podium-score')
+                .textContent();
+            return Number.parseInt(text, 10);
+        };
+        const [miaPoints, benPoints] = [await points('Mia'), await points('Ben')];
+        expect(benPoints).toBeGreaterThan(0);
+        // Both answered within a few seconds, so the speed bonus is about the
+        // same: Ben's share is close to 1/3 of Mia's.
+        expect(benPoints / miaPoints).toBeGreaterThan(0.25);
+        expect(benPoints / miaPoints).toBeLessThan(0.4);
+    });
+});
+
+test('scoring and places: no gain from extra ticks, equal points share a place', async ({
+    device,
+}) => {
+    const { host, code } = await hostQuiz(device);
+    const shares = await host.evaluate(() => ({
+        // One right and one wrong option of a single-answer question: half.
+        hedge: globalThis.mcScoreRatio([0], [0, 1]),
+        all: globalThis.mcScoreRatio([0], [0, 1, 2, 3]),
+        exact: globalThis.mcScoreRatio([0, 2], [2, 0]),
+        // Linking each term to both assignments: half, not everything.
+        matchingHedge: globalThis.matchingScoreRatio([0, 2, 1, 3], [0, 2, 0, 3, 1, 2, 1, 3]),
+        matchingPartial: globalThis.matchingScoreRatio([0, 3, 1, 4, 2, 5], [0, 3]),
+        ranks: globalThis.competitionRanks([300.2, 299.6, 120, 0, 0]),
+    }));
+    expect(shares).toEqual({
+        hedge: 0.5,
+        all: 0.25,
+        exact: 1,
+        matchingHedge: 0.5,
+        matchingPartial: 1 / 3,
+        ranks: [1, 1, 3, 4, 4],
+    });
+
+    // Both players answer wrong: two players on 0 points share 1st place.
+    const players = [await joinQuiz(device, code, 'Mia'), await joinQuiz(device, code, 'Ben')];
+    await host.click('#start-questions-btn');
+    const wrongOption = {
+        'Welche sind Primzahlen?': '4',
+        'Welche Planeten sind Gasriesen?': 'Mars',
+    };
+    for (const page of players) {
+        await expect(page.locator('#player-question')).toBeVisible();
+        const question = await page.locator('#player-question-text').textContent();
+        await page
+            .locator('#player-question .option-btn', {
+                has: page.locator('.option-btn-text', {
+                    hasText: new RegExp(`^${wrongOption[question]}$`),
+                }),
+            })
+            .click();
+        await page.click('#submit-answer-btn');
+    }
+    await expect(host.locator('#scoreboard-list .scoreboard-item')).toHaveCount(2);
+    await expect(host.locator('#scoreboard-list .player-rank')).toHaveText(['1.', '1.']);
 });

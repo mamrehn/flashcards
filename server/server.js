@@ -315,6 +315,8 @@ const MAX_OPTIONS_PER_QUESTION = 250;
 // validation); polls may run longer, and `0` means "no timer — the host ends
 // the vote manually".
 const MAX_DURATION_SEC = 600;
+// Numbers in one answer: option indices, or 10 matching pairs.
+const MAX_ANSWER_INDICES = 20;
 // Name of a highlight.js language for a question's code ("python", "csharp", "c#").
 const CODE_LANGUAGE_RE = /^[\d#+a-z-]{1,32}$/i;
 // Knock requests waiting on the host while a room is locked.
@@ -1124,6 +1126,23 @@ function sanitizeIndexList(list) {
 }
 
 /**
+ * Layout of a matching round (quiz): the first `left` options are terms, the
+ * rest assignments; `pairs` is how many pairs the answer needs. An answer is a
+ * flat [term, assignment, …] index list, so at most half the answer limit.
+ * `reuseLeft` / `reuseRight`: a term / an assignment can take several partners.
+ * @param {unknown} matching
+ * @param {number} optionCount
+ * @returns {{left:number, pairs:number, reuseLeft:boolean, reuseRight:boolean}|null}
+ */
+function sanitizeMatching(matching, optionCount) {
+    if (!isPlainObject(matching)) return null;
+    const { left, pairs, reuseLeft, reuseRight } = matching;
+    if (!Number.isInteger(left) || left < 1 || left >= optionCount) return null;
+    if (!Number.isInteger(pairs) || pairs < 1 || pairs > MAX_ANSWER_INDICES / 2) return null;
+    return { left, pairs, reuseLeft: reuseLeft === true, reuseRight: reuseRight === true };
+}
+
+/**
  * @param {unknown} list
  * @returns {Array<{name:string, score:number}>|null}
  */
@@ -1163,7 +1182,7 @@ function handleSubmitAnswer(ws, msg) {
     // Validate answerData: an array of at most 20 integer indices into the
     // active question's options. Anything else can't score on the host anyway.
     const optionCount = room.activeQuestion.options.length;
-    if (!Array.isArray(msg.answerData) || msg.answerData.length > 20) return;
+    if (!Array.isArray(msg.answerData) || msg.answerData.length > MAX_ANSWER_INDICES) return;
     if (!msg.answerData.every((i) => Number.isInteger(i) && i >= 0 && i < optionCount)) return;
     const answer = [...msg.answerData];
 
@@ -1219,6 +1238,15 @@ function handleStartQuestion(ws, msg) {
         return;
     }
 
+    // A matching round's layout must fit its options; without it the
+    // phones would show the terms and assignments as answer buttons.
+    const matching =
+        msg.matching === undefined ? null : sanitizeMatching(msg.matching, msg.options.length);
+    if (msg.matching !== undefined && !matching) {
+        sendError(ws, ERR.QUESTION_INVALID, 'Die Zuordnungsfrage ist ungültig.');
+        return;
+    }
+
     // Validate relay fields
     const questionIndex =
         typeof msg.index === 'number' && msg.index >= 0 ? Math.min(msg.index, 10_000) : 0;
@@ -1260,6 +1288,8 @@ function handleStartQuestion(ws, msg) {
             ? { codeLanguage: msg.codeLanguage }
             : {}),
         options: [...msg.options],
+        // Only matching rounds carry it, so multiple choice keeps its shape.
+        ...(matching ? { matching } : {}),
         index: questionIndex,
         total: questionTotal,
         duration: duration,

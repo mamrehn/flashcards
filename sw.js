@@ -13,7 +13,7 @@ const SW_DEBUG =
 // eslint-disable-next-line no-console
 const swLog = SW_DEBUG ? console.log.bind(console) : () => {};
 
-const CACHE_NAME = 'flashcards-v9';
+const CACHE_NAME = 'flashcards-v10';
 const ASSETS_TO_CACHE = [
     './',
     './index.html',

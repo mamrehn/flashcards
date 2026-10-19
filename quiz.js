@@ -54,6 +54,191 @@ function optionLetter(index) {
     return String.fromCodePoint(65 + index);
 }
 
+// --- Scoring and ranking (pure) ---
+
+/**
+ * Share of a question's points for a multiple-choice answer: the overlap of
+ * chosen and correct options, |correct ∩ chosen| / |correct ∪ chosen| — the
+ * score the study app gives. One right plus one wrong option of a
+ * single-answer question earns half, so ticking extra options never pays off
+ * on average (the old "right share minus wrong share" paid two thirds).
+ * @param {number[]} correctIndices
+ * @param {number[]} chosenIndices
+ * @returns {number} 0..1
+ */
+function mcScoreRatio(correctIndices, chosenIndices) {
+    const correct = new Set(correctIndices);
+    const chosen = new Set(chosenIndices);
+    let hits = 0;
+    for (const i of chosen) if (correct.has(i)) hits++;
+    const union = correct.size + chosen.size - hits;
+    return union === 0 ? 0 : hits / union;
+}
+
+/**
+ * A flat pair list [term, assignment, term, assignment, …] (how a matching
+ * answer travels) as a set of "term:assignment" keys; repeats collapse.
+ * @param {unknown} flat
+ * @returns {Set<string>}
+ */
+function pairKeys(flat) {
+    const keys = new Set();
+    if (!Array.isArray(flat)) return keys;
+    for (let i = 0; i + 1 < flat.length; i += 2) keys.add(`${flat[i]}:${flat[i + 1]}`);
+    return keys;
+}
+
+/**
+ * Share of a question's points for a matching answer: correct pairs out of
+ * the pairs the card needs — or out of the pairs made, when there are more,
+ * so linking a term to every assignment can't collect the points.
+ * @param {number[]} correctFlat - the card's pairs, flat
+ * @param {number[]} answerFlat - the player's pairs, flat
+ * @returns {number} 0..1
+ */
+function matchingScoreRatio(correctFlat, answerFlat) {
+    const correct = pairKeys(correctFlat);
+    const made = pairKeys(answerFlat);
+    if (correct.size === 0) return 0;
+    let hits = 0;
+    for (const key of made) if (correct.has(key)) hits++;
+    return hits / Math.max(correct.size, made.size);
+}
+
+/**
+ * Places for a score-sorted ranking, shared on a tie (1, 1, 3): equal
+ * displayed — i.e. rounded — points mean an equal place, as in the poll.
+ * @param {number[]} sortedScores - highest first
+ * @returns {number[]} 1-based place per entry
+ */
+function competitionRanks(sortedScores) {
+    const ranks = [];
+    for (const [i, score] of sortedScores.entries()) {
+        const tied = i > 0 && Math.round(score) === Math.round(sortedScores[i - 1]);
+        ranks.push(tied ? ranks[i - 1] : i + 1);
+    }
+    return ranks;
+}
+
+// --- Matching cards in a live round ---
+
+/**
+ * The matching layout of a question frame, or null for multiple choice (or a
+ * layout that doesn't fit the options).
+ * @param {{options?: unknown[], matching?: unknown}} qData
+ * @returns {{left: number, pairs: number, reuseLeft: boolean, reuseRight: boolean}|null}
+ */
+function matchingLayoutOf(qData) {
+    const m = qData && qData.matching;
+    const count = Array.isArray(qData?.options) ? qData.options.length : 0;
+    if (!m || typeof m !== 'object') return null;
+    if (!Number.isInteger(m.left) || m.left < 1 || m.left >= count) return null;
+    if (!Number.isInteger(m.pairs) || m.pairs < 1) return null;
+    return {
+        left: m.left,
+        pairs: m.pairs,
+        reuseLeft: m.reuseLeft === true,
+        reuseRight: m.reuseRight === true,
+    };
+}
+
+/**
+ * What to do in a matching round, and which tiles stay after pairing (so a
+ * term that doesn't disappear isn't mistaken for a bug).
+ * @param {{reuseLeft: boolean, reuseRight: boolean}} layout
+ * @returns {string}
+ */
+function matchingHint(layout) {
+    let reuse = '';
+    if (layout.reuseLeft && layout.reuseRight) {
+        reuse = ' Begriffe und Zuordnungen können mehrfach vorkommen.';
+    } else if (layout.reuseLeft) {
+        reuse = ' Ein Begriff kann mehrere Zuordnungen haben.';
+    } else if (layout.reuseRight) {
+        reuse = ' Eine Zuordnung kann zu mehreren Begriffen passen.';
+    }
+    return `Tippe einen Begriff an, dann die passende Zuordnung.${reuse}`;
+}
+
+/** The relay passes an answer of at most 20 numbers: 10 pairs. */
+const MAX_LIVE_MATCHING_PAIRS = 10;
+
+/**
+ * Whether a deck card is a matching card that can be played live: two or more
+ * pairs ({left, right}; a distractor has no left), at least one real pair, and
+ * no more pairs than an answer can carry.
+ * @param {object} q
+ * @returns {boolean}
+ */
+function isValidMatchingQuestion(q) {
+    if (!q || typeof q.question !== 'string' || !q.question.trim()) return false;
+    if (!Array.isArray(q.pairs) || q.pairs.length < 2) return false;
+    const wellFormed = q.pairs.every(
+        (p) =>
+            p &&
+            typeof p.right === 'string' &&
+            p.right.trim() !== '' &&
+            (p.left === null || p.left === undefined || typeof p.left === 'string')
+    );
+    if (!wellFormed) return false;
+    const real = new Set(
+        q.pairs.filter((p) => typeof p.left === 'string').map((p) => `${p.left}\u0000${p.right}`)
+    );
+    return real.size > 0 && real.size <= MAX_LIVE_MATCHING_PAIRS;
+}
+
+/**
+ * Lay a matching card out for a live round: its distinct terms (left, in the
+ * card's order) and assignments (right, shuffled; a distractor has no term)
+ * as one option list, terms first. Pairs are index pairs into that list.
+ * @param {{pairs: Array<{left?: string|null, right: string}>}} card
+ * @returns {{options: string[], correct: number[], layout: {left: number, pairs: number, reuseLeft: boolean, reuseRight: boolean}}}
+ */
+function layoutMatching(card) {
+    const lefts = [...new Set(card.pairs.map((p) => p.left).filter((l) => typeof l === 'string'))];
+    const rights = [...new Set(card.pairs.map((p) => p.right))];
+    shuffleArray(rights);
+    const correctKeys = new Set();
+    const correct = [];
+    const leftUse = new Map();
+    const rightUse = new Map();
+    for (const p of card.pairs) {
+        if (typeof p.left !== 'string') continue;
+        const pair = [lefts.indexOf(p.left), lefts.length + rights.indexOf(p.right)];
+        if (correctKeys.has(pair.join(':'))) continue;
+        correctKeys.add(pair.join(':'));
+        correct.push(...pair);
+        leftUse.set(p.left, (leftUse.get(p.left) || 0) + 1);
+        rightUse.set(p.right, (rightUse.get(p.right) || 0) + 1);
+    }
+    return {
+        options: [...lefts, ...rights],
+        correct,
+        layout: {
+            left: lefts.length,
+            pairs: correct.length / 2,
+            // Whether a term / an assignment takes more than one partner: the
+            // phone then keeps that column's tiles after pairing.
+            reuseLeft: [...leftUse.values()].some((n) => n > 1),
+            reuseRight: [...rightUse.values()].some((n) => n > 1),
+        },
+    };
+}
+
+/**
+ * The texts a question shows: its options, or a matching card's terms and
+ * assignments.
+ * @param {object} q
+ * @returns {string[]}
+ */
+function questionItems(q) {
+    if (Array.isArray(q.pairs)) {
+        const lefts = q.pairs.map((p) => p.left).filter((l) => typeof l === 'string');
+        return [...new Set(lefts), ...new Set(q.pairs.map((p) => p.right))];
+    }
+    return q.options;
+}
+
 /**
  * Shows a specific view and hides all other views.
  * @param {string} viewToShowId - The ID of the view element to show.
@@ -1241,6 +1426,89 @@ function getNonHostPlayerCount() {
  * Initializes all features and event listeners for the host role.
  * @param reconnectInfo
  */
+/**
+ * Cards of a library deck that can be played live: multiple choice and
+ * matching (free text stays in the study app).
+ * @param {{types?: {multipleChoice?: number, matching?: number}}} deck
+ * @returns {number}
+ */
+function livePlayableCount(deck) {
+    return (deck.types?.multipleChoice ?? 0) + (deck.types?.matching ?? 0);
+}
+
+/**
+ * "1 richtige Antwort verfehlt" / "2 richtige Zuordnungen fehlen".
+ * @param {number} n
+ * @param {boolean} matching
+ * @returns {string}
+ */
+function missedText(n, matching) {
+    if (matching)
+        return n === 1 ? '1 richtige Zuordnung fehlt' : `${n} richtige Zuordnungen fehlen`;
+    return n === 1 ? '1 richtige Antwort verfehlt' : `${n} richtige Antworten verfehlt`;
+}
+
+/**
+ * "1 falsche Antwort markiert" / "2 falsche Zuordnungen".
+ * @param {number} n
+ * @param {boolean} matching
+ * @returns {string}
+ */
+function wrongText(n, matching) {
+    if (matching) return n === 1 ? '1 falsche Zuordnung' : `${n} falsche Zuordnungen`;
+    return n === 1 ? '1 falsche Antwort markiert' : `${n} falsche Antworten markiert`;
+}
+
+/**
+ * @param {string} text
+ * @returns {HTMLSpanElement}
+ */
+function textSpan(text) {
+    const span = document.createElement('span');
+    span.textContent = text;
+    return span;
+}
+
+/**
+ * The answer key of a question for the host's question list: its options with
+ * the correct ones marked, or a matching card's pairs (a distractor is listed
+ * as fitting no term).
+ * @param {object} q
+ * @returns {string} HTML <li> items
+ */
+function answerListHtml(q) {
+    if (Array.isArray(q.pairs)) {
+        return q.pairs
+            .map((p) =>
+                typeof p.left === 'string'
+                    ? `<li class="is-correct">${sanitizeHTML(p.left)} → ${sanitizeHTML(p.right)}</li>`
+                    : `<li>${sanitizeHTML(p.right)} (passt zu keinem Begriff)</li>`
+            )
+            .join('');
+    }
+    const correctSet = new Set(q.correct);
+    return q.options
+        .map(
+            (o, i) => `<li class="${correctSet.has(i) ? 'is-correct' : ''}">${sanitizeHTML(o)}</li>`
+        )
+        .join('');
+}
+
+/**
+ * "12 Multiple-Choice-Fragen", or "15 Fragen (12 Multiple Choice, 3 Zuordnung)"
+ * when the set mixes both kinds.
+ * @param {Array<object>} questions
+ * @returns {string}
+ */
+function describeQuestionMix(questions) {
+    const matching = questions.filter((q) => Array.isArray(q.pairs)).length;
+    const mc = questions.length - matching;
+    if (matching === 0)
+        return mc === 1 ? '1 Multiple-Choice-Frage' : `${mc} Multiple-Choice-Fragen`;
+    if (mc === 0) return matching === 1 ? '1 Zuordnungsfrage' : `${matching} Zuordnungsfragen`;
+    return `${questions.length} Fragen (${mc} Multiple Choice, ${matching} Zuordnung)`;
+}
+
 /** Current host importer used by the library picker (see setupLibraryPicker). */
 let libraryPickerImport = null;
 
@@ -1269,7 +1537,7 @@ async function setupLibraryPicker(importFiles) {
         if (!res.ok) return;
         const manifest = sanitizeParsedJSON(await res.json());
         decks = (manifest && Array.isArray(manifest.decks) ? manifest.decks : []).filter(
-            (d) => d && typeof d.filename === 'string' && (d.types?.multipleChoice ?? 0) > 0
+            (d) => d && typeof d.filename === 'string' && livePlayableCount(d) > 0
         );
     } catch {
         return;
@@ -1279,7 +1547,7 @@ async function setupLibraryPicker(importFiles) {
     for (const deck of decks.toSorted((a, b) => String(a.title).localeCompare(b.title, 'de'))) {
         const option = document.createElement('option');
         option.value = deck.id;
-        option.textContent = `${deck.title} (${deck.types.multipleChoice} MC-Fragen)`;
+        option.textContent = `${deck.title} (${livePlayableCount(deck)} Fragen)`;
         select.append(option);
     }
     wrap.classList.remove('hidden');
@@ -1421,9 +1689,12 @@ async function initializeHostFeatures(reconnectInfo) {
             return [];
         };
 
-        // Extracts MC questions from a parsed JSON blob (array or {cards:[...]})
-        const extractMCQuestions = (data) =>
-            getCandidates(data).filter((q) => isValidMCQuestion(q));
+        // Cards that can be played live (array or {cards:[...]}): multiple
+        // choice and matching. Free text stays in the study app.
+        const extractPlayable = (data) =>
+            getCandidates(data).filter((q) =>
+                Array.isArray(q?.pairs) ? isValidMatchingQuestion(q) : isValidMCQuestion(q)
+            );
 
         // Reads a single File as text
         const readFileText = (file) => file.text();
@@ -1470,10 +1741,10 @@ async function initializeHostFeatures(reconnectInfo) {
                             try {
                                 const content = await entry.async('string');
                                 const data = JSON.parse(content);
-                                const mc = extractMCQuestions(data);
+                                const playable = extractPlayable(data);
                                 const total = getCandidates(data).length;
-                                skippedFreetext += Math.max(0, total - mc.length);
-                                collected.push(...mc);
+                                skippedFreetext += Math.max(0, total - playable.length);
+                                collected.push(...playable);
                                 processedFiles++;
                             } catch {
                                 failedFiles++;
@@ -1482,10 +1753,10 @@ async function initializeHostFeatures(reconnectInfo) {
                     } else {
                         const text = await readFileText(file);
                         const data = JSON.parse(text);
-                        const mc = extractMCQuestions(data);
+                        const playable = extractPlayable(data);
                         const total = getCandidates(data).length;
-                        skippedFreetext += Math.max(0, total - mc.length);
-                        collected.push(...mc);
+                        skippedFreetext += Math.max(0, total - playable.length);
+                        collected.push(...playable);
                         processedFiles++;
                     }
                 } catch (error) {
@@ -1497,20 +1768,17 @@ async function initializeHostFeatures(reconnectInfo) {
             if (collected.length > 0) {
                 quizState.questions = collected;
                 const parts = [
-                    `Importiert: ${collected.length} MC-Fragen aus ${processedFiles} Datei(en).`,
+                    `Importiert: ${describeQuestionMix(collected)} aus ${processedFiles} Datei(en).`,
                 ];
-                // Only multiple choice can be played live; free-text and
-                // matching cards stay in the study app.
+                // Free text can't be scored live; it stays in the study app.
                 if (skippedFreetext > 0)
-                    parts.push(
-                        `${skippedFreetext} Karte(n) ohne Antwortoptionen (Freitext, Zuordnung) übersprungen.`
-                    );
+                    parts.push(`${skippedFreetext} Freitext-Karte(n) übersprungen.`);
                 if (failedFiles > 0) parts.push(`${failedFiles} Datei(en) fehlgeschlagen.`);
                 fileStatus.textContent = parts.join(' ');
             } else {
                 quizState.questions = [];
                 fileStatus.textContent =
-                    'Keine gültigen MC-Fragen gefunden. Nur Multiple-Choice-Fragen werden importiert.';
+                    'Keine spielbaren Fragen gefunden. Live gespielt werden Multiple-Choice- und Zuordnungsfragen.';
             }
             // Render first so the category filter reconciles against the new
             // pool, then push the (reconciled) selection to the server.
@@ -1668,17 +1936,19 @@ async function initializeHostFeatures(reconnectInfo) {
                     );
                     return;
                 }
-                if (q.options.length > MAX_OPTIONS) {
+                // A matching card's terms and assignments travel as options.
+                const items = questionItems(q);
+                if (items.length > MAX_OPTIONS) {
                     showMessage(
-                        `Frage ${i + 1} hat zu viele Optionen (${q.options.length}/${MAX_OPTIONS}).`,
+                        `Frage ${i + 1} hat zu viele Optionen (${items.length}/${MAX_OPTIONS}).`,
                         'error'
                     );
                     return;
                 }
-                const longOption = q.options.findIndex((o) => o.length > MAX_OPTION_LENGTH);
+                const longOption = items.findIndex((o) => o.length > MAX_OPTION_LENGTH);
                 if (longOption !== -1) {
                     showMessage(
-                        `Frage ${i + 1}, Option ${longOption + 1} ist zu lang (${q.options[longOption].length}/${MAX_OPTION_LENGTH} Zeichen).`,
+                        `Frage ${i + 1}, Option ${longOption + 1} ist zu lang (${items[longOption].length}/${MAX_OPTION_LENGTH} Zeichen).`,
                         'error'
                     );
                     return;
@@ -1693,13 +1963,16 @@ async function initializeHostFeatures(reconnectInfo) {
             shuffleArray(quizState.shuffledQuestions);
 
             // Pre-compute per-question durations based on character count
-            // (a code snippet has to be read too, so it counts).
-            const charCounts = quizState.shuffledQuestions.map(
-                (q) =>
+            // (a code snippet has to be read too, so it counts). Matching
+            // texts count 1.5×: each pair takes two taps, not one.
+            const charCounts = quizState.shuffledQuestions.map((q) => {
+                const itemChars = questionItems(q).reduce((sum, o) => sum + o.length, 0);
+                return (
                     q.question.length +
                     (typeof q.code === 'string' ? q.code.length : 0) +
-                    q.options.reduce((sum, o) => sum + o.length, 0)
-            );
+                    (Array.isArray(q.pairs) ? Math.round(itemChars * 1.5) : itemChars)
+                );
+            });
             const minChars = Math.min(...charCounts);
             const maxChars = Math.max(...charCounts);
             const charRange = maxChars - minChars;
@@ -1919,8 +2192,8 @@ async function initializeHostFeatures(reconnectInfo) {
                 currentQuestion.code,
                 currentQuestion.codeLanguage
             );
-            // Options are displayed without correct indicators while question is active
-            displayHostOptions(currentQuestion.shuffledOptions || currentQuestion.options, []); // Use shuffled if available
+            // Without the answers while the question is running.
+            renderHostQuestionBody(currentQuestion, false);
             questionCounterEl.textContent = `Frage ${quizState.currentQuestionIndex + 1} von ${quizState.shuffledQuestions.length}`;
             setDoublePointsBadge(
                 doublePointsBadgeEl,
@@ -1990,13 +2263,7 @@ async function initializeHostFeatures(reconnectInfo) {
         for (const [index, q] of quizState.questions.entries()) {
             const item = document.createElement('div');
             item.className = 'question-item';
-            const correctSet = new Set(q.correct);
-            const optionsHtml = q.options
-                .map(
-                    (o, i) =>
-                        `<li class="${correctSet.has(i) ? 'is-correct' : ''}">${sanitizeHTML(o)}</li>`
-                )
-                .join('');
+            const optionsHtml = answerListHtml(q);
             item.innerHTML = `
                         <div class="question-item-head">
                             <p class="question-item-text"><strong>F${index + 1}:</strong> ${sanitizeHTML(q.question)}</p>
@@ -3023,20 +3290,26 @@ async function initializeHostFeatures(reconnectInfo) {
             hostDisconnectGraceTimeout = null;
         }
 
-        // Prepare shuffled options and correct indices for this question
-        const optionObjects = currentQuestion.options.map((text, index) => ({
-            text,
-            originalIndex: index,
-        }));
-        shuffleArray(optionObjects); // Shuffle the options
-        const shuffledOptions = optionObjects.map((obj) => obj.text);
-        const shuffledCorrectIndices = currentQuestion.correct.map((originalIdx) =>
-            optionObjects.findIndex((obj) => obj.originalIndex === originalIdx)
-        );
-
-        // Store shuffled options and correct indices in the current question object
-        currentQuestion.shuffledOptions = shuffledOptions;
-        currentQuestion.shuffledCorrect = shuffledCorrectIndices;
+        // Prepare shuffled options and correct indices for this question. A
+        // matching card becomes terms + assignments with its pairs as index
+        // pairs (see layoutMatching).
+        if (Array.isArray(currentQuestion.pairs)) {
+            const { options, correct, layout } = layoutMatching(currentQuestion);
+            currentQuestion.shuffledOptions = options;
+            currentQuestion.shuffledCorrect = correct;
+            currentQuestion.liveMatching = layout;
+        } else {
+            const optionObjects = currentQuestion.options.map((text, index) => ({
+                text,
+                originalIndex: index,
+            }));
+            shuffleArray(optionObjects); // Shuffle the options
+            currentQuestion.shuffledOptions = optionObjects.map((obj) => obj.text);
+            currentQuestion.shuffledCorrect = currentQuestion.correct.map((originalIdx) =>
+                optionObjects.findIndex((obj) => obj.originalIndex === originalIdx)
+            );
+            currentQuestion.liveMatching = null;
+        }
 
         // Reset player answers for the new question in local state
         for (const p of Object.values(quizState.players)) {
@@ -3078,7 +3351,7 @@ async function initializeHostFeatures(reconnectInfo) {
                 currentQuestion.code,
                 currentQuestion.codeLanguage
             );
-            displayHostOptions(shuffledOptions, []);
+            renderHostQuestionBody(currentQuestion, false);
             questionCounterEl.textContent = `Frage ${quizState.currentQuestionIndex + 1} von ${quizState.shuffledQuestions.length}`;
             setDoublePointsBadge(
                 doublePointsBadgeEl,
@@ -3115,6 +3388,90 @@ async function initializeHostFeatures(reconnectInfo) {
         } else {
             // Engine not initialised — keep the veil tiny then reveal.
             setTimeout(reveal, 250);
+        }
+    }
+
+    /**
+     * The answer area of the host's question screen: the options (or a
+     * matching card's terms and assignments) while the question runs; on
+     * reveal also what is correct and how many players chose it.
+     * @param {object} question - a started question (shuffledOptions set)
+     * @param {boolean} revealed
+     */
+    function renderHostQuestionBody(question, revealed) {
+        const options = question.shuffledOptions || question.options;
+        hostCurrentOptionsEl.classList.toggle('host-matching', Boolean(question.liveMatching));
+        if (question.liveMatching) {
+            if (revealed) displayHostMatchingResult(question);
+            else displayHostMatching(options, question.liveMatching.left);
+            return;
+        }
+        if (!revealed) {
+            displayHostOptions(options, []);
+            return;
+        }
+        const optionCounts = Array.from({ length: options.length }).fill(0);
+        for (const p of getNonHostPlayers()) {
+            for (const ansIndex of Array.isArray(p.currentAnswer) ? p.currentAnswer : []) {
+                if (optionCounts[ansIndex] !== undefined) optionCounts[ansIndex]++;
+            }
+        }
+        displayHostOptions(options, question.shuffledCorrect, optionCounts);
+    }
+
+    /**
+     * A running matching question on the big screen: terms and assignments
+     * side by side, as on the phones.
+     * @param {string[]} options - terms first, then assignments
+     * @param {number} leftCount - how many of the options are terms
+     */
+    function displayHostMatching(options, leftCount) {
+        hostCurrentOptionsEl.innerHTML = '';
+        const head = document.createElement('li');
+        head.className = 'host-match-head';
+        head.append(textSpan('Begriffe'), textSpan('Zuordnungen'));
+        // Two separate stacks, not rows: a term and an assignment side by
+        // side would read as a pair (and the shuffle sometimes makes it one).
+        const cols = document.createElement('li');
+        cols.className = 'host-match-cols';
+        for (const texts of [options.slice(0, leftCount), options.slice(leftCount)]) {
+            const col = document.createElement('div');
+            col.className = 'host-match-col';
+            for (const text of texts) {
+                const item = textSpan(text);
+                item.className = 'host-match-item';
+                col.append(item);
+            }
+            cols.append(col);
+        }
+        hostCurrentOptionsEl.append(head, cols);
+    }
+
+    /**
+     * A finished matching question on the big screen: each correct pair with
+     * how many players made it, then the assignments that fit no term.
+     * @param {object} question
+     */
+    function displayHostMatchingResult(question) {
+        hostCurrentOptionsEl.innerHTML = '';
+        const options = question.shuffledOptions;
+        const correct = question.shuffledCorrect;
+        const answers = getNonHostPlayers().map((p) => pairKeys(p.currentAnswer));
+        const pairedRights = new Set();
+        for (let i = 0; i + 1 < correct.length; i += 2) {
+            const [l, r] = [correct[i], correct[i + 1]];
+            pairedRights.add(r);
+            const made = answers.filter((keys) => keys.has(`${l}:${r}`)).length;
+            const li = document.createElement('li');
+            li.className = 'correct';
+            li.textContent = `${options[l]} → ${options[r]} (${made}× richtig)`;
+            hostCurrentOptionsEl.append(li);
+        }
+        for (let r = question.liveMatching.left; r < options.length; r++) {
+            if (pairedRights.has(r)) continue;
+            const li = document.createElement('li');
+            li.textContent = `${options[r]} – passt zu keinem Begriff`;
+            hostCurrentOptionsEl.append(li);
         }
     }
 
@@ -3161,6 +3518,9 @@ async function initializeHostFeatures(reconnectInfo) {
                 ? { codeLanguage: question.codeLanguage.trim().slice(0, 32) }
                 : {}),
             options: question.shuffledOptions,
+            // A matching round: which options are terms, how many pairs it
+            // needs, and which column's tiles can take several partners.
+            ...(question.liveMatching ? { matching: question.liveMatching } : {}),
             index: quizState.currentQuestionIndex,
             total: quizState.shuffledQuestions.length,
             duration: quizState.questionDurations[quizState.currentQuestionIndex],
@@ -3292,21 +3652,7 @@ async function initializeHostFeatures(reconnectInfo) {
         // question display so the audience can see what was right while the
         // time_up stinger plays.
         const currentQuestion = quizState.shuffledQuestions[quizState.currentQuestionIndex];
-        const optionCounts = Array.from({ length: currentQuestion.shuffledOptions.length }).fill(0);
-        for (const p of getNonHostPlayers()) {
-            if (p.currentAnswer && Array.isArray(p.currentAnswer)) {
-                for (const ansIndex of p.currentAnswer) {
-                    if (optionCounts[ansIndex] !== undefined) {
-                        optionCounts[ansIndex]++;
-                    }
-                }
-            }
-        }
-        displayHostOptions(
-            currentQuestion.shuffledOptions,
-            currentQuestion.shuffledCorrect,
-            optionCounts
-        );
+        renderHostQuestionBody(currentQuestion, true);
 
         calculateScores();
         await sendResultsToPlayers();
@@ -3391,11 +3737,8 @@ async function initializeHostFeatures(reconnectInfo) {
      */
     function calculateScores() {
         const currentQ = quizState.shuffledQuestions[quizState.currentQuestionIndex]; // Use shuffled questions
-        const correctSet = new Set(currentQ.shuffledCorrect); // Use shuffled correct indices
         const totalQuestionTime = quizState.questionDurations[quizState.currentQuestionIndex];
         const numQuestions = quizState.shuffledQuestions.length;
-        const totalOptions = currentQ.shuffledOptions.length;
-        const totalWrong = totalOptions - correctSet.size;
 
         const basePointsFirst = 100;
         const basePointsLast = 300;
@@ -3416,15 +3759,11 @@ async function initializeHostFeatures(reconnectInfo) {
 
         for (const p of getNonHostPlayers()) {
             if (p.currentAnswer && p.currentAnswer.length > 0) {
-                const playerAnsSet = new Set(p.currentAnswer);
-
-                const correctHits = [...playerAnsSet].filter((item) => correctSet.has(item)).length;
-                const wrongHits = [...playerAnsSet].filter((item) => !correctSet.has(item)).length;
-
-                // Proportional penalty: subtract wrong ratio from correct ratio
-                const correctRatio = correctHits / correctSet.size;
-                const wrongPenalty = totalWrong > 0 ? wrongHits / totalWrong : 0;
-                const adjustedRatio = Math.max(0, correctRatio - wrongPenalty);
+                // Share of the points: neither ticking extra options nor
+                // linking everything to everything pays off.
+                const adjustedRatio = currentQ.liveMatching
+                    ? matchingScoreRatio(currentQ.shuffledCorrect, p.currentAnswer)
+                    : mcScoreRatio(currentQ.shuffledCorrect, p.currentAnswer);
 
                 if (adjustedRatio > 0) {
                     let timeTaken = p.answerTime === null ? totalQuestionTime : p.answerTime;
@@ -3498,27 +3837,16 @@ async function initializeHostFeatures(reconnectInfo) {
             return;
         }
 
+        // Equal points, equal place (two players on 0 are both 1st).
+        const ranks = competitionRanks(sortedPlayers.map((p) => p.score));
         for (const [idx, p] of topPlayers.entries()) {
             const li = document.createElement('li');
             li.className = 'scoreboard-item';
-            switch (idx) {
-                case 0: {
-                    li.classList.add('rank-1');
-                    break;
-                }
-                case 1: {
-                    li.classList.add('rank-2');
-                    break;
-                }
-                case 2: {
-                    li.classList.add('rank-3');
-                    break;
-                }
-            }
+            if (ranks[idx] <= 3) li.classList.add(`rank-${ranks[idx]}`);
             const avatarHtml = p.avatar
                 ? `<span class="player-avatar" aria-hidden="true">${sanitizeHTML(p.avatar)}</span>`
                 : '';
-            li.innerHTML = `<span class="player-row"><span class="player-rank">${idx + 1}.</span>${avatarHtml}<span class="player-name">${sanitizeHTML(p.name)}</span></span><span class="player-score">${Math.round(p.score)} Punkte</span>`;
+            li.innerHTML = `<span class="player-row"><span class="player-rank">${ranks[idx]}.</span>${avatarHtml}<span class="player-name">${sanitizeHTML(p.name)}</span></span><span class="player-score">${Math.round(p.score)} Punkte</span>`;
             scoreboardListEl.append(li);
         }
     }
@@ -3576,9 +3904,12 @@ async function initializeHostFeatures(reconnectInfo) {
         const rest = sortedPlayers.slice(3);
         const winnerAvatar = top3[0]?.avatar || undefined;
         const MEDALS = ['🥇', '🥈', '🥉'];
+        // Equal points, equal place: tied players share pedestal, medal and
+        // number (two winners both get the crown).
+        const ranks = competitionRanks(sortedPlayers.map((p) => p.score));
 
         // Podium — DOM order is 2nd · 1st · 3rd so the tallest pedestal sits in
-        // the middle. `layout` lists the rank indices (0 = winner) that exist.
+        // the middle. `layout` lists the slots (0 = first in the ranking) that exist.
         const podium = document.createElement('div');
         podium.className = 'podium';
         const layout = [];
@@ -3587,26 +3918,27 @@ async function initializeHostFeatures(reconnectInfo) {
         if (top3[2]) layout.push(2);
 
         const placeEls = {};
-        for (const rankIdx of layout) {
-            const p = top3[rankIdx];
+        for (const slot of layout) {
+            const p = top3[slot];
+            const rank = ranks[slot];
             const place = document.createElement('div');
-            place.className = `podium-place podium-${rankIdx + 1}`;
-            if (rankIdx === 0) place.classList.add('podium-winner');
+            place.className = `podium-place podium-${rank}`;
+            if (rank === 1) place.classList.add('podium-winner');
             if (staged) place.classList.add('podium-pending');
             const avatar = p.avatar
                 ? `<span class="podium-avatar" aria-hidden="true">${sanitizeHTML(p.avatar)}</span>`
                 : '';
             const crown =
-                rankIdx === 0 ? '<span class="podium-crown" aria-hidden="true">👑</span>' : '';
+                rank === 1 ? '<span class="podium-crown" aria-hidden="true">👑</span>' : '';
             place.innerHTML =
                 crown +
-                `<span class="podium-medal" aria-hidden="true">${MEDALS[rankIdx]}</span>` +
+                `<span class="podium-medal" aria-hidden="true">${MEDALS[rank - 1]}</span>` +
                 avatar +
                 `<span class="podium-name">${sanitizeHTML(p.name)}</span>` +
                 `<span class="podium-score">${Math.round(p.score)} Punkte</span>` +
-                `<div class="podium-pedestal"><span class="podium-rank">${rankIdx + 1}</span></div>`;
+                `<div class="podium-pedestal"><span class="podium-rank">${rank}</span></div>`;
             podium.append(place);
-            placeEls[rankIdx] = place;
+            placeEls[slot] = place;
         }
         leaderboard.append(podium);
 
@@ -3622,7 +3954,7 @@ async function initializeHostFeatures(reconnectInfo) {
                 const avatarHtml = p.avatar
                     ? `<span class="player-avatar" aria-hidden="true">${sanitizeHTML(p.avatar)}</span>`
                     : '';
-                row.innerHTML = `<span class="player-row"><span class="player-rank">${idx + 4}.</span>${avatarHtml}<span class="player-name">${sanitizeHTML(p.name)}</span></span><span class="player-score">${Math.round(p.score)} Punkte</span>`;
+                row.innerHTML = `<span class="player-row"><span class="player-rank">${ranks[idx + 3]}.</span>${avatarHtml}<span class="player-name">${sanitizeHTML(p.name)}</span></span><span class="player-score">${Math.round(p.score)} Punkte</span>`;
                 restList.append(row);
             }
             leaderboard.append(restList);
@@ -3630,7 +3962,7 @@ async function initializeHostFeatures(reconnectInfo) {
 
         if (!staged) return; // static render: all visible, no fx
 
-        // Staged reveal: 3rd → 2nd → 1st, climaxing on the winner with the
+        // Staged reveal: 3rd → 2nd → 1st (tied places at once), climaxing on the winner with the
         // ovation, then the confetti once the winner has popped in (one show,
         // not two on top of each other), then — after the cannons have peaked —
         // the rest of the field slides in.
@@ -3639,13 +3971,17 @@ async function initializeHostFeatures(reconnectInfo) {
         const STEP = 700;
         const WINNER_POP_MS = 620; // quiz.css: podium-winner-pop
         const CANNON_PEAK_MS = 1000;
-        const revealOrder = [2, 1, 0].filter((r) => placeEls[r]);
+        // One step per place, lowest first; tied players step up together.
+        const revealRanks = [...new Set(layout.map((slot) => ranks[slot]))].toSorted(
+            (a, b) => b - a
+        );
         let winnerDelay = BASE;
-        for (const [i, rankIdx] of revealOrder.entries()) {
+        for (const [i, rank] of revealRanks.entries()) {
             const delay = BASE + i * STEP;
-            if (rankIdx === 0) winnerDelay = delay;
+            if (rank === 1) winnerDelay = delay;
+            const slots = layout.filter((slot) => ranks[slot] === rank);
             schedule(() => {
-                revealPodiumElement(placeEls[rankIdx]);
+                for (const slot of slots) revealPodiumElement(placeEls[slot]);
                 // Applause on every podium step — a fresh burst from the
                 // universal `audio/final.opus` (theme-agnostic ovation) timed to
                 // each reveal of 3rd → 2nd → 1st. Re-firing restarts the clip,
@@ -3667,6 +4003,9 @@ let playerCurrentId = null;
 let isPlayerInitialized = false;
 let playerTimerInterval = null;
 let playerCurrentQuestionOptions = [];
+// Layout of the current question when it is a matching round (see
+// matchingLayoutOf), else null.
+let playerCurrentMatching = null;
 let selectedAnswers = [];
 let playerHasSubmitted = false;
 let playerWasAutoSubmitted = false;
@@ -3921,6 +4260,7 @@ function initializePlayerFeatures(reconnectInfo) {
     const playerDoublePointsBadgeEl = document.querySelector('#player-double-points-badge');
     const playerTimerBar = document.querySelector('#player-timer-bar');
     const optionsContainer = document.querySelector('#options-container');
+    const playerQuestionHintEl = document.querySelector('#player-question-hint');
     const submitAnswerBtn = document.querySelector('#submit-answer-btn');
     const playerResultView = document.querySelector('#player-result');
     const resultDisplay = document.querySelector('#result-display');
@@ -4293,7 +4633,7 @@ function initializePlayerFeatures(reconnectInfo) {
             submitAnswerBtn.textContent = '✓ Gesendet';
             submitAnswerBtn.classList.add('is-sent');
             submitAnswerBtn.classList.remove('pulse-cta');
-            for (const btn of optionsContainer.querySelectorAll('button.option-btn')) {
+            for (const btn of optionsContainer.querySelectorAll('button')) {
                 btn.disabled = true;
             }
 
@@ -4790,7 +5130,7 @@ function initializePlayerFeatures(reconnectInfo) {
                 }
                 submitAnswerBtn.classList.add('hidden');
                 submitAnswerBtn.classList.remove('pulse-cta');
-                for (const btn of optionsContainer.querySelectorAll('button.option-btn')) {
+                for (const btn of optionsContainer.querySelectorAll('button')) {
                     btn.disabled = true;
                 }
             }
@@ -4823,9 +5163,15 @@ function initializePlayerFeatures(reconnectInfo) {
 
         optionsContainer.innerHTML = '';
         selectedAnswers = []; // Ensure selectedAnswers is reset for a new question
+        playerCurrentMatching = matchingLayoutOf(qData);
+        playerQuestionHintEl.textContent = playerCurrentMatching
+            ? matchingHint(playerCurrentMatching)
+            : 'Mehrere Antworten möglich.';
+        matchSelection = null;
+        if (playerCurrentMatching) renderMatchingBoard();
 
         // qData.options are already shuffled from the host
-        for (const [index, option] of qData.options.entries()) {
+        for (const [index, option] of playerCurrentMatching ? [] : qData.options.entries()) {
             const btn = document.createElement('button');
             btn.className = 'option-btn';
             const letter = document.createElement('span');
@@ -4870,9 +5216,158 @@ function initializePlayerFeatures(reconnectInfo) {
         submitAnswerBtn.disabled = true;
         playerHasSubmitted = alreadySubmitted;
         playerWasAutoSubmitted = false;
-        for (const btn of optionsContainer.querySelectorAll('button.option-btn')) {
+        for (const btn of optionsContainer.querySelectorAll('button')) {
             btn.disabled = alreadySubmitted;
             btn.classList.remove('correct-answer', 'incorrect-answer', 'selected'); // Clean up previous result styles
+        }
+    }
+
+    /** Tile the player tapped first in a matching round: {side, index} or null. */
+    let matchSelection = null;
+
+    /**
+     * The matching board: the pairs made so far (tap ✕ to undo one), then the
+     * two columns to pair from. Tap a term and then its assignment, or the
+     * other way round. A column whose tiles take one partner each loses a
+     * tile once it is paired. The answer is the flat pair list.
+     */
+    function renderMatchingBoard() {
+        const layout = playerCurrentMatching;
+        const options = playerCurrentQuestionOptions;
+        const locked = playerHasSubmitted;
+        const pairs = [];
+        for (let i = 0; i + 1 < selectedAnswers.length; i += 2) {
+            pairs.push([selectedAnswers[i], selectedAnswers[i + 1]]);
+        }
+        optionsContainer.innerHTML = '';
+
+        if (pairs.length > 0) {
+            const list = document.createElement('ul');
+            list.className = 'match-pairs';
+            for (const [i, [l, r]] of pairs.entries()) {
+                list.append(matchPairRow(i, options[l], options[r], locked));
+            }
+            optionsContainer.append(list);
+        }
+
+        const usedLeft = new Set(pairs.map(([l]) => l));
+        const usedRight = new Set(pairs.map(([, r]) => r));
+        const freeLeft = [];
+        for (let i = 0; i < layout.left; i++) {
+            if (layout.reuseLeft || !usedLeft.has(i)) freeLeft.push(i);
+        }
+        const freeRight = [];
+        for (let i = layout.left; i < options.length; i++) {
+            if (layout.reuseRight || !usedRight.has(i)) freeRight.push(i);
+        }
+        // The columns stay while another pair can still be made.
+        if (freeLeft.length > 0 && freeRight.length > 0 && pairs.length < MAX_LIVE_MATCHING_PAIRS) {
+            const cols = document.createElement('div');
+            cols.className = 'match-cols';
+            cols.append(
+                matchColumn('Begriffe', 'left', freeLeft, locked),
+                matchColumn('Zuordnungen', 'right', freeRight, locked)
+            );
+            optionsContainer.append(cols);
+        }
+
+        const progress = document.createElement('p');
+        progress.className = 'match-progress';
+        progress.textContent = `${pairs.length} von ${layout.pairs} Zuordnungen`;
+        optionsContainer.append(progress);
+        submitAnswerBtn.disabled = locked || pairs.length === 0;
+    }
+
+    /**
+     * One made pair, with ✕ to take it back.
+     * @param {number} i - position of the pair in the answer
+     * @param {string} term
+     * @param {string} assignment
+     * @param {boolean} locked
+     * @returns {HTMLLIElement}
+     */
+    function matchPairRow(i, term, assignment, locked) {
+        const li = document.createElement('li');
+        li.className = 'match-pair';
+        const text = document.createElement('span');
+        text.className = 'match-pair-text';
+        text.textContent = `${term} → ${assignment}`;
+        const unlink = document.createElement('button');
+        unlink.type = 'button';
+        unlink.className = 'match-unlink';
+        unlink.textContent = '✕';
+        unlink.disabled = locked;
+        unlink.setAttribute('aria-label', `Zuordnung lösen: ${term} → ${assignment}`);
+        unlink.addEventListener('click', () => {
+            if (playerHasSubmitted) return;
+            selectedAnswers.splice(i * 2, 2);
+            renderMatchingBoard();
+            optionsContainer.querySelector('.match-unlink, .match-item')?.focus({
+                preventScroll: true,
+            });
+        });
+        li.append(text, unlink);
+        return li;
+    }
+
+    /**
+     * One column of the matching board.
+     * @param {string} title
+     * @param {'left'|'right'} side
+     * @param {number[]} indices - option indices still to pair
+     * @param {boolean} locked
+     * @returns {HTMLElement}
+     */
+    function matchColumn(title, side, indices, locked) {
+        const col = document.createElement('div');
+        col.className = 'match-col';
+        const heading = document.createElement('p');
+        heading.className = 'match-col-title';
+        heading.textContent = title;
+        col.append(heading);
+        for (const index of indices) {
+            const btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = 'match-item';
+            btn.dataset.side = side;
+            btn.dataset.index = String(index);
+            const selected = matchSelection?.side === side && matchSelection.index === index;
+            btn.classList.toggle('selected', selected);
+            btn.setAttribute('aria-pressed', String(selected));
+            btn.textContent = playerCurrentQuestionOptions[index];
+            btn.disabled = locked;
+            btn.addEventListener('click', () => pickMatchItem(side, index));
+            col.append(btn);
+        }
+        return col;
+    }
+
+    /**
+     * A tap on a tile: select it, or — with a tile of the other column
+     * selected — pair the two. Keyboard focus stays on the board.
+     * @param {'left'|'right'} side
+     * @param {number} index
+     */
+    function pickMatchItem(side, index) {
+        if (playerHasSubmitted) return;
+        const hadFocus = optionsContainer.contains(document.activeElement);
+        if (!matchSelection || matchSelection.side === side) {
+            const same = matchSelection?.side === side && matchSelection.index === index;
+            matchSelection = same ? null : { side, index };
+        } else {
+            const [l, r] =
+                side === 'left' ? [index, matchSelection.index] : [matchSelection.index, index];
+            matchSelection = null;
+            if (!pairKeys(selectedAnswers).has(`${l}:${r}`)) selectedAnswers.push(l, r);
+        }
+        renderMatchingBoard();
+        if (hadFocus) {
+            const again = optionsContainer.querySelector(
+                `.match-item[data-side="${side}"][data-index="${index}"]`
+            );
+            (again || optionsContainer.querySelector('.match-item, .match-unlink'))?.focus({
+                preventScroll: true,
+            });
         }
     }
 
@@ -4889,8 +5384,11 @@ function initializePlayerFeatures(reconnectInfo) {
         playerResultView.classList.remove('hidden');
         flyInElement(playerResultView);
 
-        const playerAnsSet = new Set(playerAnswer || []);
-        const correctSet = new Set(rData.correct);
+        // A matching round compares pairs ("term:assignment"), multiple
+        // choice compares option indices; the verdicts are the same.
+        const matching = playerCurrentMatching;
+        const playerAnsSet = matching ? pairKeys(playerAnswer) : new Set(playerAnswer || []);
+        const correctSet = matching ? pairKeys(rData.correct) : new Set(rData.correct);
         const options = playerCurrentQuestionOptions;
 
         // Classify the answer: full / partial / wrong / no-answer.
@@ -4925,7 +5423,7 @@ function initializePlayerFeatures(reconnectInfo) {
             // Differentiate the two partial shapes so "3/3" + extra wrongs
             // doesn't read identically to "missed one of three".
             if (correctHits === correctSet.size) {
-                label = 'Zu viele markiert';
+                label = matching ? 'Zu viele Zuordnungen' : 'Zu viele markiert';
             } else if (wrongPicks === 0) {
                 label = 'Teilweise erkannt';
             } else {
@@ -4977,9 +5475,19 @@ function initializePlayerFeatures(reconnectInfo) {
         // question text is already gone). We do surface *counts* though —
         // a tick-all strategy that hits "3/3" looks identical to actually
         // getting it right unless we say "+ also picked 3 wrong".
-        let correctHtml = '<div class="result-correct-label">Richtige Antwort(en)</div>';
+        let correctHtml = `<div class="result-correct-label">${matching ? 'Richtige Zuordnung(en)' : 'Richtige Antwort(en)'}</div>`;
         correctHtml += '<div class="result-correct-items">';
-        for (const [index, option] of options.entries()) {
+        if (matching) {
+            for (let i = 0; i + 1 < rData.correct.length; i += 2) {
+                const [l, r] = [rData.correct[i], rData.correct[i + 1]];
+                const cls = playerAnsSet.has(`${l}:${r}`)
+                    ? 'correct-answer-chip player-selected'
+                    : 'correct-answer-chip';
+                const pairText = sanitizeHTML(options[l] + ' → ' + options[r]);
+                correctHtml += `<span class="${cls}">${pairText}</span>`;
+            }
+        }
+        for (const [index, option] of matching ? [] : options.entries()) {
             if (!correctSet.has(index)) continue;
             const cls = playerAnsSet.has(index)
                 ? 'correct-answer-chip player-selected'
@@ -4990,23 +5498,11 @@ function initializePlayerFeatures(reconnectInfo) {
         correctHtml += '</div>';
 
         const tallyParts = [];
-        if (missedCorrect > 0 && !allWrong) {
-            // Skip for the pure-wrong case — saying "0 hits, 3 verfehlt" on
-            // top of the red ✗ is redundant. Only useful when the player
-            // got *some* right and missed others.
-            tallyParts.push(
-                missedCorrect === 1
-                    ? '1 richtige Antwort verfehlt'
-                    : `${missedCorrect} richtige Antworten verfehlt`
-            );
-        }
-        if (wrongPicks > 0) {
-            tallyParts.push(
-                wrongPicks === 1
-                    ? '1 falsche Antwort markiert'
-                    : `${wrongPicks} falsche Antworten markiert`
-            );
-        }
+        // Skip "verfehlt" for the pure-wrong case — saying "0 hits, 3
+        // verfehlt" on top of the red ✗ is redundant. Only useful when the
+        // player got *some* right and missed others.
+        if (missedCorrect > 0 && !allWrong) tallyParts.push(missedText(missedCorrect, matching));
+        if (wrongPicks > 0) tallyParts.push(wrongText(wrongPicks, matching));
         if (tallyParts.length > 0) {
             correctHtml += `<p class="result-pick-tally">${sanitizeHTML(tallyParts.join(' · '))}</p>`;
         }
@@ -5083,10 +5579,13 @@ function initializePlayerFeatures(reconnectInfo) {
         const ownIdx = list.findIndex(
             (p) => p.name === playerDisplayName && Math.round(p.score) === Math.round(playerScore)
         );
+        // Equal points, equal place — as on the host's podium.
+        const ranks = competitionRanks(list.map((p) => p.score));
         if (ownIdx !== -1) {
+            const shared = ranks.filter((r) => r === ranks[ownIdx]).length > 1;
             const own = document.createElement('p');
             own.className = 'final-own-rank';
-            own.textContent = `Du bist auf Platz ${ownIdx + 1} von ${list.length}.`;
+            own.textContent = `Du bist auf Platz ${ranks[ownIdx]} von ${list.length}${shared ? ' (punktgleich)' : ''}.`;
             playerLeaderboardContainer.append(own);
         }
 
@@ -5097,12 +5596,12 @@ function initializePlayerFeatures(reconnectInfo) {
         for (const [idx, p] of list.entries()) {
             const li = document.createElement('li');
             li.className = 'leaderboard-item';
-            if (idx < 3) li.classList.add(`rank-${idx + 1}`);
+            if (ranks[idx] <= 3) li.classList.add(`rank-${ranks[idx]}`);
             const row = document.createElement('span');
             row.className = 'player-row';
             const rank = document.createElement('span');
             rank.className = 'player-rank';
-            rank.textContent = `${idx + 1}.`;
+            rank.textContent = `${ranks[idx]}.`;
             const name = document.createElement('span');
             name.className = 'player-name';
             name.textContent = idx === ownIdx ? `${p.name} (du)` : p.name;
@@ -5137,6 +5636,7 @@ function initializePlayerFeatures(reconnectInfo) {
         selectedAnswers = [];
         pendingFinalResultData = null;
         playerCurrentQuestionOptions = [];
+        playerCurrentMatching = null;
         playerCurrentQuestionIndex = -1;
         playerRoomId = null;
         playerCurrentId = null;

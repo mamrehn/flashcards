@@ -95,6 +95,8 @@ A `.zip` deck bundles one or more `.json` files; the library manifest is regener
 
 The quiz mode uses a tiny WebSocket relay hosted on Fly.io. All quiz logic — scoring, timers, question flow — lives in the host's browser; the server only forwards messages between the host and the joined players.
 
+Live rounds play the multiple-choice and matching cards of a deck (free-text cards stay in the study app). On a phone, a matching card is answered by tapping a term and then its assignment. Scoring matches the study app, so hedging doesn't pay. A multiple-choice answer earns the overlap of chosen and correct options (one right plus one wrong option of a single-answer question earns half). A matching answer earns its correct pairs out of the pairs the card needs, or out of the pairs made when there are more. Players with equal points share a place.
+
 ```
 ┌──────────┐        ┌───────────────────────┐        ┌──────────┐
 │  Host    │  WS    │  qlash-server         │  WS    │  Player  │

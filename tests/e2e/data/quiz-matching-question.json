@@ -1,0 +1,23 @@
+{
+    "meta": {
+        "name": "E2E-Zuordnung",
+        "description": "One matching card (three pairs and a distractor) for the end-to-end tests."
+    },
+    "cards": [
+        {
+            "categories": ["Geografie"],
+            "question": "Ordne die Länder ihren Hauptstädten zu.",
+            "pairs": [
+                { "left": "Deutschland", "right": "Berlin" },
+                { "left": "Frankreich", "right": "Paris" },
+                { "left": "Italien", "right": "Rom" },
+                { "left": null, "right": "Madrid" }
+            ]
+        },
+        {
+            "categories": ["Geografie"],
+            "question": "Was ist die Hauptstadt von Spanien?",
+            "answer": "Madrid"
+        }
+    ]
+}
